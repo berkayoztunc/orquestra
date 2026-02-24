@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test'
-import { validateIDL, parseIDL, getInstruction, resolveType, getDefaultValue, extractPDASeeds, getDefinedTypeName, isDefinedType, lookupType, resolveDefinedType, expandInstructionArgs, resolveAccountFields, resolveEventFields } from '../src/services/idl-parser'
+import { validateIDL, parseIDL, getInstruction, resolveType, getDefaultValue, extractPDASeeds, getDefinedTypeName, isDefinedType, lookupType, resolveDefinedType, expandInstructionArgs, resolveAccountFields, resolveEventFields, normalizeField } from '../src/services/idl-parser'
 
 const sampleIDL = {
   version: '0.1.0',
@@ -491,4 +491,43 @@ describe('IDL Parser', () => {
       expect(resolved.fields).toEqual([])
     })
   })
+
+  // ── Tuple struct fields (bare type strings) ──────────────────────
+
+  describe('normalizeField', () => {
+    test('passes through normal named field unchanged', () => {
+      const field = { name: 'amount', type: 'u64' }
+      const result = normalizeField(field, 0)
+      expect(result.name).toBe('amount')
+      expect(result.type).toBe('u64')
+    })
+
+    test('normalizes bare string field to field_N', () => {
+      const result = normalizeField('bool' as any, 0)
+      expect(result.name).toBe('field_0')
+      expect(result.type).toBe('bool')
+    })
+
+    test('normalizes unnamed object field to field_N', () => {
+      const result = normalizeField({ vec: 'u8' } as any, 2)
+      expect(result.name).toBe('field_2')
+      expect(result.type).toEqual({ vec: 'u8' })
+    })
+  })
+
+  describe('resolveType edge cases', () => {
+    test('returns unknown for null type', () => {
+      expect(resolveType(null)).toBe('unknown')
+    })
+
+    test('returns unknown for undefined type', () => {
+      expect(resolveType(undefined)).toBe('unknown')
+    })
+
+    test('resolves vec of defined type (new format)', () => {
+      expect(resolveType({ vec: { defined: { name: 'Shareholder' } } })).toBe('Vec<Shareholder>')
+    })
+  })
+
+
 })

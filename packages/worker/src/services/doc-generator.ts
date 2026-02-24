@@ -4,7 +4,7 @@
  */
 
 import type { AnchorIDL, AnchorInstruction, AnchorAccount, AnchorError, AnchorEvent } from './idl-parser'
-import { resolveType, extractPDASeeds, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta } from './idl-parser'
+import { resolveType, extractPDASeeds, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, normalizeField } from './idl-parser'
 
 export interface GeneratedDocs {
   full: string           // Complete markdown documentation
@@ -292,7 +292,8 @@ function generateTypesDocs(idl: AnchorIDL): string {
       md += '|-------|------|\n'
 
       for (const field of t.type.fields) {
-        md += `| \`${field.name}\` | \`${resolveType(field.type)}\` |\n`
+        const normalized = normalizeField(field, t.type.fields.indexOf(field))
+        md += `| \`${normalized.name}\` | \`${resolveType(normalized.type)}\` |\n`
       }
       md += '\n'
     }

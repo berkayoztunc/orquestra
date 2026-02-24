@@ -74,7 +74,27 @@ interface AnchorAccount {
 
 interface AnchorType {
   name: string
-  type: { kind: string; fields?: Array<{ name: string; type: any }>; variants?: Array<{ name: string; fields?: any }> }
+  type: { kind: string; fields?: Array<{ name: string; type: any } | string>; variants?: Array<{ name: string; fields?: any }> }
+}
+
+/**
+ * Normalize a struct field entry.
+ * Anchor IDLs may use tuple struct format where fields are bare type strings
+ * (e.g. ["bool"]) instead of objects ({ name: "field_0", type: "bool" }).
+ * This helper normalizes both formats to a consistent { name, type } object.
+ */
+export function normalizeField(
+  field: { name: string; type: any } | string,
+  index: number,
+): { name: string; type: any } {
+  if (typeof field === 'string') {
+    return { name: `field_${index}`, type: field }
+  }
+  if (typeof field === 'object' && field !== null && !('name' in field)) {
+    // Field is an unnamed type object like { vec: "u8" }
+    return { name: `field_${index}`, type: field }
+  }
+  return field as { name: string; type: any }
 }
 
 interface AnchorEvent {
@@ -202,6 +222,10 @@ export function getInstruction(idl: AnchorIDL, name: string): AnchorInstruction 
  * Resolve IDL type to a human-readable string
  */
 export function resolveType(type: any): string {
+  if (type === null || type === undefined) {
+    return 'unknown'
+  }
+
   if (typeof type === 'string') {
     return type
   }
@@ -278,13 +302,14 @@ export function resolveDefinedType(
   const kind = typeDef.type?.kind || 'unknown'
 
   if (kind === 'struct' && typeDef.type?.fields) {
-    const fields: ResolvedField[] = typeDef.type.fields.map((f) => {
-      const definedName = getDefinedTypeName(f.type)
+    const fields: ResolvedField[] = typeDef.type.fields.map((f, i) => {
+      const normalized = normalizeField(f, i)
+      const definedName = getDefinedTypeName(normalized.type)
       const nested = definedName ? resolveDefinedType(idl, definedName) : null
       return {
-        name: f.name,
-        type: f.type,
-        typeStr: resolveType(f.type),
+        name: normalized.name,
+        type: normalized.type,
+        typeStr: resolveType(normalized.type),
         isDefinedType: !!definedName,
         nestedFields: nested?.fields || null,
       }
@@ -405,11 +430,14 @@ export function resolveAccountFields(
   if (account.type?.fields?.length) {
     return {
       kind: account.type.kind,
-      fields: account.type.fields.map((f) => ({
-        name: f.name,
-        type: f.type,
-        typeStr: resolveType(f.type),
-      })),
+      fields: account.type.fields.map((f, i) => {
+        const normalized = normalizeField(f, i)
+        return {
+          name: normalized.name,
+          type: normalized.type,
+          typeStr: resolveType(normalized.type),
+        }
+      }),
     }
   }
 
@@ -418,11 +446,14 @@ export function resolveAccountFields(
   if (typeDef?.type?.fields?.length) {
     return {
       kind: typeDef.type.kind,
-      fields: typeDef.type.fields.map((f) => ({
-        name: f.name,
-        type: f.type,
-        typeStr: resolveType(f.type),
-      })),
+      fields: typeDef.type.fields.map((f, i) => {
+        const normalized = normalizeField(f, i)
+        return {
+          name: normalized.name,
+          type: normalized.type,
+          typeStr: resolveType(normalized.type),
+        }
+      }),
     }
   }
 
@@ -441,11 +472,14 @@ export function resolveEventFields(
   // Old format: event has inline data array
   if (event.data && Array.isArray(event.data) && event.data.length > 0) {
     return {
-      fields: event.data.map((f: any) => ({
-        name: f.name,
-        type: f.type,
-        typeStr: resolveType(f.type),
-      })),
+      fields: event.data.map((f: any, i: number) => {
+        const normalized = normalizeField(f, i)
+        return {
+          name: normalized.name,
+          type: normalized.type,
+          typeStr: resolveType(normalized.type),
+        }
+      }),
     }
   }
 
@@ -453,11 +487,14 @@ export function resolveEventFields(
   const typeDef = idl.types?.find((t) => t.name === event.name)
   if (typeDef?.type?.fields?.length) {
     return {
-      fields: typeDef.type.fields.map((f) => ({
-        name: f.name,
-        type: f.type,
-        typeStr: resolveType(f.type),
-      })),
+      fields: typeDef.type.fields.map((f, i) => {
+        const normalized = normalizeField(f, i)
+        return {
+          name: normalized.name,
+          type: normalized.type,
+          typeStr: resolveType(normalized.type),
+        }
+      }),
     }
   }
 

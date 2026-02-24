@@ -5,7 +5,7 @@
  */
 
 import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType } from './idl-parser'
-import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta } from './idl-parser'
+import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField } from './idl-parser'
 
 export interface BuildTransactionRequest {
   accounts: Record<string, string>  // account name -> public key (base58)
@@ -176,7 +176,8 @@ function encodeValue(value: any, type: any, types?: AnchorType[]): number[] {
     if (typeDef && typeDef.type?.kind === 'struct' && typeDef.type?.fields) {
       const obj = (typeof value === 'object' && value !== null) ? value : {}
       const result: number[] = []
-      for (const field of typeDef.type.fields) {
+      for (let i = 0; i < typeDef.type.fields.length; i++) {
+        const field = normalizeField(typeDef.type.fields[i], i)
         const fieldValue = obj[field.name]
         result.push(...encodeValue(fieldValue, field.type, types))
       }
@@ -330,7 +331,8 @@ export function validateBuildRequest(
           if (typeof val !== 'object' || val === null) {
             errors.push(`Argument "${arg.name}" must be an object matching struct ${definedName}`)
           } else {
-            for (const field of typeDef.type.fields) {
+            for (let i = 0; i < typeDef.type.fields.length; i++) {
+              const field = normalizeField(typeDef.type.fields[i], i)
               if (val[field.name] === undefined) {
                 errors.push(`Missing field "${field.name}" in argument "${arg.name}" (struct ${definedName})`)
               }

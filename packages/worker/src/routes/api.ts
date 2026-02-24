@@ -741,10 +741,12 @@ app.get('/:projectId/types', async (c) => {
     const types = (data.idl.types || []).map((t) => ({
       name: t.name,
       kind: t.type?.kind || 'unknown',
-      fields: (t.type?.fields || []).map((f) => ({
-        name: f.name,
-        type: resolveType(f.type),
-      })),
+      fields: (t.type?.fields || [])
+        .filter((f): f is { name: string; type: any } => typeof f === 'object' && f !== null && 'name' in f && 'type' in f)
+        .map((f) => ({
+          name: f.name,
+          type: resolveType(f.type),
+        })),
     }))
 
     return c.json({

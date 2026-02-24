@@ -1,0 +1,19 @@
+{
+  "name": "@orquestra/shared",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared types and utilities",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

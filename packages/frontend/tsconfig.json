@@ -1,0 +1,26 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["vite/client"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": [
+        "../shared/src/*"
+      ],
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "outDir": "./dist"
+  },
+  "include": [
+    "src"
+  ]
+}

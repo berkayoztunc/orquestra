@@ -1,0 +1,44 @@
+# Ignore dependencies
+node_modules
+npm-debug.log
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# Build output
+dist
+build
+.next
+out
+
+# Environment
+.env
+.env.local
+.env.*.local
+.dev.vars
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage
+.nyc_output
+
+# Logs
+logs
+*.log
+
+# Misc
+.cache
+*.tmp
+.turbo
+
+.dev.vars
+.env.local
+.env.example
+.wrangler

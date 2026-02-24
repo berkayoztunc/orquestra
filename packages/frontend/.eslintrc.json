@@ -1,0 +1,39 @@
+{export default {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}  }    }      "version": "detect"    "react": {  "settings": {  },    ]      }        "argsIgnorePattern": "^_"      {      "warn",    "@typescript-eslint/no-unused-vars": [    "react/react-in-jsx-scope": "off",  "rules": {  },    }      "jsx": true    "ecmaFeatures": {    "sourceType": "module",    "ecmaVersion": "latest",  "parserOptions": {  "parser": "@typescript-eslint/parser",  ],    "plugin:react/recommended"    "plugin:@typescript-eslint/recommended",    "eslint:recommended",  "extends": [  },    "es2021": true    "browser": true,  "env": {  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}

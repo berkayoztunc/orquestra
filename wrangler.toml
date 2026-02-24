@@ -1,0 +1,102 @@
+name = "orquestra"
+account_id = "568525424c1d0ac88c8baa71f52d3e45"
+workers_dev = true
+main = "packages/worker/src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Development Variables (used by `wrangler dev` without --env flag)
+[vars]
+ENVIRONMENT = "development"
+GITHUB_OAUTH_ID = "Ov23liMCsCr6TDxJdNy5"
+
+JWT_EXPIRY = "30d"
+FRONTEND_URL = "http://localhost:5173"
+API_BASE_URL = "http://localhost:8787"
+CORS_ORIGIN = "http://localhost:5173"
+
+# Routes for production
+[route]
+pattern = "api.orquestra.dev/*"
+zone_name = "orquestra.dev"
+
+# Top-level D1 Databases (used by wrangler CLI commands)
+[[d1_databases]]
+binding = "DB"
+database_name = "orquestra-prod"
+database_id = "7308ceeb-9f86-4948-a1bf-916d21078788"
+
+# Top-level KV Namespaces (used by wrangler CLI commands)
+[[kv_namespaces]]
+binding = "IDLS"
+id = "f9bd92f54c1149fba41a7c6c3ef20760"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "00550acbdd544169b8af0e5eb7a34bdd"
+
+# Environment: Production
+[env.production]
+name = "orquestra-worker-prod"
+routes = [
+  { pattern = "api.orquestra.dev/*", zone_name = "orquestra.dev" }
+]
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "orquestra-prod"
+database_id = "7308ceeb-9f86-4948-a1bf-916d21078788"
+
+[[env.production.kv_namespaces]]
+binding = "IDLS"
+id = "f9bd92f54c1149fba41a7c6c3ef20760"
+
+[[env.production.kv_namespaces]]
+binding = "CACHE"
+id = "00550acbdd544169b8af0e5eb7a34bdd"
+
+# Environment: Development
+[env.development]
+name = "orquestra-worker-dev"
+workers_dev = true
+
+[[env.development.d1_databases]]
+binding = "DB"
+database_name = "orquestra-dev"
+database_id = "38a17d10-e419-44f9-834c-1cbf64d81d66"
+
+[[env.development.kv_namespaces]]
+binding = "IDLS"
+id = "ab1db1fef1094ee89aa4b7876c1b7d38"
+
+[[env.development.kv_namespaces]]
+binding = "CACHE"
+id = "5868c26cb04949fd88ff75c0d315d475"
+
+# Environment Variables - Production
+[env.production.vars]
+ENVIRONMENT = "production"
+GITHUB_OAUTH_ID = "Ov23liMCsCr6TDxJdNy5"
+
+JWT_EXPIRY = "7d"
+FRONTEND_URL = "https://orquestra.dev"
+API_BASE_URL = "https://api.orquestra.dev"
+CORS_ORIGIN = "https://orquestra.dev"
+
+# Environment Variables - Development
+[env.development.vars]
+ENVIRONMENT = "development"
+GITHUB_OAUTH_ID = "Ov23liMCsCr6TDxJdNy5"
+
+JWT_EXPIRY = "30d"
+FRONTEND_URL = "http://localhost:5173"
+API_BASE_URL = "http://localhost:8787"
+CORS_ORIGIN = "http://localhost:5173"
+
+# Build configuration
+[build]
+command = "bun run build"
+cwd = "./"
+
+# Observability
+[observability]
+enabled = false

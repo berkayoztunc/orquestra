@@ -1,0 +1,35 @@
+name: Database Migrations
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'migrations/**'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [ development, production ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Install Wrangler
+        run: bun add -g wrangler
+
+      - name: Migrate Database (${{ matrix.environment }})
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ "${{ matrix.environment }}" = "production" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            bun run db:migrate
+          elif [ "${{ matrix.environment }}" = "development" ]; then
+            bun run db:migrate:dev
+          fi

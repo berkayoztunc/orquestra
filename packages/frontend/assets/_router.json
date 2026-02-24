@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "^/api/(.*)$",
+      "dest": "https://api.orquestra.dev/$1"
+    },
+    {
+      "src": "^/auth/(.*)$",
+      "dest": "https://api.orquestra.dev/auth/$1"
+    },
+    {
+      "src": "^/project/(.+)/llms\\.txt$",
+      "dest": "https://api.orquestra.dev/project/$1/llms.txt"
+    },
+    {
+      "src": ".*",
+      "dest": "/index.html"
+    }
+  ]
+}

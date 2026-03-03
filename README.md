@@ -72,6 +72,7 @@ orquestra/
 ├── packages/
 │   ├── frontend/          # React 18 + Tailwind CSS (Cloudflare Pages)
 │   ├── worker/            # Hono REST API (Cloudflare Workers)
+│   ├── cli/               # CLI tools for on-chain program discovery
 │   └── shared/            # Shared TypeScript types & utilities
 ├── migrations/            # D1 (SQLite) database schema
 ├── scripts/               # Setup, seeding, and deployment scripts
@@ -141,7 +142,35 @@ bun run deploy          # Deploy to Cloudflare
 
 > 📚 **Detailed Setup:** See [SETUP_INSTRUCTIONS.md](./docs/SETUP_INSTRUCTIONS.md) for complete setup guide including environment variables and Cloudflare configuration.
 
-## 📡 API Reference
+## � CLI Tools
+
+orquestra includes a powerful CLI for discovering and analyzing Solana programs on-chain:
+
+```bash
+# Scan all programs on mainnet
+bun run cli:scan -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Check which programs have on-chain Anchor IDL
+bun run cli:check-idl -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Run both commands in sequence
+bun run cli:full -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+```
+
+**Outputs:**
+- `programs.csv` - List of all executable programs (program_id, loader)
+- `program_idl_status.csv` - IDL availability status (program_id, has_onchain_idl, idl_account, error)
+
+**Key Features:**
+- 🔍 Discovers all programs using BPFLoaderUpgradeable, legacy v2, and v1 loaders
+- 📊 Detects Anchor IDL using both old (<0.30) and new (≥0.30) derivation methods  
+- 💾 Resume support with automatic checkpointing
+- ⚡ Rate-limiting and retry logic for public/premium RPCs
+- 📈 Real-time progress tracking and batch processing
+
+> 📚 **Full CLI Documentation:** See [CLI_TOOL.md](./docs/CLI_TOOL.md) for complete usage, examples, and troubleshooting.
+
+## �📡 API Reference
 
 ### Core Endpoints
 

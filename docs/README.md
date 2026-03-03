@@ -10,6 +10,7 @@ A free, open-source platform for converting Anchor IDLs into production-ready RE
 - **Auto-Generated REST APIs** - Endpoints for every instruction, account type, and error
 - **Base58 Transaction Building** - Serialize transactions ready for wallet signing
 - **AI-Ready Markdown Docs** - Auto-generated documentation optimized for LLMs
+- **CLI Tools** - Discover and analyze Solana programs on-chain
 - **GitHub Auth** - Secure authentication for developers
 - **Public API Explorer** - Browse and test public projects
 - **Dashboard** - Manage projects, API keys, and metadata
@@ -22,6 +23,7 @@ orquestra/
 ├── packages/
 │   ├── frontend/          React SPA (Cloudflare Pages)
 │   ├── worker/            Hono API (Cloudflare Workers)
+│   ├── cli/               CLI tools for program discovery
 │   └── shared/            Shared types & utilities
 ├── migrations/            D1 database schema
 ├── scripts/               Build & deployment utilities

@@ -23,6 +23,7 @@ Welcome to base58fun's documentation! This index helps you find what you need qu
 |----------|---------|----------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design & components | Engineers, architects |
 | [QUICKREF.md](QUICKREF.md) | Command reference cheatsheet | Active developers |
+| [CLI_TOOL.md](CLI_TOOL.md) | CLI for program discovery & analysis | Developers, researchers |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute | Open source contributors |
 | [SETUP_INSTRUCTIONS.md](SETUP_INSTRUCTIONS.md) | Detailed dev environment setup | Contributors |
 

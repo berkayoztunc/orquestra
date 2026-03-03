@@ -6,69 +6,100 @@ Common commands and quick tips for developing orquestra.
 
 ```bash
 # Start all dev servers
-npm run dev
+bun run dev
 
 # Or start individually
-npm run dev:frontend     # React dev server (5173)
-npm run dev:worker       # Worker dev server (8787)
+bun run dev:frontend     # React dev server (5173)
+bun run dev:worker       # Worker dev server (8787)
 
 # Type checking
-npm run type-check
+bun run type-check
 
 # Linting
-npm run lint
-npm run lint:fix        # Auto-fix linting issues
+bun run lint
+bun run lint:fix        # Auto-fix linting issues
 
 # Formatting
-npm run format
+bun run format
 ```
 
 ## Building
 
 ```bash
 # Build all packages
-npm run build
+bun run build
 
 # Build specific packages
-npm run build:frontend
-npm run build:worker
+bun run build:frontend
+bun run build:worker
 
 # Check for TypeScript errors
-npm run type-check
+bun run type-check
 ```
 
 ## Database
 
 ```bash
 # Development database
-npm run db:migrate:dev      # Run migrations
-npm run db:seed             # Add sample data
-npm run db:reset            # Clear all tables
+bun run db:migrate:dev      # Run migrations
+bun run db:seed             # Add sample data
+bun run db:reset            # Clear all tables
 
 # Production database
-npm run db:migrate          # Run migrations (requires wrangler auth)
+bun run db:migrate          # Run migrations (requires wrangler auth)
 ```
+
+## CLI Tools
+
+```bash
+# Scan all programs on mainnet
+bun run cli:scan -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Check which programs have on-chain Anchor IDL
+bun run cli:check-idl -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Run both commands sequentially
+bun run cli:full -- --rpc-url 'https://api.mainnet-beta.solana.com' --out-dir ./output
+
+# Limit programs for testing
+bun run cli:scan -- --rpc-url 'https://...' --max-programs 100 --out-dir ./test
+
+# Use custom program list
+bun run cli:check-idl -- --input-file ./my-programs.json --out-dir ./output
+
+# Resume interrupted scan/check
+bun run cli:check-idl -- --rpc-url 'https://...' --out-dir ./output --resume
+
+# Premium RPC with higher rate limits
+bun run cli:scan -- --rpc-url 'https://mainnet.helius-rpc.com/?api-key=KEY' --rps 20
+```
+
+**Output Files:**
+- `programs.csv` - All discovered programs
+- `program_idl_status.csv` - IDL availability for each program
+
+> See [CLI_TOOL.md](./CLI_TOOL.md) for complete documentation
 
 ## Testing
 
 ```bash
 # Run all tests
-npm test
+bun test
 
 # Run tests for specific package
-npm test -w packages/frontend
-npm test -w packages/worker
+bun test -w packages/frontend
+bun test -w packages/worker
 ```
 
 ## Deployment
 
 ```bash
 # Deploy everything
-npm run deploy
+bun run deploy
 
 # Deploy specific services
-npm run deploy:worker       # Backend to Cloudflare Workers
-npm run deploy:pages        # Frontend to Cloudflare Pages
+bun run deploy:worker       # Backend to Cloudflare Workers
+bun run deploy:pages        # Frontend to Cloudflare Pages
 ```
 
 ## Environment

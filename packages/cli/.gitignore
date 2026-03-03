@@ -1,0 +1,6 @@
+# CLI-specific ignores
+output/
+.checkpoint-*.json
+.program-list.json
+node_modules/
+dist/

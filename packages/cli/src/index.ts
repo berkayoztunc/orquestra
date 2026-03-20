@@ -18,6 +18,9 @@
  *   --resume                 Resume from checkpoint if available
  *   --input-file <path>      Custom program list JSON for check-idl
  *   --rps <n>                Max requests per second (default: 10)
+ *   --enable-ingest          Enable AI description + DB ingest for each discovered IDL
+ *   --skip-ai                Skip AI description step (ingest IDL only, no AI call)
+ *   --ingest-concurrency <n> Max concurrent AI+ingest calls (default: 5)
  *   --help                   Show this help
  */
 
@@ -57,6 +60,16 @@ function parseArgs(argv: string[]): { command: string; flags: Record<string, str
       continue
     }
 
+    if (arg === '--enable-ingest') {
+      flags['enable-ingest'] = true
+      continue
+    }
+
+    if (arg === '--skip-ai') {
+      flags['skip-ai'] = true
+      continue
+    }
+
     if (arg.startsWith('--') && i + 1 < argv.length) {
       const key = arg.slice(2)
       flags[key] = argv[++i]
@@ -90,7 +103,17 @@ OPTIONS:
   --resume                 Resume from checkpoint if available
   --input-file <path>      Custom program list JSON for check-idl
   --rps <n>                Max requests per second (default: 10)
+  --enable-ingest          Generate AI description & save to Orquestra DB for each IDL found
+  --skip-ai                Skip AI step (ingest IDL without AI description)
+  --ingest-concurrency <n> Max concurrent AI+ingest calls (default: 5)
   --help                   Show this help
+
+AI INGEST ENV VARS (required when --enable-ingest):
+  ORQUESTRA_API_URL        Worker base URL (e.g. https://api.orquestra.dev)
+  ORQUESTRA_INGEST_KEY     Secret ingest key matching INGEST_API_KEY on the Worker
+  CF_ACCOUNT_ID            Cloudflare account ID (for AI descriptions)
+  CF_API_TOKEN             Cloudflare API token with Workers AI:Run permission
+  CF_AI_MODEL              AI model (default: @cf/meta/llama-3.1-8b-instruct)
 
 EXAMPLES:
   # Scan all programs on mainnet
@@ -102,8 +125,11 @@ EXAMPLES:
   # Check IDL for previously scanned programs
   bun run packages/cli/src/index.ts check-idl --rpc-url $SOLANA_RPC_URL
 
-  # Full pipeline
-  bun run packages/cli/src/index.ts full --rpc-url $SOLANA_RPC_URL --out-dir ./results
+  # Check IDL + generate AI descriptions + ingest to DB
+  bun run packages/cli/src/index.ts check-idl --rpc-url $SOLANA_RPC_URL --enable-ingest
+
+  # Full pipeline with ingest
+  bun run packages/cli/src/index.ts full --rpc-url $SOLANA_RPC_URL --out-dir ./results --enable-ingest
 
   # Resume interrupted IDL check
   bun run packages/cli/src/index.ts check-idl --rpc-url $SOLANA_RPC_URL --resume
@@ -136,6 +162,9 @@ async function main() {
   const includeLegacyV2 = !flags['no-legacy-v2']
   const inputFile = (flags['input-file'] as string) || ''
   const requestsPerSecond = parseInt((flags.rps as string) || '10', 10)
+  const enableIngest = !!flags['enable-ingest']
+  const skipAi = !!flags['skip-ai']
+  const ingestConcurrency = parseInt((flags['ingest-concurrency'] as string) || '5', 10)
 
   const scanOpts: ScanProgramsOptions = {
     rpcUrl,
@@ -155,6 +184,9 @@ async function main() {
     concurrency,
     resume,
     requestsPerSecond,
+    enableIngest,
+    skipAi,
+    ingestConcurrency,
   }
 
   switch (command) {

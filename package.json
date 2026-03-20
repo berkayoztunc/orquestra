@@ -24,8 +24,8 @@
     "lint:fix": "eslint packages/*/src --ext .ts,.tsx --fix",
     "type-check": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p packages/worker/tsconfig.json && tsc --noEmit -p packages/frontend/tsconfig.json && tsc --noEmit -p packages/cli/tsconfig.json",
     "format": "prettier --write \"packages/**/src/**/*.(ts|tsx|json|css)\"",
-    "db:migrate": "wrangler d1 execute orquestra-prod --file ./migrations/001_initial_schema.sql --remote",
-    "db:migrate:dev": "wrangler d1 execute DB --local --file ./migrations/001_initial_schema.sql && wrangler d1 execute DB --local --file ./migrations/002_indexes.sql",
+    "db:migrate": "wrangler d1 execute orquestra-prod --file ./migrations/001_initial_schema.sql --remote && wrangler d1 execute orquestra-prod --file ./migrations/002_indexes.sql --remote && wrangler d1 execute orquestra-prod --file ./migrations/003_custom_docs_and_known_addresses.sql --remote && wrangler d1 execute orquestra-prod --file ./migrations/004_ai_analyses.sql --remote",
+    "db:migrate:dev": "wrangler d1 execute DB --local --file ./migrations/001_initial_schema.sql && wrangler d1 execute DB --local --file ./migrations/002_indexes.sql && wrangler d1 execute DB --local --file ./migrations/003_custom_docs_and_known_addresses.sql && wrangler d1 execute DB --local --file ./migrations/004_ai_analyses.sql",
     "db:seed": "node scripts/seed-db.js",
     "db:reset": "wrangler d1 execute DB --local --command \"DROP TABLE IF EXISTS project_socials; DROP TABLE IF EXISTS api_keys; DROP TABLE IF EXISTS idl_versions; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS users;\"",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"

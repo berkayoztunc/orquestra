@@ -9,11 +9,15 @@
  *   seeds = ["anchor:idl", programId]
  *   but may also be at a legacy address derived differently.
  *
- * This module checks if such an account exists for a given program.
- * It does NOT download or parse the full IDL — just checks existence.
+ * This module checks if such an account exists for a given program,
+ * and when found, decodes and returns the full IDL data.
  */
 
 import { RpcClient } from './rpc'
+import { inflate } from 'node:zlib'
+import { promisify } from 'node:util'
+
+const inflateAsync = promisify(inflate)
 
 /** Base58 alphabet for encoding */
 const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -22,7 +26,30 @@ export interface IdlCheckResult {
   programId: string
   hasOnchainIdl: boolean
   idlAccount: string | null
+  /** Decoded IDL JSON object when available */
+  idlData: Record<string, any> | null
   error: string | null
+}
+
+/**
+ * Decode an Anchor IDL from raw account data (base64-encoded).
+ * Layout: [8 discriminator][32 authority][4 data_len LE][...zlib compressed IDL...]
+ */
+async function decodeIdlFromAccountData(base64Data: string): Promise<Record<string, any> | null> {
+  try {
+    const buf = Buffer.from(base64Data, 'base64')
+    // 8 (discriminator) + 32 (authority) + 4 (data_len) = 44 byte header
+    if (buf.length < 44) return null
+
+    const dataLen = buf.readUInt32LE(40)
+    if (dataLen === 0 || 44 + dataLen > buf.length) return null
+
+    const compressed = buf.subarray(44, 44 + dataLen)
+    const decompressed = await inflateAsync(compressed)
+    return JSON.parse(decompressed.toString('utf-8'))
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -108,6 +135,7 @@ export async function checkIdlBatch(
           programId: d.programId,
           hasOnchainIdl: false,
           idlAccount: null,
+          idlData: null,
           error: d.error,
         })
       }
@@ -153,6 +181,7 @@ export async function checkIdlBatch(
             programId: d.programId,
             hasOnchainIdl: false,
             idlAccount: null,
+            idlData: null,
             error: d.error,
           })
         } else {
@@ -166,25 +195,49 @@ export async function checkIdlBatch(
           const oldExists = !(oldInfo instanceof Error) && oldInfo !== null && oldInfo !== undefined
           const newExists = !(newInfo instanceof Error) && newInfo !== null && newInfo !== undefined
 
-          if (oldExists) {
+          const oldBase64 = oldExists ? oldInfo?.data?.[0] ?? null : null
+          const newBase64 = newExists ? newInfo?.data?.[0] ?? null : null
+          const oldIdlData = oldBase64 ? await decodeIdlFromAccountData(oldBase64) : null
+          const newIdlData = newBase64 ? await decodeIdlFromAccountData(newBase64) : null
+
+          if (oldIdlData) {
             results.push({
               programId: d.programId,
               hasOnchainIdl: true,
               idlAccount: d.oldIdlAddress,
+              idlData: oldIdlData,
               error: null,
+            })
+          } else if (newIdlData) {
+            results.push({
+              programId: d.programId,
+              hasOnchainIdl: true,
+              idlAccount: d.newIdlAddress,
+              idlData: newIdlData,
+              error: null,
+            })
+          } else if (oldExists) {
+            results.push({
+              programId: d.programId,
+              hasOnchainIdl: true,
+              idlAccount: d.oldIdlAddress,
+              idlData: null,
+              error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
             })
           } else if (newExists) {
             results.push({
               programId: d.programId,
               hasOnchainIdl: true,
               idlAccount: d.newIdlAddress,
-              error: null,
+              idlData: null,
+              error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
             })
           } else {
             results.push({
               programId: d.programId,
               hasOnchainIdl: false,
               idlAccount: d.oldIdlAddress,
+              idlData: null,
               error: oldErr || newErr || null,
             })
           }
@@ -197,6 +250,7 @@ export async function checkIdlBatch(
           programId: d.programId,
           hasOnchainIdl: false,
           idlAccount: d.oldIdlAddress,
+          idlData: null,
           error: `Batch RPC error: ${err.message}`,
         })
       }

@@ -13,6 +13,7 @@ interface Project {
   username?: string
   avatar_url?: string
   latestVersion?: number
+  latestVersionDate?: string
   isOwner?: boolean
   socials?: Record<string, string>
 }

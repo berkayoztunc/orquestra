@@ -352,6 +352,33 @@ export default function ProjectDetail(): JSX.Element {
               </button>
             </div>
 
+            {/* Meta info row */}
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3 text-xs text-gray-500">
+              {selectedProject.latestVersion !== undefined && (
+                <div className="flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" />
+                  </svg>
+                  <span>IDL v{selectedProject.latestVersion}</span>
+                  {selectedProject.latestVersionDate && (
+                    <span className="text-gray-600">({new Date(selectedProject.latestVersionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})</span>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Updated {new Date(selectedProject.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Created {new Date(selectedProject.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              </div>
+            </div>
+
             {/* Social Links Display */}
             {selectedProject.socials && Object.values(selectedProject.socials).some(v => v) && (
               <div className="flex items-center gap-3 mt-4 flex-wrap">

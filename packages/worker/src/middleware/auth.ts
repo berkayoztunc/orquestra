@@ -57,6 +57,31 @@ export async function optionalAuthMiddleware(c: Context, next: Next) {
 }
 
 /**
+ * Ingest key middleware — service-to-service auth for the CLI ingest endpoint.
+ * Validates the X-Ingest-Key header against the INGEST_API_KEY Worker secret.
+ * Does NOT require a user session or project-scoped API key.
+ */
+export async function ingestKeyMiddleware(c: Context, next: Next) {
+  const ingestKey = c.req.header('X-Ingest-Key')
+
+  if (!ingestKey) {
+    return c.json({ error: 'Unauthorized', message: 'Missing X-Ingest-Key header' }, 401)
+  }
+
+  const expectedKey = c.env?.INGEST_API_KEY
+  if (!expectedKey) {
+    return c.json({ error: 'Server configuration error', message: 'INGEST_API_KEY not configured' }, 500)
+  }
+
+  // Constant-time comparison to prevent timing attacks
+  if (ingestKey.length !== expectedKey.length || ingestKey !== expectedKey) {
+    return c.json({ error: 'Unauthorized', message: 'Invalid ingest key' }, 401)
+  }
+
+  await next()
+}
+
+/**
  * API key authentication middleware
  * Checks X-API-Key header against database
  */

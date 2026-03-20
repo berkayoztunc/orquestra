@@ -97,6 +97,14 @@ CORS_ORIGIN = "http://localhost:5173"
 command = "bun run build"
 cwd = "./"
 
+# Secrets (set via: wrangler secret put <NAME>)
+# Required secrets for production:
+#   JWT_SECRET          — JWT signing secret
+#   GITHUB_OAUTH_SECRET — GitHub OAuth app secret
+#   INGEST_API_KEY      — Service key for CLI bulk IDL ingest (X-Ingest-Key header)
+#
+# Set with: wrangler secret put INGEST_API_KEY --env production
+
 # Observability
 [observability]
 enabled = false

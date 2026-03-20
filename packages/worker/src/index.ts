@@ -16,6 +16,8 @@ import idlRoutes from './routes/idl'
 import apiRoutes from './routes/api'
 import authRoutes from './routes/auth'
 import llmsRoutes from './routes/llms'
+import ingestRoutes from './routes/ingest'
+import aiRoutes from './routes/ai'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -30,6 +32,7 @@ type Env = {
     FRONTEND_URL: string
     API_BASE_URL: string
     CORS_ORIGIN: string
+    INGEST_API_KEY: string
   }
 }
 
@@ -65,6 +68,8 @@ app.use('/api/*', requestLogger)
 app.use('/api/*', apiRateLimit)
 app.use('/api/*', publicApiCache)
 app.route('/api/idl', idlRoutes)
+app.route('/api/ingest', ingestRoutes)
+app.route('/api', aiRoutes)
 app.route('/api', apiRoutes)
 
 // 404 handler

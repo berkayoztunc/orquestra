@@ -187,6 +187,49 @@ export interface GitHubUser {
   name: string | null
 }
 
+// AI Analysis types
+export interface AIAnalysis {
+  id: string
+  project_id: string
+  idl_version_id: string | null
+  short_description: string | null
+  detailed_analysis_json: string | null
+  model_used: string | null
+  generated_at: string | null
+  created_at: string
+}
+
+export interface AIDetailedAnalysis {
+  programName: string
+  instructionCount: number
+  accountCount: number
+  errorCount: number
+  eventCount: number
+  tags: string[]
+  summary: string
+}
+
+// Ingest types (CLI → Worker)
+export interface IngestRequest {
+  programId: string
+  idl: AnchorIDL
+  idlHash: string
+  aiDescription: string | null
+  aiAnalysisJson: string | null
+  aiModelUsed: string | null
+  aiGeneratedAt: string | null
+  programName?: string
+  programDescription?: string
+}
+
+export interface IngestResponse {
+  projectId: string
+  idlVersionId: string
+  aiAnalysisId: string | null
+  created: boolean
+  newVersion: boolean
+}
+
 // Constants
 export const API_VERSION = 'v1'
 export const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB

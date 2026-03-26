@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getMyProjects, listProjects, getProject } from '../api/client'
+import { getMyProjects, listProjects, getProject, getProjectByProgramId } from '../api/client'
 
 interface Project {
   id: string
@@ -34,6 +34,7 @@ interface ProjectsState {
   loadPublicProjects: (params?: { page?: number; search?: string }) => Promise<void>
   loadMyProjects: () => Promise<void>
   loadProject: (projectId: string) => Promise<void>
+  loadProjectByProgramId: (programId: string) => Promise<void>
   clearSelected: () => void
 }
 
@@ -73,6 +74,16 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     set({ isLoading: true, error: null })
     try {
       const project = await getProject(projectId)
+      set({ selectedProject: project, isLoading: false })
+    } catch (err: any) {
+      set({ selectedProject: null, isLoading: false, error: err.message || 'Failed to load project' })
+    }
+  },
+
+  loadProjectByProgramId: async (programId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const project = await getProjectByProgramId(programId)
       set({ selectedProject: project, isLoading: false })
     } catch (err: any) {
       set({ selectedProject: null, isLoading: false, error: err.message || 'Failed to load project' })

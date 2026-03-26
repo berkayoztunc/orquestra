@@ -24,7 +24,7 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
 
   return (
     <Link
-      to={`/project/${project.id}`}
+      to={`/project/${project.program_id}`}
       className="card block group p-5"
     >
       <div className="flex items-start justify-between mb-4">

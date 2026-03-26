@@ -2,12 +2,13 @@ import { Hono } from 'hono'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 import { buildRateLimit } from '../middleware/rate-limit'
 import { invalidateCache } from '../middleware/cache'
-import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta } from '../services/idl-parser'
+import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL } from '../services/idl-parser'
 import type { AnchorIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
 import { listPdaAccounts, derivePda } from '../services/pda'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
+import { fetchAnchorIDLFromChain } from '../services/idl-fetcher'
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
@@ -107,6 +108,129 @@ app.get('/projects/mine', authMiddleware, async (c) => {
     return c.json({ projects: results?.results || [] })
   } catch (err) {
     return c.json({ error: 'Failed to list projects' }, 500)
+  }
+})
+
+// Get project by Solana program ID (auto-fetch from chain if not found)
+app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => {
+  const programId = c.req.param('programId')
+  const userId = c.get('userId') as string | undefined
+
+  try {
+    const db = c.env?.DB
+
+    // Look up by program_id (globally unique)
+    const project = await db
+      ?.prepare(
+        'SELECT p.*, u.username, u.avatar_url FROM projects p LEFT JOIN users u ON p.user_id = u.id WHERE p.program_id = ?'
+      )
+      .bind(programId)
+      .first()
+
+    if (project) {
+      // Check access
+      if (!project.is_public && project.user_id !== userId) {
+        return c.json({ error: 'Access denied' }, 403)
+      }
+
+      // Enrich with version, socials, owner info (same as GET /projects/:projectId)
+      const [latestIdlResult, socialsResult] = await Promise.all([
+        db
+          ?.prepare(
+            'SELECT id, version, created_at FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
+          )
+          .bind(project.id)
+          .first(),
+        db
+          ?.prepare('SELECT twitter, discord, telegram, github, website FROM project_socials WHERE project_id = ?')
+          .bind(project.id)
+          .first(),
+      ])
+
+      let apiKeyCount = 0
+      if (project.user_id === userId) {
+        const keyCount = await db
+          ?.prepare('SELECT COUNT(*) as count FROM api_keys WHERE project_id = ?')
+          .bind(project.id)
+          .first()
+        apiKeyCount = (keyCount as any)?.count || 0
+      }
+
+      return c.json({
+        project: {
+          ...project,
+          latestVersion: latestIdlResult?.version || 0,
+          latestVersionDate: latestIdlResult?.created_at,
+          socials: socialsResult || {},
+          apiKeyCount,
+          isOwner: project.user_id === userId,
+        },
+      })
+    }
+
+    // Not found in DB — try fetching IDL from Solana on-chain
+    const rpcUrl = c.env?.SOLANA_MAINNET_RPC_URL || c.env?.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+    const fetchResult = await fetchAnchorIDLFromChain(programId, rpcUrl)
+
+    if (!fetchResult) {
+      return c.json({ error: 'Program not found on-chain or does not have an Anchor IDL' }, 404)
+    }
+
+    // Auto-create "system" project
+    const projectId = generateId()
+    const now = getCurrentTimestamp()
+    const idlName = fetchResult.idl.name || fetchResult.idl.metadata?.name || programId.slice(0, 8)
+
+    await db
+      ?.prepare(
+        'INSERT INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+      .bind(projectId, 'system', idlName, `Auto-imported from Solana on-chain IDL`, programId, 1, now, now)
+      .run()
+
+    // Store IDL version
+    const versionId = generateId()
+    await db
+      ?.prepare(
+        'INSERT INTO idl_versions (id, project_id, idl_json, version, created_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      .bind(versionId, projectId, fetchResult.idlJson, 1, now)
+      .run()
+
+    // Cache IDL in KV
+    const kv = c.env?.IDLS
+    if (kv) {
+      await kv.put(`idl:${projectId}:latest`, fetchResult.idlJson, { expirationTtl: 86400 * 30 })
+    }
+
+    // Generate and cache docs
+    const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
+    const docs = generateDocumentation(fetchResult.idl, programId, apiBaseUrl, projectId, null)
+    if (c.env?.CACHE) {
+      await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+
+    return c.json({
+      project: {
+        id: projectId,
+        user_id: 'system',
+        name: idlName,
+        description: 'Auto-imported from Solana on-chain IDL',
+        program_id: programId,
+        is_public: 1,
+        created_at: now,
+        updated_at: now,
+        username: null,
+        avatar_url: null,
+        latestVersion: 1,
+        latestVersionDate: now,
+        socials: {},
+        apiKeyCount: 0,
+        isOwner: false,
+      },
+    })
+  } catch (err) {
+    return c.json({ error: 'Failed to look up program', details: (err as Error).message }, 500)
   }
 })
 

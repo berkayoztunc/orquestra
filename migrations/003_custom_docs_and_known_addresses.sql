@@ -1,5 +1,7 @@
 -- Add custom documentation support (owner-editable docs)
-ALTER TABLE projects ADD COLUMN custom_docs TEXT;
+IF NOT EXISTS (SELECT 1 FROM pragma_table_info('projects') WHERE name = 'custom_docs') THEN
+  ALTER TABLE projects ADD COLUMN custom_docs TEXT;
+END IF;
 
 -- Known public key addresses for a project
 CREATE TABLE IF NOT EXISTS known_addresses (

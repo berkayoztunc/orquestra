@@ -26,7 +26,7 @@ function App(): JSX.Element {
             <Route path="/" element={<Home />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/explorer" element={<Explorer />} />
-            <Route path="/project/:projectId" element={<ProjectDetail />} />
+            <Route path="/project/:programId" element={<ProjectDetail />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/error" element={<AuthError />} />
             <Route path="*" element={<NotFound />} />

@@ -27,8 +27,8 @@ import PDAExplorer from '../components/PDAExplorer'
 type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'docs' | 'addresses' | 'settings'
 
 export default function ProjectDetail(): JSX.Element {
-  const { projectId } = useParams<{ projectId: string }>()
-  const { selectedProject, loadProject, isLoading } = useProjectsStore()
+  const { programId } = useParams<{ programId: string }>()
+  const { selectedProject, loadProjectByProgramId, isLoading, error } = useProjectsStore()
   const { user } = useAuthStore()
   const { showToast } = useToast()
 
@@ -74,10 +74,13 @@ export default function ProjectDetail(): JSX.Element {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (projectId) {
-      loadProject(projectId)
+    if (programId) {
+      loadProjectByProgramId(programId)
     }
-  }, [projectId, loadProject])
+  }, [programId, loadProjectByProgramId])
+
+  // Internal project ID from the loaded project (used for all API calls)
+  const projectId = selectedProject?.id
 
   useEffect(() => {
     if (!projectId) return
@@ -152,13 +155,36 @@ export default function ProjectDetail(): JSX.Element {
     loadTabData()
   }, [activeTab, projectId, selectedProject])
 
-  if (isLoading || !selectedProject) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
       </div>
     )
   }
+
+  if (!selectedProject) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6 text-center px-4">
+        <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
+          <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white mb-2">Program Not Found</h2>
+          <p className="text-gray-400 text-sm max-w-sm">
+            {error || 'This program could not be found. It may not exist or may not have an Anchor IDL on-chain.'}
+          </p>
+        </div>
+        <Link to="/" className="btn-secondary px-6 py-2 text-sm">
+          Back to Home
+        </Link>
+      </div>
+    )
+  }
+
+  const isSystemProject = selectedProject.user_id === 'system'
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'instructions', label: 'Instructions' },
@@ -168,7 +194,7 @@ export default function ProjectDetail(): JSX.Element {
     { id: 'pda', label: 'PDA Finder' },
     { id: 'docs', label: 'Docs' },
     { id: 'addresses', label: 'Addresses' },
-    ...(selectedProject.isOwner ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
+    ...(!isSystemProject && selectedProject.isOwner ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
   ]
 
   const handleGenerateKey = async () => {
@@ -200,7 +226,7 @@ export default function ProjectDetail(): JSX.Element {
     if (!projectId) return
     try {
       await updateProject(projectId, { isPublic: !selectedProject.is_public })
-      loadProject(projectId)
+      loadProjectByProgramId(programId!)
       showToast(`Project is now ${!selectedProject.is_public ? 'public' : 'private'}`, 'success')
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Failed to update project', 'error')
@@ -277,7 +303,7 @@ export default function ProjectDetail(): JSX.Element {
     setIsSavingSocials(true)
     try {
       await updateProject(projectId, { socials: socialsForm })
-      await loadProject(projectId)
+      await loadProjectByProgramId(programId!)
       showToast('Social links updated', 'success')
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Failed to update social links', 'error')
@@ -301,6 +327,32 @@ export default function ProjectDetail(): JSX.Element {
 
   return (
     <div className="space-y-8">
+      {/* Unowned Program Banner */}
+      {isSystemProject && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20 flex-shrink-0">
+              <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-yellow-400 font-medium text-sm">No registered developer</p>
+              <p className="text-gray-400 text-xs mt-0.5">This program was auto-imported from Solana on-chain data. It has no verified developer on Orquestra.</p>
+            </div>
+          </div>
+          <a
+            href={`mailto:request@orquestra.dev?subject=${encodeURIComponent(`Developer Request: ${selectedProject.name}`)}&body=${encodeURIComponent(`Program ID: ${selectedProject.program_id}\nProgram Name: ${selectedProject.name}\n\nI would like to request the developer of this program to register on Orquestra.`)}`}
+            className="btn-secondary text-sm px-4 py-2 flex items-center gap-2 whitespace-nowrap self-start"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            Request Developer
+          </a>
+        </div>
+      )}
+
       {/* Project Header - Modern */}
       <div className="card-static p-6">
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -664,7 +716,7 @@ export default function ProjectDetail(): JSX.Element {
                     )}
                     {!isEditingDocs && selectedProject.is_public && (
                       <a
-                        href={`https://api.orquestra.dev/project/${projectId}/llms.txt`}
+                        href={`https://api.orquestra.dev/project/${selectedProject.id}/llms.txt`}
                         className="btn-secondary text-sm px-4 py-2"
                       >
                         LLMs

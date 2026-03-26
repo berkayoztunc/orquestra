@@ -78,6 +78,11 @@ export async function getProject(projectId: string) {
   return res.data.project
 }
 
+export async function getProjectByProgramId(programId: string) {
+  const res = await api.get(`/projects/by-program/${programId}`)
+  return res.data.project
+}
+
 export async function updateProject(projectId: string, data: {
   name?: string
   description?: string

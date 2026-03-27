@@ -33,6 +33,9 @@ export default function Header(): JSX.Element {
             <Link to="/explorer" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
               Explorer
             </Link>
+            <Link to="/docs/sign-and-send" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
+              Docs
+            </Link>
             {isAuthenticated ? (
               <>
                 <Link to="/dashboard" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
@@ -113,6 +116,13 @@ export default function Header(): JSX.Element {
                 className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
               >
                 Explorer
+              </Link>
+              <Link
+                to="/docs/sign-and-send"
+                onClick={closeMobileMenu}
+                className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
+              >
+                Docs
               </Link>
               {isAuthenticated ? (
                 <>

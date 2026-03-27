@@ -197,11 +197,36 @@ Complete checklist and step-by-step implementation guide for orquestra.
 - [x] Create CONTRIBUTING.md
 - [x] Create QUICKREF.md
 
+## Phase 8: Program-ID Routing & On-Chain IDL Auto-Fetch ✅
 
+### Routing
+- [x] Change project detail route from `/project/:projectId` (internal DB ID) to `/project/:programId` (Solana base58 program address)
+- [x] Update `App.tsx` route param from `:projectId` → `:programId`
+- [x] Update `ProjectCard.tsx` links to use `project.program_id`
+- [x] Make `program_id` globally unique — `migrations/005_unique_program_id.sql` adds a unique index on `projects(program_id)`
+
+### On-Chain IDL Auto-Fetch
+- [x] New `services/idl-fetcher.ts` — fetches Anchor IDL from Solana on-chain accounts without Node.js dependencies
+  - Derives IDL account address: `findProgramAddress([], programId)` then `createWithSeed(base, "anchor:idl", programId)`
+  - Calls Solana JSON-RPC `getAccountInfo` directly
+  - Skips 8-byte discriminator, reads u32 LE data length, decompresses with `DecompressionStream` (deflate-raw → deflate → gzip → raw fallback)
+  - Validates result with existing `validateIDL()`
+- [x] New `GET /projects/by-program/:programId` endpoint in `routes/api.ts`
+  - Looks up project by `program_id` in DB first
+  - If not found: triggers on-chain IDL fetch, auto-creates a `user_id='system'` project with `is_public=1`, stores IDL version and cached docs
+  - Returns 404 if program has no Anchor IDL on-chain
+
+### Frontend Updates
+- [x] New `getProjectByProgramId()` in `api/client.ts`
+- [x] New `loadProjectByProgramId()` action in `store/projects.ts`
+- [x] `ProjectDetail.tsx` updated to use `programId` URL param; internal `projectId` (DB ID) derived from loaded project for all API calls
+- [x] Unowned project banner — shown when `user_id === 'system'`; includes a `mailto:request@orquestra.dev` "Request Developer" button with pre-filled subject/body
+- [x] Settings tab hidden for system-owned projects
+- [x] Proper 404/error state in `ProjectDetail.tsx` — shows "Program Not Found" page with error message instead of infinite spinner
 
 ## Current Status
 
-✅ **Completed:** Project setup, core backend (auth, IDL, tx-builder, docs), full dashboard & explorer UI, rate limiting, validation, error handling, unit tests (56 passing), performance optimizations (caching, compression, cold start monitoring, query batching), CI/CD (automated testing with coverage, auto-deploy staging & production)
+✅ **Completed:** Project setup, core backend (auth, IDL, tx-builder, docs), full dashboard & explorer UI, rate limiting, validation, error handling, unit tests (56 passing), performance optimizations (caching, compression, cold start monitoring, query batching), CI/CD (automated testing with coverage, auto-deploy staging & production), **program-ID routing + on-chain IDL auto-fetch + unowned project UI (Phase 8)**
 🟡 **In Progress:** Cloudflare infrastructure setup, monitoring & observability
 🔴 **Remaining:** E2E tests, Cloudflare production setup, community setup
 

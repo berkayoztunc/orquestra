@@ -17,6 +17,7 @@ export interface BuildTransactionRequest {
 
 export interface BuildTransactionResponse {
   transaction: string               // base58 serialized transaction message
+  serializedTransaction: string     // base58 Solana legacy wire transaction, compatible with Transaction.from(bs58.decode(...))
   message: string                   // human-readable description
   accounts: AccountInfo[]           // account details used
   instruction: InstructionInfo      // instruction info
@@ -271,8 +272,18 @@ export async function buildTransaction(
   const txBytes = new TextEncoder().encode(JSON.stringify(txData))
   const txBase58 = base58Encode(txBytes)
 
+  // Build real Solana wire-format transaction (compatible with Transaction.from())
+  const msgBytes = buildSolanaMessage(request.feePayer, accountInfos, programId, instructionData, blockhash)
+  const sigCountBytes = encodeCompactU16(1)
+  const wireBytes = new Uint8Array(sigCountBytes.length + 64 + msgBytes.length)
+  wireBytes.set(sigCountBytes, 0)
+  // bytes [sigCountBytes.length .. sigCountBytes.length+63] stay zero (empty signature slot)
+  wireBytes.set(msgBytes, sigCountBytes.length + 64)
+  const serializedTransaction = base58Encode(wireBytes)
+
   return {
     transaction: txBase58,
+    serializedTransaction,
     message: `Transaction for ${idl.metadata.name}.${instructionName}`,
     accounts: accountInfos,
     instruction: {
@@ -442,4 +453,131 @@ function arrayToHex(arr: Uint8Array): string {
 
 function arrayToBase58(arr: Uint8Array): string {
   return base58Encode(arr)
+}
+
+// compact-u16 / shortvec encoding used in Solana message wire format (LEB128 variant)
+function encodeCompactU16(n: number): number[] {
+  const out: number[] = []
+  let rem = n
+  for (;;) {
+    const b = rem & 0x7f
+    rem >>= 7
+    if (rem === 0) {
+      out.push(b)
+      break
+    }
+    out.push(b | 0x80)
+  }
+  return out
+}
+
+interface KeyMeta {
+  pubkey: string
+  writableSigner: boolean
+  readonlySigner: boolean
+  writableNonSigner: boolean
+  readonlyNonSigner: boolean
+}
+
+/**
+ * Build a Solana legacy message in binary wire format.
+ * Returns the raw message bytes (not the full transaction — no signature prefix).
+ */
+function buildSolanaMessage(
+  feePayer: string,
+  accountInfos: AccountInfo[],
+  programId: string,
+  instructionData: Uint8Array,
+  blockhash: string,
+): Uint8Array {
+  // Collect all keys, merging flags if the same pubkey appears multiple times
+  const keyMap = new Map<string, KeyMeta>()
+
+  function upsert(pubkey: string, isSigner: boolean, isWritable: boolean) {
+    if (!pubkey) return
+    const existing = keyMap.get(pubkey)
+    if (!existing) {
+      keyMap.set(pubkey, {
+        pubkey,
+        writableSigner: isSigner && isWritable,
+        readonlySigner: isSigner && !isWritable,
+        writableNonSigner: !isSigner && isWritable,
+        readonlyNonSigner: !isSigner && !isWritable,
+      })
+    } else {
+      // Promote flags: writable > readonly, signer > non-signer
+      if (isSigner && isWritable) existing.writableSigner = true
+      else if (isSigner && !isWritable) existing.readonlySigner = true
+      else if (!isSigner && isWritable) existing.writableNonSigner = true
+      else existing.readonlyNonSigner = true
+    }
+  }
+
+  // fee payer is always writable signer at index 0
+  upsert(feePayer, true, true)
+  for (const acc of accountInfos) {
+    upsert(acc.pubkey, acc.isSigner, acc.isWritable)
+  }
+  // program id is readonly non-signer
+  upsert(programId, false, false)
+
+  // Determine effective role per key (most privileged wins)
+  function bucket(m: KeyMeta): 0 | 1 | 2 | 3 {
+    if (m.writableSigner) return 0
+    if (m.readonlySigner) return 1
+    if (m.writableNonSigner) return 2
+    return 3
+  }
+
+  const sorted = Array.from(keyMap.values()).sort((a, b) => {
+    const ba = bucket(a), bb = bucket(b)
+    if (ba !== bb) return ba - bb
+    // fee payer must be first within bucket 0
+    if (a.pubkey === feePayer) return -1
+    if (b.pubkey === feePayer) return 1
+    return 0
+  })
+
+  // Header counts
+  const numWritableSigners = sorted.filter((k) => bucket(k) === 0).length
+  const numReadonlySigners = sorted.filter((k) => bucket(k) === 1).length
+  const numReadonlyNonSigners = sorted.filter((k) => bucket(k) === 3).length
+  const numRequiredSignatures = numWritableSigners + numReadonlySigners
+
+  const keyIndex = new Map<string, number>(sorted.map((k, i) => [k.pubkey, i]))
+
+  // Encode instruction
+  const programIdIdx = keyIndex.get(programId)!
+  const accountIndices = accountInfos
+    .filter((a) => a.pubkey)
+    .map((a) => keyIndex.get(a.pubkey)!)
+
+  const ixBytes: number[] = [
+    programIdIdx,
+    ...encodeCompactU16(accountIndices.length),
+    ...accountIndices,
+    ...encodeCompactU16(instructionData.length),
+    ...instructionData,
+  ]
+
+  // Assemble message
+  const out: number[] = []
+
+  // Header (3 bytes)
+  out.push(numRequiredSignatures, numReadonlySigners, numReadonlyNonSigners)
+
+  // Account keys
+  out.push(...encodeCompactU16(sorted.length))
+  for (const k of sorted) {
+    out.push(...base58Decode(k.pubkey))
+  }
+
+  // Recent blockhash (32 bytes)
+  out.push(...base58Decode(blockhash))
+
+  // Instructions (always 1 here)
+  out.push(...encodeCompactU16(1))
+  out.push(...ixBytes)
+
+  return new Uint8Array(out)
 }

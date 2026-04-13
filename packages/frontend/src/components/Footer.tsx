@@ -23,6 +23,10 @@ export default function Footer(): JSX.Element {
             </a>
           </div>
         </div>
+        <div className="text-gray-500 text-xs mt-2">
+          Disclaimer: This project is developed for solana hackathon 2026. It is not intended for production use and should not be used in any real-world applications without proper security audits and testing.
+          The developers are not responsible for any misuse or damage caused by this software. Use at your own risk. All code is open source and available on GitHub for review and contribution. Please refer to the repository for more details and updates.
+        </div>
       </div>
     </footer>
   )

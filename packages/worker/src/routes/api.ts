@@ -38,29 +38,38 @@ const app = new Hono<Env>()
 // List all public projects (+ user's private projects if authenticated)
 app.get('/projects', optionalAuthMiddleware, async (c) => {
   const userId = c.get('userId') as string | undefined
-  const page = parseInt(c.req.query('page') || '1')
-  const limit = Math.min(parseInt(c.req.query('limit') || '20'), 100)
+
+  const rawPage = parseInt(c.req.query('page') || '1', 10)
+  const rawLimit = parseInt(c.req.query('limit') || '20', 10)
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20
   const offset = (page - 1) * limit
-  const search = c.req.query('search') || ''
+
+  const rawSearch = c.req.query('search') || ''
+  if (rawSearch.length > 100) {
+    return c.json({ error: 'Search term too long (max 100 characters)' }, 400)
+  }
+  // Escape LIKE special characters to prevent wildcard injection
+  const search = rawSearch.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
 
   try {
-    const db = c.env?.DB
+    const db = c.env.DB
     let query: string
     let countQuery: string
-    const params: any[] = []
-    const countParams: any[] = []
+    const params: (string | number)[] = []
+    const countParams: (string | number)[] = []
 
     if (search) {
       const searchTerm = `%${search}%`
       if (userId) {
-        query = 'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE (p.is_public = 1 OR p.user_id = ?) AND (p.name LIKE ? OR p.description LIKE ?) ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
+        query = "SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE (p.is_public = 1 OR p.user_id = ?) AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT ? OFFSET ?"
         params.push(userId, searchTerm, searchTerm, limit, offset)
-        countQuery = 'SELECT COUNT(*) as count FROM projects WHERE (is_public = 1 OR user_id = ?) AND (name LIKE ? OR description LIKE ?)'
+        countQuery = "SELECT COUNT(*) as count FROM projects WHERE (is_public = 1 OR user_id = ?) AND (LOWER(name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(description,'')) LIKE LOWER(?) ESCAPE '\\')"
         countParams.push(userId, searchTerm, searchTerm)
       } else {
-        query = 'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 AND (p.name LIKE ? OR p.description LIKE ?) ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
+        query = "SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT ? OFFSET ?"
         params.push(searchTerm, searchTerm, limit, offset)
-        countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1 AND (name LIKE ? OR description LIKE ?)'
+        countQuery = "SELECT COUNT(*) as count FROM projects WHERE is_public = 1 AND (LOWER(name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(description,'')) LIKE LOWER(?) ESCAPE '\\')"
         countParams.push(searchTerm, searchTerm)
       }
     } else {
@@ -76,8 +85,8 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
       }
     }
 
-    const results = await db?.prepare(query).bind(...params).all()
-    const countResult = await db?.prepare(countQuery).bind(...countParams).first()
+    const results = await db.prepare(query).bind(...params).all()
+    const countResult = await db.prepare(countQuery).bind(...countParams).first()
     const total = (countResult as any)?.count || 0
 
     return c.json({
@@ -90,7 +99,7 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
       },
     })
   } catch (err) {
-    return c.json({ error: 'Failed to list projects', details: (err as Error).message }, 500)
+    return c.json({ error: 'Failed to list projects' }, 500)
   }
 })
 

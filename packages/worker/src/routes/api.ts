@@ -897,6 +897,7 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
   const userId = c.get('userId') as string | undefined
   const format = c.req.query('format') || 'json'
+  const refresh = c.req.query('refresh') === '1' || c.req.query('refresh') === 'true'
 
   try {
     const db = c.env?.DB
@@ -925,8 +926,8 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
       return c.json({ projectId, docs: customDocs, isCustom: true })
     }
 
-    // Try cache first for auto-generated docs
-    if (c.env?.CACHE) {
+    // Try cache first for auto-generated docs unless refresh is requested
+    if (!refresh && c.env?.CACHE) {
       const cached = await c.env.CACHE.get(`docs:${projectId}`)
       if (cached) {
         if (format === 'md' || format === 'markdown') {

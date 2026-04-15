@@ -47,6 +47,7 @@ export default function ProjectDetail(): JSX.Element {
   const [isEditingDocs, setIsEditingDocs] = useState(false)
   const [editedDocs, setEditedDocs] = useState('')
   const [isCustomDocs, setIsCustomDocs] = useState(false)
+  const [isRegeneratingDocs, setIsRegeneratingDocs] = useState(false)
 
   // Known addresses state
   const [knownAddresses, setKnownAddresses] = useState<any[]>([])
@@ -268,6 +269,34 @@ export default function ProjectDetail(): JSX.Element {
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Failed to reset docs', 'error')
     }
+  }
+
+  const handleRegenerateDocs = async () => {
+    if (!projectId) return
+
+    if (isCustomDocs) {
+      const confirmed = confirm(
+        'You currently use custom docs. Regenerating will discard custom docs and rebuild from the latest IDL. Continue?'
+      )
+      if (!confirmed) return
+    }
+
+    setIsRegeneratingDocs(true)
+    try {
+      if (isCustomDocs) {
+        await resetDocs(projectId)
+      }
+
+      const data = await getDocs(projectId, 'json', { refresh: true })
+      const docsText = typeof data === 'string' ? data : data.docs || ''
+      setDocs(docsText)
+      setIsCustomDocs(data.isCustom || false)
+      setIsEditingDocs(false)
+      showToast('Documentation regenerated from latest IDL', 'success')
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to regenerate docs', 'error')
+    }
+    setIsRegeneratingDocs(false)
   }
 
   // ── Known addresses handlers ──
@@ -687,6 +716,15 @@ export default function ProjectDetail(): JSX.Element {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {selectedProject.isOwner && !isEditingDocs && (
+                      <button
+                        onClick={handleRegenerateDocs}
+                        disabled={isRegeneratingDocs}
+                        className="btn-secondary text-sm px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isRegeneratingDocs ? 'Regenerating...' : 'Regenerate'}
+                      </button>
+                    )}
                     {selectedProject.isOwner && !isEditingDocs && (
                       <button
                         onClick={handleEditDocs}

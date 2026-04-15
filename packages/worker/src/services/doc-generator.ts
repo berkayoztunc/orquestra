@@ -5,6 +5,7 @@
 
 import type { AnchorIDL, AnchorInstruction, AnchorAccount, AnchorError, AnchorEvent } from './idl-parser'
 import { resolveType, extractPDASeeds, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, normalizeField } from './idl-parser'
+import { listPdaAccounts } from './pda'
 
 export interface GeneratedDocs {
   full: string           // Complete markdown documentation
@@ -14,6 +15,7 @@ export interface GeneratedDocs {
   events: string         // Events section only
   types: string          // Types section only
   overview: string       // Overview/summary section
+  pdaAccounts: string    // PDA-derivable accounts section
 }
 
 /**
@@ -33,15 +35,16 @@ export function generateDocumentation(
   const errors = generateErrorsDocs(idl)
   const events = generateEventsDocs(idl)
   const types = generateTypesDocs(idl)
+  const pdaAccounts = generatePdaDocs(idl, normalizedApiBase, projectSlug)
 
-  let full = [overview, instructions, accounts, types, errors, events].join('\n\n---\n\n')
+  let full = [overview, pdaAccounts, instructions, accounts, types, errors, events].join('\n\n---\n\n')
 
   // Append CPI documentation if available
   if (cpiMd) {
     full += `\n\n---\n\n## CPI Integration\n\n${cpiMd}`
   }
 
-  return { full, instructions, accounts, errors, events, types, overview }
+  return { full, instructions, accounts, errors, events, types, overview, pdaAccounts }
 }
 
 function generateOverview(
@@ -52,13 +55,14 @@ function generateOverview(
 ): string {
   const programName = idl.metadata?.name || idl.name || 'Unknown Program'
   const programVersion = idl.metadata?.version || idl.version || 'unknown'
+  const base = `${apiBaseUrl}/${projectSlug}`
   return `# ${programName}
 
 > Auto-generated documentation from Anchor IDL
 
 **Program ID:** \`${programId}\`  
 **Version:** ${programVersion}  
-**API Base:** \`${apiBaseUrl}/${projectSlug}\`
+**API Base:** \`${base}\`
 
 ## Summary
 
@@ -70,21 +74,52 @@ function generateOverview(
 | Errors | ${idl.errors?.length || 0} |
 | Events | ${idl.events?.length || 0} |
 
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | \`${base}/instructions\` | List all instructions |
+| GET | \`${base}/instructions/:name\` | Get a single instruction |
+| POST | \`${base}/instructions/:name/build\` | Build a base58 transaction |
+| GET | \`${base}/pda\` | List all PDA-derivable accounts with seed schemas |
+| POST | \`${base}/pda/derive\` | Derive a PDA address from seed values |
+| GET | \`${base}/accounts\` | List all account types |
+| GET | \`${base}/errors\` | List all error codes |
+| GET | \`${base}/types\` | List all custom types |
+| GET | \`${base}/events\` | List all events |
+| GET | \`${base}/docs\` | Full documentation (this content) |
+
 ## Quick Start
 
 ### List all instructions
 \`\`\`bash
-curl ${apiBaseUrl}/${projectSlug}/instructions
+curl ${base}/instructions
 \`\`\`
 
 ### Build a transaction
 \`\`\`bash
-curl -X POST ${apiBaseUrl}/${projectSlug}/instructions/{name}/build \\
+curl -X POST ${base}/instructions/{name}/build \\
   -H "Content-Type: application/json" \\
   -d '{
     "accounts": { "account_name": "pubkey..." },
     "args": { "arg_name": "value" },
     "feePayer": "your_pubkey..."
+  }'
+\`\`\`
+
+### List PDA-derivable accounts
+\`\`\`bash
+curl ${base}/pda
+\`\`\`
+
+### Derive a PDA address
+\`\`\`bash
+curl -X POST ${base}/pda/derive \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "instruction": "instruction_name",
+    "account": "account_name",
+    "seeds": { "seed_arg_name": "value" }
   }'
 \`\`\``
 }
@@ -200,6 +235,64 @@ function normalizeApiBaseUrl(apiBaseUrl: string): string {
     return trimmed
   }
   return `${trimmed}/api`
+}
+
+function generatePdaDocs(idl: AnchorIDL, apiBaseUrl: string, projectSlug: string): string {
+  const pdaAccounts = listPdaAccounts(idl)
+  const base = `${apiBaseUrl}/${projectSlug}`
+
+  if (!pdaAccounts.length) {
+    return '## PDA-Derivable Accounts\n\nNo PDA-derivable accounts found in this program.'
+  }
+
+  let md = '## PDA-Derivable Accounts\n\n'
+  md += `**List endpoint:** \`GET ${base}/pda\`  \n`
+  md += `**Derive endpoint:** \`POST ${base}/pda/derive\`\n\n`
+
+  // Group by account name to deduplicate across instructions
+  const seen = new Set<string>()
+  const unique = pdaAccounts.filter((entry) => {
+    const key = `${entry.instruction}:${entry.account}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  for (const entry of unique) {
+    md += `### \`${entry.account}\` (instruction: \`${entry.instruction}\`)\n\n`
+
+    if (entry.customProgram) {
+      md += `> Cross-program PDA — derived using program \`${entry.customProgram}\`\n\n`
+    }
+
+    md += '| # | Kind | Name | Type | Description |\n'
+    md += '|---|------|------|------|-------------|\n'
+
+    entry.seeds.forEach((seed, i) => {
+      const num = i + 1
+      const name = seed.name ?? '-'
+      const type = seed.type ?? '-'
+      const desc = seed.description ?? '-'
+      md += `| ${num} | \`${seed.kind}\` | ${name} | ${type} | ${desc} |\n`
+    })
+
+    md += '\n'
+
+    // Build seed payload example
+    const argSeeds = entry.seeds.filter((s) => s.kind === 'arg' || s.kind === 'account')
+    const seedsExample = argSeeds.length
+      ? argSeeds.map((s) => `      "${s.name}": "<${s.type ?? 'value'}>"`).join(',\n')
+      : '      // no dynamic seeds required'
+
+    md += '**Derive example:**\n'
+    md += '```bash\n'
+    md += `curl -X POST ${base}/pda/derive \\\n`
+    md += '  -H "Content-Type: application/json" \\\n'
+    md += `  -d '{\n    "instruction": "${entry.instruction}",\n    "account": "${entry.account}",\n    "seeds": {\n${seedsExample}\n    }\n  }'\n`
+    md += '```\n\n'
+  }
+
+  return md.trimEnd()
 }
 
 function generateAccountsDocs(idl: AnchorIDL): string {

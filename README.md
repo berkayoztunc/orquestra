@@ -84,19 +84,15 @@ Install and use it to interact with your orquestra projects from the terminal:
 
 ```bash
 # Install
-npm install -g orquestra-cli
-
-# Upload an IDL
-orquestra upload --idl ./target/idl/my_program.json --name my-program
-
-# List instructions for a project
-orquestra instructions my-program
-
-# Build a transaction
-orquestra build my-program initialize --args '{"amount": 1000000}' --accounts '{"authority": "<pubkey>"}'
-
-# Fetch AI-ready docs
-orquestra docs my-program
+orquestra                              # interactive top-level menu
+orquestra list
+orquestra run [INSTRUCTION]
+orquestra pda [ACCOUNT]
+orquestra config set [--project-id] [--api-key] [--rpc] [--keypair] [--api-base] [--idl]
+orquestra config show
+orquestra config reset                  # interactively update config values
+orquestra --version
+orquestra --help
 ```
 
 This repo also includes tools for discovering on-chain programs:

@@ -10,6 +10,9 @@
   ],
   "scripts": {
     "install:all": "bun install",
+    "dev": "concurrently \"bun run dev:worker\" \"bun run dev:frontend\"",
+    "dev:worker": "cd packages/worker && bun run dev",
+    "dev:frontend": "cd packages/frontend && bun run dev",
     "build": "cd packages/shared && bun run build && cd ../frontend && bun run build && cd ../worker && bun run build",
     "build:worker": "cd packages/worker && bun run build",
     "build:frontend": "cd packages/frontend && bun run build",

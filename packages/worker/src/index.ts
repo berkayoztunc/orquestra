@@ -3,6 +3,9 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 
+// MCP
+import { handleMcpRequest } from './routes/mcp'
+
 // Middleware
 import { errorHandler } from './middleware/error-handler'
 import { apiRateLimit } from './middleware/rate-limit'
@@ -77,4 +80,14 @@ app.all('*', (c) => {
   return c.json({ error: 'Not Found' }, 404)
 })
 
-export default app
+// Export a custom fetch handler so /mcp bypasses Hono's CORS middleware
+// and is handled directly by the Cloudflare Agents SDK transport.
+export default {
+  fetch(request: Request, env: Env['Bindings'], ctx: ExecutionContext): Response | Promise<Response> {
+    const url = new URL(request.url)
+    if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
+      return handleMcpRequest(request, env as any)
+    }
+    return app.fetch(request, env, ctx)
+  },
+}

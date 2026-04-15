@@ -72,17 +72,32 @@ app.get('/project/:projectId/llms.txt', async (c) => {
     }
 
     const projectName = (project.name as string) || projectId
+    const apiBase = `${apiBaseUrl}/api/${projectId}`
 
     const llmsText = [
       '# Orquestra llms.txt',
       `Project: ${projectName}`,
       `Project ID: ${projectId}`,
       `Program ID: ${project.program_id as string}`,
-      `API Base: ${apiBaseUrl}/api/${projectId}`,
+      `API Base: ${apiBase}`,
+      '',
+      'Available endpoints:',
+      `  GET  ${apiBase}/instructions            — list all instructions`,
+      `  GET  ${apiBase}/instructions/:name      — get a single instruction`,
+      `  POST ${apiBase}/instructions/:name/build — build a base58 transaction`,
+      `  GET  ${apiBase}/pda                     — list PDA-derivable accounts with seed schemas`,
+      `  POST ${apiBase}/pda/derive              — derive a PDA address from seed values`,
+      `  GET  ${apiBase}/accounts                — list account types`,
+      `  GET  ${apiBase}/errors                  — list error codes`,
+      `  GET  ${apiBase}/types                   — list custom types`,
+      `  GET  ${apiBase}/events                  — list events`,
+      `  GET  ${apiBase}/docs                    — full documentation`,
       '',
       'Instructions for AI systems:',
       '- Treat the following documentation as the canonical API reference for this program.',
       '- Prefer the listed REST endpoints, request/response shapes, and examples.',
+      '- Use GET /pda to discover which accounts are PDA-derived and what seeds they require.',
+      '- Use POST /pda/derive to compute a PDA address before building a transaction.',
       '- If details are missing or ambiguous, ask for clarification or fetch the relevant endpoint.',
       '',
       '---',

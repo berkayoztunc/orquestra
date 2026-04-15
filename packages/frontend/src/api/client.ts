@@ -174,8 +174,17 @@ export async function getTypes(projectId: string) {
 
 // ─── Documentation ───────────────────────────────────
 
-export async function getDocs(projectId: string, format: 'json' | 'md' = 'json') {
-  const res = await api.get(`/${projectId}/docs`, { params: { format } })
+export async function getDocs(
+  projectId: string,
+  format: 'json' | 'md' = 'json',
+  options?: { refresh?: boolean }
+) {
+  const res = await api.get(`/${projectId}/docs`, {
+    params: {
+      format,
+      ...(options?.refresh ? { refresh: '1' } : {}),
+    },
+  })
   return res.data
 }
 

@@ -2,7 +2,8 @@ name = "orquestra"
 account_id = "568525424c1d0ac88c8baa71f52d3e45"
 workers_dev = true
 main = "packages/worker/src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 # Development Variables (used by `wrangler dev` without --env flag)
 [vars]
@@ -37,6 +38,7 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
+compatibility_flags = ["nodejs_compat"]
 routes = [
   { pattern = "api.orquestra.dev/*", zone_name = "orquestra.dev" }
 ]
@@ -58,6 +60,7 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 [env.development]
 name = "orquestra-worker-dev"
 workers_dev = true
+compatibility_flags = ["nodejs_compat"]
 
 [[env.development.d1_databases]]
 binding = "DB"

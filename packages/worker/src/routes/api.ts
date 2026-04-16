@@ -101,7 +101,7 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
         const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1'
 
         const results = await db.prepare(query).bind(...params).all()
-        const countResult = await db.prepare(countQuery).bind(...countParams).first()
+        const countResult = await db.prepare(countQuery).first()
         const total = (countResult as any)?.count || 0
 
         return c.json({

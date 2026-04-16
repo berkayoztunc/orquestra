@@ -1,5 +1,5 @@
 -- Add idl_hash column to idl_versions for duplicate detection in CLI ingest
-ALTER TABLE idl_versions ADD COLUMN idl_hash TEXT;
+ALTER TABLE idl_versions ADD COLUMN IF NOT EXISTS idl_hash TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_idl_versions_project_hash ON idl_versions(project_id, idl_hash);
 

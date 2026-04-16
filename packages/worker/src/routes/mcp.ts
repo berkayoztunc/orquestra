@@ -142,7 +142,7 @@ function createServer(env: Bindings): McpServer {
             name: r.name,
             program_id: r.program_id,
             description: r.description,
-            updated_at: r.updated_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
             username: r.username,
           }))
         } else {

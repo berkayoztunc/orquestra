@@ -558,7 +558,7 @@ function createServer(env: Bindings): McpServer {
 
         const analysis = await db
           ?.prepare(
-            `SELECT a.short_description, a.detailed_analysis, a.model_used, a.generated_at,
+            `SELECT a.short_description, a.detailed_analysis_json, a.model_used, a.generated_at,
                     v.version as idl_version
              FROM ai_analyses a
              JOIN idl_versions v ON a.idl_version_id = v.id
@@ -591,10 +591,10 @@ function createServer(env: Bindings): McpServer {
           lines.push('')
         }
 
-        if (analysis.detailed_analysis) {
+        if (analysis.detailed_analysis_json) {
           let detail: any
           try {
-            detail = JSON.parse(analysis.detailed_analysis as string)
+            detail = JSON.parse(analysis.detailed_analysis_json as string)
           } catch {
             detail = null
           }

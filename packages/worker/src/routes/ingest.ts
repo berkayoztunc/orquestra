@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
+import { autoSeedCategory } from '../services/program-auto-detect'
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
@@ -108,6 +109,9 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
         .prepare('INSERT INTO project_socials (id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?)')
         .bind(generateId(), projectId, now, now)
         .run()
+
+      // Auto-detect and seed category if known program
+      await autoSeedCategory(db, projectId, programName)
 
       created = true
     } else {

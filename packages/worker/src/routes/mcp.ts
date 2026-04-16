@@ -28,6 +28,7 @@ import type { AnchorIDL } from '../services/idl-parser'
 import { buildTransaction } from '../services/tx-builder'
 import { listPdaAccounts, derivePda } from '../services/pda'
 import { generateDocumentation } from '../services/doc-generator'
+import { searchProjects } from '../services/search'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
 
@@ -134,23 +135,16 @@ function createServer(env: Bindings): McpServer {
             .first()
           if (row) results = [row]
         } else if (query) {
-          const escaped = query
-            .replace(/\\/g, '\\\\')
-            .replace(/%/g, '\\%')
-            .replace(/_/g, '\\_')
-          const term = `%${escaped}%`
-          const { results: rows } = await db
-            ?.prepare(
-              `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
-               FROM projects p LEFT JOIN users u ON p.user_id = u.id
-               WHERE p.is_public = 1
-                 AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
-                      OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\')
-               ORDER BY p.updated_at DESC LIMIT ?`,
-            )
-            .bind(term, term, limit)
-            .all()
-          results = rows ?? []
+          // Use FTS search for text queries
+          const { results: searchResults } = await searchProjects(db, query, limit, 0)
+          results = searchResults.map((r) => ({
+            id: r.id,
+            name: r.name,
+            program_id: r.program_id,
+            description: r.description,
+            updated_at: r.updated_at || new Date().toISOString(),
+            username: r.username,
+          }))
         } else {
           // Return recent public projects
           const { results: rows } = await db

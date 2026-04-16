@@ -9,6 +9,8 @@ import { listPdaAccounts, derivePda } from '../services/pda'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
 import { fetchAnchorIDLFromChain } from '../services/idl-fetcher'
+import { searchProjects } from '../services/search'
+import { autoSeedCategory } from '../services/program-auto-detect'
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
@@ -36,6 +38,7 @@ const app = new Hono<Env>()
 // ── Project Management ────────────────────────────────
 
 // List all public projects (+ user's private projects if authenticated)
+// Uses full-text search with relevance ranking
 app.get('/projects', optionalAuthMiddleware, async (c) => {
   const userId = c.get('userId') as string | undefined
 
@@ -49,56 +52,71 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
   if (rawSearch.length > 100) {
     return c.json({ error: 'Search term too long (max 100 characters)' }, 400)
   }
-  // Escape LIKE special characters to prevent wildcard injection
-  const search = rawSearch.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
 
   try {
     const db = c.env.DB
-    let query: string
-    let countQuery: string
-    const params: (string | number)[] = []
-    const countParams: (string | number)[] = []
 
-    if (search) {
-      const searchTerm = `%${search}%`
-      if (userId) {
-        query = "SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE (p.is_public = 1 OR p.user_id = ?) AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT ? OFFSET ?"
-        params.push(userId, searchTerm, searchTerm, limit, offset)
-        countQuery = "SELECT COUNT(*) as count FROM projects WHERE (is_public = 1 OR user_id = ?) AND (LOWER(name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(description,'')) LIKE LOWER(?) ESCAPE '\\')"
-        countParams.push(userId, searchTerm, searchTerm)
-      } else {
-        query = "SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT ? OFFSET ?"
-        params.push(searchTerm, searchTerm, limit, offset)
-        countQuery = "SELECT COUNT(*) as count FROM projects WHERE is_public = 1 AND (LOWER(name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(description,'')) LIKE LOWER(?) ESCAPE '\\')"
-        countParams.push(searchTerm, searchTerm)
-      }
+    if (rawSearch) {
+      // Use FTS for search queries
+      const { results, total } = await searchProjects(db, rawSearch, limit, offset, userId)
+      return c.json({
+        projects: results,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        search: {
+          query: rawSearch,
+          relevance_ranked: true,
+        },
+      })
     } else {
+      // No search: return recent projects
       if (userId) {
-        query = 'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 OR p.user_id = ? ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
-        params.push(userId, limit, offset)
-        countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1 OR user_id = ?'
-        countParams.push(userId)
+        const query =
+          'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 OR p.user_id = ? ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
+        const params = [userId, limit, offset]
+        const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1 OR user_id = ?'
+        const countParams = [userId]
+
+        const results = await db.prepare(query).bind(...params).all()
+        const countResult = await db.prepare(countQuery).bind(...countParams).first()
+        const total = (countResult as any)?.count || 0
+
+        return c.json({
+          projects: results?.results || [],
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        })
       } else {
-        query = 'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
-        params.push(limit, offset)
-        countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1'
+        const query =
+          'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
+        const params = [limit, offset]
+        const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1'
+
+        const results = await db.prepare(query).bind(...params).all()
+        const countResult = await db.prepare(countQuery).bind(...countParams).first()
+        const total = (countResult as any)?.count || 0
+
+        return c.json({
+          projects: results?.results || [],
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        })
       }
     }
-
-    const results = await db.prepare(query).bind(...params).all()
-    const countResult = await db.prepare(countQuery).bind(...countParams).first()
-    const total = (countResult as any)?.count || 0
-
-    return c.json({
-      projects: results?.results || [],
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    })
   } catch (err) {
+    console.error('Projects list error:', err)
     return c.json({ error: 'Failed to list projects' }, 500)
   }
 })
@@ -205,6 +223,9 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
       )
       .bind(versionId, projectId, fetchResult.idlJson, 1, now)
       .run()
+
+    // Auto-detect and seed category if known program
+    await autoSeedCategory(db, projectId, idlName)
 
     // Cache IDL in KV
     const kv = c.env?.IDLS

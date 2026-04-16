@@ -4,6 +4,7 @@ import { uploadRateLimit } from '../middleware/rate-limit'
 import { validateIDL, parseIDL } from '../services/idl-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateIDLUpload } from '../services/validation'
+import { autoSeedCategory } from '../services/program-auto-detect'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
@@ -116,6 +117,9 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       )
       .bind(generateId(), projectId, now, now)
       .run()
+
+    // Auto-detect and seed category if known program
+    await autoSeedCategory(db, projectId, body.name)
 
     // Cache IDL in KV
     if (kv) {

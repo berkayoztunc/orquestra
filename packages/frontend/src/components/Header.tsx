@@ -33,9 +33,53 @@ export default function Header(): JSX.Element {
             <Link to="/explorer" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
               Explorer
             </Link>
-            <Link to="/docs/sign-and-send" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
-              Docs
-            </Link>
+              {/* Docs dropdown */}
+              <div className="relative group">
+                <button
+                  type="button"
+                  aria-haspopup="true"
+                  className="flex items-center gap-1 text-gray-300 hover:text-primary transition-colors text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-dark-800 rounded"
+                >
+                  Docs
+                  <svg
+                    className="w-3.5 h-3.5 transition-transform duration-150 group-hover:rotate-180 group-focus-within:rotate-180"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                <div
+                  className="absolute top-full left-1/2 -translate-x-1/2 pt-2 w-52 z-50 opacity-0 invisible pointer-events-none translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto group-focus-within:translate-y-0"
+                  role="menu"
+                >
+                  <div className="rounded-xl border border-white/10 bg-dark-900/95 backdrop-blur-md shadow-xl py-1.5">
+                    <Link
+                      to="/docs/sign-and-send"
+                      role="menuitem"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:bg-primary/10"
+                    >
+                      <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                      Sign &amp; Send
+                    </Link>
+                    <Link
+                      to="/docs/mcp"
+                      role="menuitem"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:bg-primary/10"
+                    >
+                      <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      MCP Server
+                    </Link>
+                  </div>
+                </div>
+              </div>
             <Link to="/cli" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
               CLI
             </Link>
@@ -120,13 +164,20 @@ export default function Header(): JSX.Element {
               >
                 Explorer
               </Link>
-              <Link
-                to="/docs/sign-and-send"
-                onClick={closeMobileMenu}
-                className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
-              >
-                Docs
-              </Link>
+                <Link
+                  to="/docs/sign-and-send"
+                  onClick={closeMobileMenu}
+                  className="text-gray-300 hover:text-primary transition-colors text-sm font-medium py-2 pl-2"
+                >
+                  Docs - Sign &amp; Send
+                </Link>
+                <Link
+                  to="/docs/mcp"
+                  onClick={closeMobileMenu}
+                  className="text-gray-300 hover:text-primary transition-colors text-sm font-medium py-2 pl-2"
+                >
+                  Docs - MCP Server
+                </Link>
               <Link
                 to="/cli"
                 onClick={closeMobileMenu}

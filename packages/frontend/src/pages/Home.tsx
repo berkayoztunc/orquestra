@@ -59,134 +59,65 @@ export default function Home(): JSX.Element {
           </div>
         </div>
       </section>
-
-      {/* Features Grid */}
+   {/* How It Works */}
       <section className="max-w-6xl mx-auto px-6">
-        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">
-          <span className="text-white">Everything you need to build </span>
-          <span className="gradient-text">Solana dApps</span>
-        </h2>
-        <p className="text-center text-gray-400 mb-12 max-w-2xl mx-auto">
-          From IDL to production API in minutes. Complete transaction building, type-safe documentation, 
-          and developer tools that scale with your project.
-        </p>
-        
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="card p-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-            </div>
-            <h3 className="text-white font-bold text-lg mb-3">Instant IDL Parsing</h3>
-            <p className="text-gray-400 leading-relaxed mb-3">
-              Upload your Anchor IDL JSON and watch as we automatically extract every instruction, 
-              account type, error code, and custom type definition.
-            </p>
-            <ul className="text-sm text-gray-500 space-y-1">
-              <li>• Complete instruction analysis</li>
-              <li>• Account type validation</li>
-              <li>• Error code mapping</li>
-              <li>• Custom type resolution</li>
-            </ul>
-          </div>
-          
-          <div className="card p-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-            </div>
-            <h3 className="text-white font-bold text-lg mb-3">Base58 Transaction Builder</h3>
-            <p className="text-gray-400 leading-relaxed mb-3">
-              Build fully-formed Solana transactions via REST API. Returns base58-encoded transactions 
-              ready for wallet signing and submission to the network.
-            </p>
-            <ul className="text-sm text-gray-500 space-y-1">
-              <li>• Borsh serialization handled</li>
-              <li>• Anchor discriminators computed</li>
-              <li>• Wallet-ready base58 output</li>
-              <li>• No client-side IDL needed</li>
-            </ul>
-          </div>
-          
-          <div className="card p-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-white font-bold text-lg mb-3">AI-Optimized Documentation</h3>
-            <p className="text-gray-400 leading-relaxed mb-3">
-              Auto-generated Markdown documentation formatted for AI agents and LLMs. 
-              Complete with type definitions, examples, and usage patterns.
-            </p>
-            <ul className="text-sm text-gray-500 space-y-1">
-              <li>• Structured Markdown format</li>
-              <li>• LLM context-optimized</li>
-              <li>• Complete API reference</li>
-              <li>• Type-safe examples included</li>
-            </ul>
-          </div>
+        <div className="text-center mb-12">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            <span className="text-white">How </span>
+            <span className="gradient-text">It Works</span>
+          </h2>
+          <p className="text-gray-400 max-w-2xl mx-auto">
+            From zero to production-ready Solana API in four steps. No backend code, no devops,
+            no Anchor SDK on the client.
+          </p>
+        </div>
 
-          <div className="card p-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
-            <h3 className="text-white font-bold text-lg mb-3">Secure API Keys</h3>
-            <p className="text-gray-400 leading-relaxed mb-3">
-              Generate and manage API keys for your projects. Control access, monitor usage, 
-              and rotate keys with full audit trails.
-            </p>
-            <ul className="text-sm text-gray-500 space-y-1">
-              <li>• Per-project API keys</li>
-              <li>• Usage analytics</li>
-              <li>• Rate limiting built-in</li>
-              <li>• Easy key rotation</li>
-            </ul>
-          </div>
+        <div className="relative">
+          {/* Connecting line between circles on desktop */}
+          <div className="hidden md:block absolute top-8 left-[calc(12.5%+2rem)] right-[calc(12.5%+2rem)] h-px bg-gradient-to-r from-primary/10 via-primary/40 to-primary/10 pointer-events-none" />
 
-          <div className="card p-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-              </svg>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Step 1 */}
+            <div className="flex flex-col items-center text-center group">
+              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
+                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">1</span>
+              </div>
+              <h4 className="font-bold text-white mb-2 text-sm">Sign In with GitHub</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">OAuth in one click. No passwords, no forms. Your projects are ready immediately.</p>
             </div>
-            <h3 className="text-white font-bold text-lg mb-3">Developer-First API</h3>
-            <p className="text-gray-400 leading-relaxed mb-3">
-              RESTful endpoints with predictable structure. Works with any HTTP client, 
-              language, or framework. No SDK dependencies required.
-            </p>
-            <ul className="text-sm text-gray-500 space-y-1">
-              <li>• Standard REST conventions</li>
-              <li>• JSON request/response</li>
-              <li>• Works with curl, fetch, axios</li>
-              <li>• Language agnostic</li>
-            </ul>
-          </div>
 
-          <div className="card p-6">
-            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+            {/* Step 2 */}
+            <div className="flex flex-col items-center text-center group">
+              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
+                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">2</span>
+              </div>
+              <h4 className="font-bold text-white mb-2 text-sm">Upload Your IDL</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">Drag and drop your Anchor IDL JSON. We validate, parse, and index every instruction and type.</p>
             </div>
-            <h3 className="text-white font-bold text-lg mb-3">Cloudflare Edge Infrastructure</h3>
-            <p className="text-gray-400 leading-relaxed mb-3">
-              Deployed on Cloudflare Workers with global edge caching. 
-              Lightning-fast response times from anywhere in the world.
-            </p>
-            <ul className="text-sm text-gray-500 space-y-1">
-              <li>• Sub-50ms latency globally</li>
-              <li>• Automatic scaling</li>
-              <li>• 99.99% uptime SLA</li>
-              <li>• DDoS protection included</li>
-            </ul>
+
+           
+
+            {/* Step 4 */}
+            <div className="flex flex-col items-center text-center group">
+              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
+                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">3</span>
+              </div>
+              <h4 className="font-bold text-white mb-2 text-sm">Build &amp; Send Transactions</h4>
+              <p className="text-xs text-gray-500 leading-relaxed">POST accounts and args, get a base58 tx back. Sign with any wallet and broadcast to Solana.</p>
+            </div>
           </div>
         </div>
       </section>
+  
 
       {/* Platform Section — One IDL, Every Platform */}
       <section className="max-w-6xl mx-auto px-6">
@@ -317,71 +248,130 @@ export default function Home(): JSX.Element {
         </div>
       </section>
 
-      {/* How It Works */}
+       {/* Features Grid */}
       <section className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            <span className="text-white">How </span>
-            <span className="gradient-text">It Works</span>
-          </h2>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            From zero to production-ready Solana API in four steps. No backend code, no devops,
-            no Anchor SDK on the client.
-          </p>
-        </div>
-
-        <div className="relative">
-          {/* Connecting line between circles on desktop */}
-          <div className="hidden md:block absolute top-8 left-[calc(12.5%+2rem)] right-[calc(12.5%+2rem)] h-px bg-gradient-to-r from-primary/10 via-primary/40 to-primary/10 pointer-events-none" />
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {/* Step 1 */}
-            <div className="flex flex-col items-center text-center group">
-              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
-                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">1</span>
-              </div>
-              <h4 className="font-bold text-white mb-2 text-sm">Sign In with GitHub</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">OAuth in one click. No passwords, no forms. Your projects are ready immediately.</p>
+        <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">
+          <span className="text-white">Everything you need to build </span>
+          <span className="gradient-text">Solana dApps</span>
+        </h2>
+        <p className="text-center text-gray-400 mb-12 max-w-2xl mx-auto">
+          From IDL to production API in minutes. Complete transaction building, type-safe documentation, 
+          and developer tools that scale with your project.
+        </p>
+        
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="card p-6">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
+              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
             </div>
-
-            {/* Step 2 */}
-            <div className="flex flex-col items-center text-center group">
-              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
-                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">2</span>
-              </div>
-              <h4 className="font-bold text-white mb-2 text-sm">Upload Your IDL</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">Drag and drop your Anchor IDL JSON. We validate, parse, and index every instruction and type.</p>
+            <h3 className="text-white font-bold text-lg mb-3">Instant IDL Parsing</h3>
+            <p className="text-gray-400 leading-relaxed mb-3">
+              Upload your Anchor IDL JSON and watch as we automatically extract every instruction, 
+              account type, error code, and custom type definition.
+            </p>
+            <ul className="text-sm text-gray-500 space-y-1">
+              <li>• Complete instruction analysis</li>
+              <li>• Account type validation</li>
+              <li>• Error code mapping</li>
+              <li>• Custom type resolution</li>
+            </ul>
+          </div>
+          
+          <div className="card p-6">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
+              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
             </div>
-
-            {/* Step 3 */}
-            <div className="flex flex-col items-center text-center group">
-              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
-                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">3</span>
-              </div>
-              <h4 className="font-bold text-white mb-2 text-sm">Get Your API Key</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">Your endpoints go live instantly. Generate a key from the dashboard and start making requests.</p>
+            <h3 className="text-white font-bold text-lg mb-3">Base58 Transaction Builder</h3>
+            <p className="text-gray-400 leading-relaxed mb-3">
+              Build fully-formed Solana transactions via REST API. Returns base58-encoded transactions 
+              ready for wallet signing and submission to the network.
+            </p>
+            <ul className="text-sm text-gray-500 space-y-1">
+              <li>• Borsh serialization handled</li>
+              <li>• Anchor discriminators computed</li>
+              <li>• Wallet-ready base58 output</li>
+              <li>• No client-side IDL needed</li>
+            </ul>
+          </div>
+          
+          <div className="card p-6">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
+              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
             </div>
+            <h3 className="text-white font-bold text-lg mb-3">AI-Optimized Documentation</h3>
+            <p className="text-gray-400 leading-relaxed mb-3">
+              Auto-generated Markdown documentation formatted for AI agents and LLMs. 
+              Complete with type definitions, examples, and usage patterns.
+            </p>
+            <ul className="text-sm text-gray-500 space-y-1">
+              <li>• Structured Markdown format</li>
+              <li>• LLM context-optimized</li>
+              <li>• Complete API reference</li>
+              <li>• Type-safe examples included</li>
+            </ul>
+          </div>
 
-            {/* Step 4 */}
-            <div className="flex flex-col items-center text-center group">
-              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
-                <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">4</span>
-              </div>
-              <h4 className="font-bold text-white mb-2 text-sm">Build &amp; Send Transactions</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">POST accounts and args, get a base58 tx back. Sign with any wallet and broadcast to Solana.</p>
+          <div className="card p-6">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
+              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
             </div>
+            <h3 className="text-white font-bold text-lg mb-3">Secure API Keys</h3>
+            <p className="text-gray-400 leading-relaxed mb-3">
+              Generate and manage API keys for your projects. Control access, monitor usage, 
+              and rotate keys with full audit trails.
+            </p>
+            <ul className="text-sm text-gray-500 space-y-1">
+              <li>• Per-project API keys</li>
+              <li>• Usage analytics</li>
+              <li>• Rate limiting built-in</li>
+              <li>• Easy key rotation</li>
+            </ul>
+          </div>
+
+          <div className="card p-6">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
+              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+            </div>
+            <h3 className="text-white font-bold text-lg mb-3">Developer-First API</h3>
+            <p className="text-gray-400 leading-relaxed mb-3">
+              RESTful endpoints with predictable structure. Works with any HTTP client, 
+              language, or framework. No SDK dependencies required.
+            </p>
+            <ul className="text-sm text-gray-500 space-y-1">
+              <li>• Standard REST conventions</li>
+              <li>• JSON request/response</li>
+              <li>• Works with curl, fetch, axios</li>
+              <li>• Language agnostic</li>
+            </ul>
+          </div>
+
+          <div className="card p-6">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-4">
+              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h3 className="text-white font-bold text-lg mb-3">Cloudflare Edge Infrastructure</h3>
+            <p className="text-gray-400 leading-relaxed mb-3">
+              Deployed on Cloudflare Workers with global edge caching. 
+              Lightning-fast response times from anywhere in the world.
+            </p>
+            <ul className="text-sm text-gray-500 space-y-1">
+              <li>• Sub-50ms latency globally</li>
+              <li>• Automatic scaling</li>
+              <li>• 99.99% uptime SLA</li>
+              <li>• DDoS protection included</li>
+            </ul>
           </div>
         </div>
       </section>

@@ -10,6 +10,7 @@ import AuthError from '@/pages/AuthError'
 import NotFound from '@/pages/NotFound'
 import SignAndSend from '@/pages/SignAndSend'
 import CLI from '@/pages/CLI'
+import MCP from '@/pages/MCP'
 import { ToastProvider } from '@/components/Toast'
 import { useAuthStore } from '@/store/auth'
 
@@ -33,6 +34,7 @@ function App(): JSX.Element {
             <Route path="/auth/error" element={<AuthError />} />
             <Route path="/docs/sign-and-send" element={<SignAndSend />} />
             <Route path="/cli" element={<CLI />} />
+              <Route path="/docs/mcp" element={<MCP />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

@@ -2,10 +2,15 @@
  * Transaction Builder Service
  * Constructs Solana transactions from IDL instructions
  * Works in Cloudflare Workers environment (no Node.js dependencies)
+ *
+ * Wire format: responses use **legacy** Solana transactions (not v0 / versioned messages).
+ * Deserialize with `@solana/web3.js` `Transaction.from(bytes)` after `bs58.decode(serializedTransaction)`.
+ * `VersionedTransaction.deserialize` will not work on these bytes until a v0 builder exists.
  */
 
 import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType } from './idl-parser'
 import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField } from './idl-parser'
+import type { ResolvedCluster } from '../utils/solana-rpc'
 
 export interface BuildTransactionRequest {
   accounts: Record<string, string>  // account name -> public key (base58)
@@ -13,6 +18,8 @@ export interface BuildTransactionRequest {
   feePayer: string                  // base58 public key
   recentBlockhash?: string          // optional, will fetch if not provided
   network?: 'mainnet-beta' | 'devnet' | 'testnet'
+  /** When true, runs JSON-RPC simulateTransaction on the same RPC (unsigned wire bytes). No wallet required. */
+  simulate?: boolean
 }
 
 export interface BuildTransactionResponse {
@@ -22,6 +29,23 @@ export interface BuildTransactionResponse {
   accounts: AccountInfo[]           // account details used
   instruction: InstructionInfo      // instruction info
   estimatedFee: number              // estimated fee in lamports
+  /** Normalized cluster used for RPC (blockhash / simulate). */
+  network: ResolvedCluster
+  /** RPC hostname only (no path/query — avoids leaking API keys in logs). */
+  rpcUrlHost: string
+  /** Blockhash embedded in the serialized transaction. */
+  recentBlockhash: string
+  /** Present when the server fetched the blockhash via getLatestBlockhash. */
+  lastValidBlockHeight?: number
+  blockhashSource: 'client' | 'rpc'
+  /**
+   * Wire format: legacy Solana message (not versioned / v0).
+   * Consumers that only call VersionedTransaction.deserialize should try legacy Transaction.from after failure.
+   */
+  wireFormat: 'legacy'
+  /** Set when `simulate: true` was requested. Null err means simulation succeeded at RPC preflight. */
+  simulationError: unknown | null
+  simulationLogs: string[] | null
 }
 
 export interface AccountInfo {
@@ -189,6 +213,10 @@ function encodeValue(value: any, type: any, types?: AnchorType[]): number[] {
   return []
 }
 
+function listInstructionNames(idl: AnchorIDL): string {
+  return (idl.instructions ?? []).map((ix) => ix.name).join(', ')
+}
+
 /**
  * Build a transaction from IDL instruction
  */
@@ -198,10 +226,13 @@ export async function buildTransaction(
   request: BuildTransactionRequest,
   programId: string,
   rpcUrl: string,
+  meta: { cluster: ResolvedCluster; rpcUrlHost: string },
 ): Promise<BuildTransactionResponse> {
   const instruction = getInstruction(idl, instructionName)
   if (!instruction) {
-    throw new Error(`Instruction "${instructionName}" not found in IDL`)
+    throw new Error(
+      `Instruction "${instructionName}" not found in IDL. Available: ${listInstructionNames(idl)}`,
+    )
   }
 
   // Validate required accounts
@@ -248,10 +279,14 @@ export async function buildTransaction(
     }
   })
 
-  // Fetch recent blockhash if not provided
+  // Fetch recent blockhash if not provided (must use same RPC as cluster intent — see resolveSolanaRpcUrl at call sites)
   let blockhash = request.recentBlockhash
+  let lastValidBlockHeight: number | undefined
+  const blockhashSource: 'client' | 'rpc' = blockhash ? 'client' : 'rpc'
   if (!blockhash) {
-    blockhash = await fetchRecentBlockhash(rpcUrl)
+    const latest = await fetchLatestBlockhash(rpcUrl)
+    blockhash = latest.blockhash
+    lastValidBlockHeight = latest.lastValidBlockHeight
   }
 
   // Build serialized transaction data (simplified format for API response)
@@ -281,6 +316,14 @@ export async function buildTransaction(
   wireBytes.set(msgBytes, sigCountBytes.length + 64)
   const serializedTransaction = base58Encode(wireBytes)
 
+  let simulationError: unknown | null = null
+  let simulationLogs: string[] | null = null
+  if (request.simulate) {
+    const sim = await simulateTransactionRpc(rpcUrl, wireBytes)
+    simulationError = sim.err
+    simulationLogs = sim.logs
+  }
+
   return {
     transaction: txBase58,
     serializedTransaction,
@@ -293,6 +336,14 @@ export async function buildTransaction(
       accounts: accountInfos,
     },
     estimatedFee: 5000, // base fee in lamports
+    network: meta.cluster,
+    rpcUrlHost: meta.rpcUrlHost,
+    recentBlockhash: blockhash,
+    lastValidBlockHeight,
+    blockhashSource,
+    wireFormat: 'legacy',
+    simulationError,
+    simulationLogs,
   }
 }
 
@@ -357,8 +408,9 @@ export function validateBuildRequest(
   return { valid: errors.length === 0, errors }
 }
 
-// Utility: Fetch recent blockhash from Solana RPC
-async function fetchRecentBlockhash(rpcUrl: string): Promise<string> {
+async function fetchLatestBlockhash(
+  rpcUrl: string,
+): Promise<{ blockhash: string; lastValidBlockHeight?: number }> {
   try {
     const response = await fetch(rpcUrl, {
       method: 'POST',
@@ -371,13 +423,69 @@ async function fetchRecentBlockhash(rpcUrl: string): Promise<string> {
       }),
     })
 
-    const data = await response.json() as any
-    if (data.result?.value?.blockhash) {
-      return data.result.value.blockhash
+    const data = (await response.json()) as {
+      result?: { value?: { blockhash: string; lastValidBlockHeight?: number } }
+      error?: { message?: string }
     }
-    throw new Error('Failed to get blockhash from RPC')
+    const value = data.result?.value
+    if (value?.blockhash) {
+      const out: { blockhash: string; lastValidBlockHeight?: number } = {
+        blockhash: value.blockhash,
+      }
+      if (typeof value.lastValidBlockHeight === 'number') {
+        out.lastValidBlockHeight = value.lastValidBlockHeight
+      }
+      return out
+    }
+    throw new Error(data.error?.message || 'Failed to get blockhash from RPC')
   } catch (err) {
     throw new Error(`Failed to fetch recent blockhash: ${(err as Error).message}`)
+  }
+}
+
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!)
+  }
+  return btoa(binary)
+}
+
+/** Preflight simulation of unsigned legacy transaction bytes (same RPC as build). */
+async function simulateTransactionRpc(
+  rpcUrl: string,
+  wireBytes: Uint8Array,
+): Promise<{ err: unknown | null; logs: string[] }> {
+  const base64 = uint8ArrayToBase64(wireBytes)
+  try {
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'simulateTransaction',
+        params: [
+          base64,
+          {
+            encoding: 'base64',
+            sigVerify: false,
+            commitment: 'processed',
+          },
+        ],
+      }),
+    })
+    const data = (await response.json()) as {
+      result?: { value?: { err: unknown; logs?: string[] } }
+      error?: { message?: string }
+    }
+    const value = data.result?.value
+    if (!value) {
+      return { err: data.error?.message ?? 'simulateTransaction RPC error', logs: [] }
+    }
+    return { err: value.err ?? null, logs: value.logs ?? [] }
+  } catch (err) {
+    return { err: (err as Error).message, logs: [] }
   }
 }
 
@@ -480,8 +588,9 @@ interface KeyMeta {
 }
 
 /**
- * Build a Solana legacy message in binary wire format.
+ * Build a Solana **legacy** message in binary wire format (not v0 / versioned).
  * Returns the raw message bytes (not the full transaction — no signature prefix).
+ * @see BuildTransactionResponse.wireFormat
  */
 function buildSolanaMessage(
   feePayer: string,

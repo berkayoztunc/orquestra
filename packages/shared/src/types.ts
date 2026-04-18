@@ -163,6 +163,15 @@ export interface TransactionBuildResponse {
   transaction: string
   message: string
   blockHash?: string
+  /** Cluster used for RPC blockhash / simulation */
+  network?: 'mainnet-beta' | 'devnet' | 'testnet' | 'custom'
+  rpcUrlHost?: string
+  recentBlockhash?: string
+  lastValidBlockHeight?: number
+  blockhashSource?: 'client' | 'rpc'
+  wireFormat?: 'legacy'
+  simulationError?: unknown | null
+  simulationLogs?: string[] | null
 }
 
 // Auth types

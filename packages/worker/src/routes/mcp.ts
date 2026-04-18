@@ -26,6 +26,7 @@ import {
 } from '../services/idl-parser'
 import type { AnchorIDL } from '../services/idl-parser'
 import { buildTransaction } from '../services/tx-builder'
+import { resolveSolanaRpcUrl, rpcUrlHost } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda } from '../services/pda'
 import { generateDocumentation } from '../services/doc-generator'
 import { searchProjects } from '../services/search'
@@ -37,7 +38,10 @@ type Bindings = {
   IDLS: any
   CACHE: any
   API_BASE_URL: string
-  SOLANA_RPC_URL: string
+  SOLANA_RPC_URL?: string
+  SOLANA_MAINNET_RPC_URL?: string
+  SOLANA_DEVNET_RPC_URL?: string
+  SOLANA_TESTNET_RPC_URL?: string
 }
 
 // ── Helper: fetch IDL from KV with D1 fallback ───────────────────────────────
@@ -253,7 +257,7 @@ function createServer(env: Bindings): McpServer {
 
   server.tool(
     'build_instruction',
-    'Build a serialized Solana transaction for a specific instruction. Returns a base58 transaction string that can be signed and submitted. Use list_instructions first to get the required accounts and args.',
+      'Build a serialized Solana transaction for a specific instruction. Returns a base58 transaction string that can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
     {
       projectId: z.string().describe('The orquestra project ID'),
       instruction: z.string().describe('Instruction name (exact or camelCase/snake_case variant)'),
@@ -269,14 +273,28 @@ function createServer(env: Bindings): McpServer {
         .string()
         .optional()
         .describe(
-          'Recent blockhash (base58). If omitted, will be fetched from the configured RPC.',
+          'Recent blockhash (base58). If omitted, fetched from the RPC for `network` / `rpcUrl`.',
         ),
       network: z
         .enum(['mainnet-beta', 'devnet', 'testnet'])
         .optional()
-        .describe('Solana network. Defaults to mainnet-beta.'),
+        .describe(
+          'Solana cluster for blockhash + simulation RPC. Defaults to mainnet-beta when omitted.',
+        ),
+      rpcUrl: z
+        .string()
+        .optional()
+        .describe(
+          'Optional full RPC URL (e.g. Helius devnet). When set, overrides the default RPC for this cluster.',
+        ),
+      simulate: z
+        .boolean()
+        .optional()
+        .describe(
+          'If true, runs simulateTransaction on the same RPC after building (preflight, unsigned).',
+        ),
     },
-    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network }) => {
+    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate }) => {
       try {
         const data = await fetchIDL(projectId, env)
         if (!data) {
@@ -286,7 +304,11 @@ function createServer(env: Bindings): McpServer {
           }
         }
 
-        const rpcUrl = env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
+        const { rpcUrl: resolvedRpc, cluster } = resolveSolanaRpcUrl({
+          network: network ?? 'mainnet-beta',
+          rpcUrlOverride: rpcUrl,
+          env,
+        })
 
         const result = await buildTransaction(
           data.idl,
@@ -296,10 +318,11 @@ function createServer(env: Bindings): McpServer {
             args: args as Record<string, any>,
             feePayer,
             recentBlockhash,
-            network,
+            simulate,
           },
           data.programId,
-          rpcUrl,
+          resolvedRpc,
+          { cluster, rpcUrlHost: rpcUrlHost(resolvedRpc) },
         )
 
         const output = [
@@ -308,8 +331,27 @@ function createServer(env: Bindings): McpServer {
           `Serialized transaction (base58):`,
           `\`${result.serializedTransaction}\``,
           '',
+          `**Cluster / RPC:** \`${result.network}\` — \`${result.rpcUrlHost}\` (blockhash source: ${result.blockhashSource})`,
+          `**Embedded blockhash:** \`${result.recentBlockhash}\``,
+          ...(result.lastValidBlockHeight != null
+            ? [`**lastValidBlockHeight:** ${result.lastValidBlockHeight}`]
+            : []),
+          `**Wire format:** \`${result.wireFormat}\` (use legacy Transaction.from(bs58.decode(...)) or equivalent; not v0 VersionedTransaction unless you convert)`,
+          '',
           `Message: ${result.message}`,
           `Estimated fee: ${result.estimatedFee} lamports`,
+          ...(simulate
+            ? [
+                '',
+                '**Simulation (preflight):**',
+                result.simulationError != null
+                  ? `\`err:\` ${JSON.stringify(result.simulationError)}`
+                  : '`err:` null (success)',
+                ...(result.simulationLogs?.length
+                  ? ['Logs:', ...result.simulationLogs.map((l) => `  ${l}`)]
+                  : ['Logs: (none)']),
+              ]
+            : []),
           '',
           '**Accounts used:**',
           ...result.accounts.map(

@@ -5,6 +5,7 @@ import { invalidateCache } from '../middleware/cache'
 import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL } from '../services/idl-parser'
 import type { AnchorIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
+import { resolveSolanaRpcUrl, rpcUrlHost } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda } from '../services/pda'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
@@ -29,6 +30,7 @@ type Env = {
     SOLANA_RPC_URL: string
     SOLANA_MAINNET_RPC_URL?: string
     SOLANA_DEVNET_RPC_URL?: string
+    SOLANA_TESTNET_RPC_URL?: string
     API_BASE_URL: string
   }
 }
@@ -672,6 +674,7 @@ app.get('/:projectId/instructions/:name', async (c) => {
 })
 
 // Build transaction
+// Defaults: `network` omitted → mainnet-beta RPC for blockhash. For devnet programs always pass `network: "devnet"` or `rpcUrl`, or supply `recentBlockhash` from your RPC.
 app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
   const projectId = c.req.param('projectId')
   const instructionName = c.req.param('name')
@@ -682,7 +685,12 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
       args: Record<string, any>
       feePayer: string
       recentBlockhash?: string
+      /** Cluster name, or full https RPC URL (same rules as MCP build_instruction). */
       network?: string
+      /** Overrides cluster-derived RPC when set (e.g. Helius URL with API key). */
+      rpcUrl?: string
+      /** Run simulateTransaction on the same RPC after building (no wallet). */
+      simulate?: boolean
     }>()
 
     if (!body.accounts || !body.args || !body.feePayer) {
@@ -705,21 +713,11 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
       return c.json({ error: 'Invalid build request', details: validation.errors }, 400)
     }
 
-    // Determine RPC URL:
-    // 1. network = "devnet" → env SOLANA_DEVNET_RPC_URL or public devnet
-    // 2. network = "mainnet" or not provided → env SOLANA_MAINNET_RPC_URL or SOLANA_RPC_URL or public mainnet
-    // 3. network = anything else (URL) → use it directly as custom RPC
-    let rpcUrl: string
-    const network = body.network?.toLowerCase() || 'mainnet'
-    
-    if (network === 'devnet') {
-      rpcUrl = c.env?.SOLANA_DEVNET_RPC_URL || 'https://api.devnet.solana.com'
-    } else if (network === 'mainnet' || network === 'mainnet-beta') {
-      rpcUrl = c.env?.SOLANA_MAINNET_RPC_URL || c.env?.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'
-    } else {
-      // Treat as custom RPC URL
-      rpcUrl = body.network!
-    }
+    const { rpcUrl, cluster } = resolveSolanaRpcUrl({
+      network: body.network ?? 'mainnet',
+      rpcUrlOverride: body.rpcUrl,
+      env: c.env,
+    })
 
     const result = await buildTransaction(
       data.idl,
@@ -729,9 +727,11 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
         args: body.args,
         feePayer: body.feePayer,
         recentBlockhash: body.recentBlockhash,
+        simulate: body.simulate,
       },
       data.programId,
       rpcUrl,
+      { cluster, rpcUrlHost: rpcUrlHost(rpcUrl) },
     )
 
     return c.json(result)

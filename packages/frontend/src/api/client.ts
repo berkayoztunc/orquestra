@@ -144,6 +144,8 @@ export async function buildTransaction(
     feePayer: string
     recentBlockhash?: string
     network?: string
+    rpcUrl?: string
+    simulate?: boolean
   }
 ) {
   const res = await api.post(`/${projectId}/instructions/${instructionName}/build`, data)

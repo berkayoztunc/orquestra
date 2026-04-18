@@ -32,6 +32,9 @@ type Env = {
     GITHUB_OAUTH_SECRET: string
     JWT_SECRET: string
     SOLANA_RPC_URL: string
+    SOLANA_MAINNET_RPC_URL?: string
+    SOLANA_DEVNET_RPC_URL?: string
+    SOLANA_TESTNET_RPC_URL?: string
     FRONTEND_URL: string
     API_BASE_URL: string
     CORS_ORIGIN: string

@@ -51,7 +51,7 @@ async function signAndSendTransaction(base58Tx: string) {
 
 // --- Example: call the Orquestra API then send ---------------------
 
-const API_BASE = "https://api.orquestra.build";
+const API_BASE = "https://api.orquestra.dev";
 
 async function buildAndSend(
   programId: string,
@@ -86,7 +86,7 @@ from solana.rpc.api import Client
 from solana.rpc.types import TxOpts
 from solana.rpc.commitment import Confirmed
 
-API_BASE = "https://api.orquestra.build"
+API_BASE = "https://api.orquestra.dev"
 
 
 def build_transaction(
@@ -169,7 +169,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 
-const API_BASE: &str = "https://api.orquestra.build";
+const API_BASE: &str = "https://api.orquestra.dev";
 
 #[derive(Deserialize)]
 struct BuildResponse {

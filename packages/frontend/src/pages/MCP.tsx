@@ -15,7 +15,7 @@ import {
 
 type Client = 'claude' | 'cursor' | 'vscode'
 
-const MCP_ENDPOINT = 'https://api.orquestra.build/mcp'
+const MCP_ENDPOINT = 'https://api.orquestra.dev/mcp'
 
 const CLIENT_CONFIGS: Record<Client, { label: string; badge: string; filename: string; hint: string; config: string }> = {
   claude: {

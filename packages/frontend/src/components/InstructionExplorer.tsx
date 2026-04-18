@@ -201,7 +201,8 @@ function InstructionCard({
                     navigator.clipboard.writeText(`${apiBase}${endpoint}`)
                     showToast('Endpoint copied', 'success')
                   }}
-                  className="flex-shrink-0 text-gray-500 hover:text-primary transition-colors"
+                  className="flex-shrink-0 text-gray-500 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 rounded"
+                  aria-label="Copy endpoint URL"
                   title="Copy endpoint"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -433,6 +434,7 @@ function InstructionCard({
                     showToast('cURL copied to clipboard', 'success')
                   }}
                   className="btn-secondary px-3"
+                  aria-label="Copy cURL command"
                   title="Copy cURL"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -461,7 +463,7 @@ function InstructionCard({
                       Copy JSON
                     </button>
                   </div>
-                  <pre className="p-4 text-xs font-mono text-gray-300 whitespace-pre-wrap max-h-[300px] overflow-y-auto w-150">
+                  <pre className="p-4 text-xs font-mono text-gray-300 whitespace-pre-wrap max-h-[300px] overflow-y-auto w-full">
                     {JSON.stringify(result, null, 2)}
                   </pre>
                 </div>

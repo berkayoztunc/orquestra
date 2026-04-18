@@ -75,7 +75,7 @@
 
   /* Button styles */
   .btn-primary {
-    @apply bg-primary text-dark-900 px-6 py-3 rounded-xl font-bold transition-all duration-200;
+    @apply bg-primary text-dark-900 px-6 py-3 rounded-xl font-bold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface;
     box-shadow: 0 0 20px rgba(20, 241, 149, 0.3);
   }
 
@@ -89,7 +89,7 @@
   }
 
   .btn-secondary {
-    @apply border border-white/10 px-6 py-3 rounded-xl font-semibold transition-all duration-200;
+    @apply border border-white/10 px-6 py-3 rounded-xl font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface;
     background: rgba(255, 255, 255, 0.03);
   }
 

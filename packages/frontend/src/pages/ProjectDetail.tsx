@@ -211,16 +211,24 @@ export default function ProjectDetail(): JSX.Element {
     }
   }
 
-  const handleDeleteKey = async (keyId: string) => {
+  const handleDeleteKey = (keyId: string) => {
     if (!projectId) return
-    if (!confirm('Delete this API key?')) return
-    try {
-      await deleteAPIKey(projectId, keyId)
-      setApiKeys(apiKeys.filter((k) => k.id !== keyId))
-      showToast('API key deleted', 'info')
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Failed to delete API key', 'error')
-    }
+    setConfirmModal({
+      show: true,
+      title: 'Delete API Key',
+      message: 'This API key will be permanently deleted and stop working immediately.',
+      confirmText: 'Delete Key',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          await deleteAPIKey(projectId, keyId)
+          setApiKeys(prev => prev.filter((k) => k.id !== keyId))
+          showToast('API key deleted', 'info')
+        } catch (err: any) {
+          showToast(err.response?.data?.error || 'Failed to delete API key', 'error')
+        }
+      },
+    })
   }
 
   const handleToggleVisibility = async () => {
@@ -253,50 +261,68 @@ export default function ProjectDetail(): JSX.Element {
     }
   }
 
-  const handleResetDocs = async () => {
+  const handleResetDocs = () => {
     if (!projectId) return
-    if (!confirm('Reset documentation to auto-generated? Your custom edits will be lost.')) return
-    try {
-      await resetDocs(projectId)
-      setDocs('')
-      setIsCustomDocs(false)
-      setIsEditingDocs(false)
-      // Refetch auto-generated docs
-      const data = await getDocs(projectId, 'json')
-      setDocs(typeof data === 'string' ? data : data.docs || '')
-      setIsCustomDocs(data.isCustom || false)
-      showToast('Documentation reset to auto-generated', 'info')
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Failed to reset docs', 'error')
-    }
+    setConfirmModal({
+      show: true,
+      title: 'Reset Documentation',
+      message: 'Reset documentation to auto-generated? Your custom edits will be lost.',
+      confirmText: 'Reset',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          await resetDocs(projectId)
+          setDocs('')
+          setIsCustomDocs(false)
+          setIsEditingDocs(false)
+          // Refetch auto-generated docs
+          const data = await getDocs(projectId, 'json')
+          setDocs(typeof data === 'string' ? data : data.docs || '')
+          setIsCustomDocs(data.isCustom || false)
+          showToast('Documentation reset to auto-generated', 'info')
+        } catch (err: any) {
+          showToast(err.response?.data?.error || 'Failed to reset docs', 'error')
+        }
+      },
+    })
   }
 
   const handleRegenerateDocs = async () => {
     if (!projectId) return
 
-    if (isCustomDocs) {
-      const confirmed = confirm(
-        'You currently use custom docs. Regenerating will discard custom docs and rebuild from the latest IDL. Continue?'
-      )
-      if (!confirmed) return
-    }
-
-    setIsRegeneratingDocs(true)
-    try {
-      if (isCustomDocs) {
-        await resetDocs(projectId)
+    const doRegenerate = async () => {
+      setIsRegeneratingDocs(true)
+      try {
+        if (isCustomDocs) {
+          await resetDocs(projectId)
+        }
+        const data = await getDocs(projectId, 'json', { refresh: true })
+        const docsText = typeof data === 'string' ? data : data.docs || ''
+        setDocs(docsText)
+        setIsCustomDocs(data.isCustom || false)
+        setIsEditingDocs(false)
+        showToast('Documentation regenerated from latest IDL', 'success')
+      } catch (err: any) {
+        showToast(err.response?.data?.error || 'Failed to regenerate docs', 'error')
       }
-
-      const data = await getDocs(projectId, 'json', { refresh: true })
-      const docsText = typeof data === 'string' ? data : data.docs || ''
-      setDocs(docsText)
-      setIsCustomDocs(data.isCustom || false)
-      setIsEditingDocs(false)
-      showToast('Documentation regenerated from latest IDL', 'success')
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Failed to regenerate docs', 'error')
+      setIsRegeneratingDocs(false)
     }
-    setIsRegeneratingDocs(false)
+
+    if (isCustomDocs) {
+      setConfirmModal({
+        show: true,
+        title: 'Regenerate Documentation',
+        message: 'You currently use custom docs. Regenerating will discard custom docs and rebuild from the latest IDL. Continue?',
+        confirmText: 'Regenerate',
+        onConfirm: () => {
+          setConfirmModal(null)
+          doRegenerate()
+        },
+      })
+      return
+    }
+
+    doRegenerate()
   }
 
   // ── Known addresses handlers ──
@@ -314,16 +340,24 @@ export default function ProjectDetail(): JSX.Element {
     }
   }
 
-  const handleDeleteAddress = async (addressId: string) => {
+  const handleDeleteAddress = (addressId: string) => {
     if (!projectId) return
-    if (!confirm('Delete this known address?')) return
-    try {
-      await deleteKnownAddress(projectId, addressId)
-      setKnownAddresses(knownAddresses.filter((a) => a.id !== addressId))
-      showToast('Address deleted', 'info')
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Failed to delete address', 'error')
-    }
+    setConfirmModal({
+      show: true,
+      title: 'Delete Address',
+      message: 'This known address will be permanently removed from the project.',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        try {
+          await deleteKnownAddress(projectId, addressId)
+          setKnownAddresses(prev => prev.filter((a) => a.id !== addressId))
+          showToast('Address deleted', 'info')
+        } catch (err: any) {
+          showToast(err.response?.data?.error || 'Failed to delete address', 'error')
+        }
+      },
+    })
   }
 
   // ── Socials handler ──
@@ -542,12 +576,27 @@ export default function ProjectDetail(): JSX.Element {
       </div>
 
       {/* Tabs - Modern */}
-      <div className="flex gap-1 border-b border-white/5 overflow-x-auto">
+      <div
+        className="flex gap-1 border-b border-white/5 overflow-x-auto"
+        role="tablist"
+        aria-label="Project sections"
+        onKeyDown={(e) => {
+          const ids = tabs.map(t => t.id)
+          const cur = ids.indexOf(activeTab)
+          if (e.key === 'ArrowRight') { e.preventDefault(); setActiveTab(ids[(cur + 1) % ids.length]) }
+          else if (e.key === 'ArrowLeft') { e.preventDefault(); setActiveTab(ids[(cur - 1 + ids.length) % ids.length]) }
+        }}
+      >
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            id={`tab-${tab.id}`}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`tabpanel-${tab.id}`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-3 text-sm font-medium transition whitespace-nowrap ${
+            className={`px-5 py-3 text-sm font-medium transition whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset ${
               activeTab === tab.id
                 ? 'text-primary border-b-2 border-primary bg-primary/5'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -559,7 +608,12 @@ export default function ProjectDetail(): JSX.Element {
       </div>
 
       {/* Tab Content */}
-      <div className="min-h-[300px]">
+      <div
+        className="min-h-[300px]"
+        role="tabpanel"
+        id={`tabpanel-${activeTab}`}
+        aria-labelledby={`tab-${activeTab}`}
+      >
         {tabLoading ? (
           <div className="flex justify-center py-12">
             <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
@@ -1147,6 +1201,30 @@ export default function ProjectDetail(): JSX.Element {
           </>
         )}
       </div>
+
+      {/* Generic Confirm Modal */}
+      {confirmModal?.show && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card-static p-6 max-w-md w-full border border-white/10">
+            <h3 className="text-lg font-bold text-white mb-3">{confirmModal.title}</h3>
+            <p className="text-gray-400 text-sm mb-5">{confirmModal.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => confirmModal.onConfirm()}
+                className="btn-primary px-4 py-2 text-sm"
+              >
+                {confirmModal.confirmText ?? 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (

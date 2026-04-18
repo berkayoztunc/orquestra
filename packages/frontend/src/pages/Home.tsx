@@ -77,7 +77,7 @@ export default function Home(): JSX.Element {
           <div className="hidden md:block absolute top-8 left-[calc(12.5%+2rem)] right-[calc(12.5%+2rem)] h-px bg-gradient-to-r from-primary/10 via-primary/40 to-primary/10 pointer-events-none" />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Step 1 */}
+            {/* Step 3 */}
             <div className="flex flex-col items-center text-center group">
               <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
                 <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -86,7 +86,7 @@ export default function Home(): JSX.Element {
                 <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">1</span>
               </div>
               <h4 className="font-bold text-white mb-2 text-sm">Sign In with GitHub</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">OAuth in one click. No passwords, no forms. Your projects are ready immediately.</p>
+              <p className="text-xs text-gray-400 leading-relaxed">OAuth in one click. No passwords, no forms. Your projects are ready immediately.</p>
             </div>
 
             {/* Step 2 */}
@@ -98,12 +98,12 @@ export default function Home(): JSX.Element {
                 <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">2</span>
               </div>
               <h4 className="font-bold text-white mb-2 text-sm">Upload Your IDL</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">Drag and drop your Anchor IDL JSON. We validate, parse, and index every instruction and type.</p>
+              <p className="text-xs text-gray-400 leading-relaxed">Drag and drop your Anchor IDL JSON. We validate, parse, and index every instruction and type.</p>
             </div>
 
            
 
-            {/* Step 4 */}
+            {/* Step 3 */}
             <div className="flex flex-col items-center text-center group">
               <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
                 <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -112,7 +112,7 @@ export default function Home(): JSX.Element {
                 <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-dark-900 text-xs font-bold flex items-center justify-center">3</span>
               </div>
               <h4 className="font-bold text-white mb-2 text-sm">Build &amp; Send Transactions</h4>
-              <p className="text-xs text-gray-500 leading-relaxed">POST accounts and args, get a base58 tx back. Sign with any wallet and broadcast to Solana.</p>
+              <p className="text-xs text-gray-400 leading-relaxed">POST accounts and args, get a base58 tx back. Sign with any wallet and broadcast to Solana.</p>
             </div>
           </div>
         </div>
@@ -217,7 +217,7 @@ export default function Home(): JSX.Element {
         <div className="card-static p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 text-center">
           <div>
             <p className="text-white font-semibold text-sm">Your Client</p>
-            <p className="text-gray-600 text-xs mt-0.5">Web · Mobile · IoT · CLI</p>
+            <p className="text-gray-500 text-xs mt-0.5">Web · Mobile · IoT · CLI</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -230,7 +230,7 @@ export default function Home(): JSX.Element {
 
           <div>
             <div className="badge badge-primary text-xs font-bold px-4 py-1.5 mb-1 inline-block">Orquestra API</div>
-            <p className="text-gray-600 text-xs">Build · Serialize · Discriminate</p>
+            <p className="text-gray-500 text-xs">Build · Serialize · Discriminate</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -243,7 +243,7 @@ export default function Home(): JSX.Element {
 
           <div>
             <p className="text-secondary font-semibold text-sm">Solana Network</p>
-            <p className="text-gray-600 text-xs mt-0.5">Mainnet · Devnet · Testnet</p>
+            <p className="text-gray-500 text-xs mt-0.5">Mainnet · Devnet · Testnet</p>
           </div>
         </div>
       </section>

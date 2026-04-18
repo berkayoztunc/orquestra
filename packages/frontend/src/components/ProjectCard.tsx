@@ -53,7 +53,7 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
         <p className="text-gray-400 text-sm mb-4 line-clamp-2 leading-relaxed">{project.description}</p>
       )}
 
-      <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-white/5">
+      <div className="flex items-center justify-between text-xs text-gray-400 pt-3 border-t border-white/5">
         <code className="font-mono truncate max-w-[160px]" title={project.program_id}>
           {project.program_id.slice(0, 6)}...{project.program_id.slice(-4)}
         </code>
@@ -65,7 +65,7 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
           {project.avatar_url && (
             <img src={project.avatar_url} alt="" className="w-4 h-4 rounded-full" />
           )}
-          <span className="text-xs text-gray-500">{project.username}</span>
+          <span className="text-xs text-gray-400">{project.username}</span>
         </div>
       )}
     </Link>

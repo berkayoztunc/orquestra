@@ -63,8 +63,21 @@ export default function Explorer(): JSX.Element {
 
       {/* Results */}
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="card-static p-5 space-y-3 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex-shrink-0" />
+                <div className="h-5 w-36 rounded-lg bg-white/10" />
+              </div>
+              <div className="h-3.5 w-full rounded bg-white/10" />
+              <div className="h-3.5 w-2/3 rounded bg-white/10" />
+              <div className="flex justify-between pt-3 border-t border-white/5">
+                <div className="h-3 w-24 rounded bg-white/10" />
+                <div className="h-3 w-16 rounded bg-white/10" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : projects.length === 0 ? (
         <div className="card-static p-12 text-center">

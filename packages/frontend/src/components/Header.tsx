@@ -118,8 +118,10 @@ export default function Header(): JSX.Element {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-gray-400 hover:text-primary transition-colors"
+            className="md:hidden p-2 text-gray-400 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded"
             aria-label="Toggle menu"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-nav"
           >
             <svg
               className="w-6 h-6"
@@ -148,7 +150,7 @@ export default function Header(): JSX.Element {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-4 pb-4 border-t border-white/5 pt-4">
+          <div id="mobile-nav" className="md:hidden mt-4 pb-4 border-t border-white/5 pt-4">
             <div className="flex flex-col gap-4">
               <Link
                 to="/"

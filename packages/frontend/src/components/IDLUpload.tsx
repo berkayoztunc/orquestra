@@ -15,6 +15,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
   const [idlFileName, setIdlFileName] = useState('')
   const [cpiMd, setCpiMd] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const { showToast } = useToast()
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -44,18 +45,12 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!name.trim()) {
-      showToast('Project name is required', 'error')
-      return
-    }
-    if (!programId.trim()) {
-      showToast('Program ID is required', 'error')
-      return
-    }
-    if (!idlJson) {
-      showToast('Please upload an IDL file', 'error')
-      return
-    }
+    const newErrors: Record<string, string> = {}
+    if (!name.trim()) newErrors.name = 'Project name is required'
+    if (!programId.trim()) newErrors.programId = 'Program ID is required'
+    if (!idlJson) newErrors.idl = 'Please upload an IDL file'
+    setFieldErrors(newErrors)
+    if (Object.keys(newErrors).length > 0) return
 
     setIsLoading(true)
     try {
@@ -140,30 +135,41 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
               Valid IDL: {idlJson.name} v{idlJson.version} ({idlJson.instructions?.length || 0} instructions)
             </p>
           )}
+          {fieldErrors.idl && !idlJson && (
+            <p className="text-xs text-red-400 mt-1.5">{fieldErrors.idl}</p>
+          )}
         </div>
 
         {/* Name */}
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Project Name *</label>
+          <label htmlFor="project-name" className="block text-sm text-gray-400 mb-2">Project Name *</label>
           <input
+            id="project-name"
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => { setName(e.target.value); if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: '' })) }}
             placeholder="e.g., My Token Program"
-            className="input w-full"
+            className={`input w-full ${fieldErrors.name ? 'border-red-500/50' : ''}`}
           />
+          {fieldErrors.name && (
+            <p className="text-xs text-red-400 mt-1.5">{fieldErrors.name}</p>
+          )}
         </div>
 
         {/* Program ID */}
         <div>
-          <label className="block text-sm text-gray-400 mb-2">Program ID (Solana Address) *</label>
+          <label htmlFor="program-id" className="block text-sm text-gray-400 mb-2">Program ID (Solana Address) *</label>
           <input
+            id="program-id"
             type="text"
             value={programId}
-            onChange={(e) => setProgramId(e.target.value)}
+            onChange={(e) => { setProgramId(e.target.value); if (fieldErrors.programId) setFieldErrors(prev => ({ ...prev, programId: '' })) }}
             placeholder="e.g., TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-            className="input w-full font-mono text-sm"
+            className={`input w-full font-mono text-sm ${fieldErrors.programId ? 'border-red-500/50' : ''}`}
           />
+          {fieldErrors.programId && (
+            <p className="text-xs text-red-400 mt-1.5">{fieldErrors.programId}</p>
+          )}
         </div>
 
         {/* Description */}

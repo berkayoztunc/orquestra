@@ -25,12 +25,25 @@ export default function Explorer(): JSX.Element {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">API Explorer</h1>
-          <p className="text-gray-400 mt-1">Browse public Solana program APIs</p>
+          <h1 className="text-3xl font-bold text-white">Program Explorer</h1>
+          <p className="text-gray-400 mt-1">Browse and search public Solana programs indexed by Orquestra</p>
         </div>
-        <p className="text-sm text-gray-500">
-          {pagination.total} projects available
-        </p>
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <p className="text-2xl font-bold text-white">{pagination.total.toLocaleString()}</p>
+            <p className="text-xs text-gray-500">Programs</p>
+          </div>
+          <div className="w-px h-10 bg-white/10" />
+          <div className="text-right">
+            <p className="text-2xl font-bold text-white">7</p>
+            <p className="text-xs text-gray-500">MCP Tools</p>
+          </div>
+          <div className="w-px h-10 bg-white/10" />
+          <div className="text-right">
+            <p className="text-2xl font-bold gradient-text">FTS</p>
+            <p className="text-xs text-gray-500">Full-Text Search</p>
+          </div>
+        </div>
       </div>
 
       {/* Search Bar - Modern */}

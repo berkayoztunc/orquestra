@@ -33,8 +33,8 @@ function App(): JSX.Element {
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/error" element={<AuthError />} />
             <Route path="/docs/sign-and-send" element={<SignAndSend />} />
-            <Route path="/cli" element={<CLI />} />
-              <Route path="/docs/mcp" element={<MCP />} />
+            <Route path="/docs/cli" element={<CLI />} />
+            <Route path="/docs/mcp" element={<MCP />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

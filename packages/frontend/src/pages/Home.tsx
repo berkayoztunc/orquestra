@@ -24,14 +24,9 @@ export default function Home(): JSX.Element {
             <span className="gradient-text">in seconds</span>
           </h1>
           
-          <p className="text-xl text-gray-400 mb-6 max-w-2xl mx-auto leading-relaxed">
-            Transform your Anchor programs into production-ready REST APIs instantly. 
-            No backend code, no infrastructure setup, no deployment hassles.
-          </p>
-          
-          <p className="text-lg text-gray-500 mb-10 max-w-xl mx-auto">
-            Just upload your IDL and get automatic transaction building, wallet-ready base58 serialization, 
-            and AI-optimized documentation for every instruction and account type.
+          <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+            Upload your Anchor IDL. Get a REST API, AI docs, and an MCP server — in 30 seconds.
+            No backend code, no SDK, no infrastructure setup.
           </p>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -54,8 +49,31 @@ export default function Home(): JSX.Element {
               to="/explorer"
               className="btn-secondary text-base px-8 py-4"
             >
-              Explore APIs
+              Explore Programs
             </Link>
+          </div>
+
+          {/* Stats bar */}
+          <div className="mt-16 flex flex-wrap justify-center gap-8 md:gap-12">
+            <div className="text-center">
+              <p className="text-3xl font-bold text-white">1,000+</p>
+              <p className="text-xs text-gray-500 mt-1">Programs Indexed</p>
+            </div>
+            <div className="w-px bg-white/10 hidden sm:block" />
+            <div className="text-center">
+              <p className="text-3xl font-bold text-white">7</p>
+              <p className="text-xs text-gray-500 mt-1">MCP Tools</p>
+            </div>
+            <div className="w-px bg-white/10 hidden sm:block" />
+            <div className="text-center">
+              <p className="text-3xl font-bold gradient-text">100% Free</p>
+              <p className="text-xs text-gray-500 mt-1">Open Source</p>
+            </div>
+            <div className="w-px bg-white/10 hidden sm:block" />
+            <div className="text-center">
+              <p className="text-3xl font-bold text-white">&lt;50ms</p>
+              <p className="text-xs text-gray-500 mt-1">Edge Latency</p>
+            </div>
           </div>
         </div>
       </section>
@@ -67,7 +85,7 @@ export default function Home(): JSX.Element {
             <span className="gradient-text">It Works</span>
           </h2>
           <p className="text-gray-400 max-w-2xl mx-auto">
-            From zero to production-ready Solana API in four steps. No backend code, no devops,
+            From zero to a production Solana API in four steps. No backend code, no devops,
             no Anchor SDK on the client.
           </p>
         </div>
@@ -76,8 +94,8 @@ export default function Home(): JSX.Element {
           {/* Connecting line between circles on desktop */}
           <div className="hidden md:block absolute top-8 left-[calc(12.5%+2rem)] right-[calc(12.5%+2rem)] h-px bg-gradient-to-r from-primary/10 via-primary/40 to-primary/10 pointer-events-none" />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Step 3 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {/* Step 1 */}
             <div className="flex flex-col items-center text-center group">
               <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
                 <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -101,8 +119,6 @@ export default function Home(): JSX.Element {
               <p className="text-xs text-gray-400 leading-relaxed">Drag and drop your Anchor IDL JSON. We validate, parse, and index every instruction and type.</p>
             </div>
 
-           
-
             {/* Step 3 */}
             <div className="flex flex-col items-center text-center group">
               <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-primary/25 flex items-center justify-center mb-5 z-10 group-hover:border-primary/60 group-hover:bg-primary/10 transition-all duration-300">
@@ -113,6 +129,18 @@ export default function Home(): JSX.Element {
               </div>
               <h4 className="font-bold text-white mb-2 text-sm">Build &amp; Send Transactions</h4>
               <p className="text-xs text-gray-400 leading-relaxed">POST accounts and args, get a base58 tx back. Sign with any wallet and broadcast to Solana.</p>
+            </div>
+
+            {/* Step 4 — MCP */}
+            <div className="flex flex-col items-center text-center group">
+              <div className="relative w-16 h-16 rounded-2xl bg-surface-elevated border border-secondary/25 flex items-center justify-center mb-5 z-10 group-hover:border-secondary/60 group-hover:bg-secondary/10 transition-all duration-300">
+                <svg className="w-7 h-7 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-secondary text-dark-900 text-xs font-bold flex items-center justify-center">4</span>
+              </div>
+              <h4 className="font-bold text-white mb-2 text-sm">Connect Your AI Agent</h4>
+              <p className="text-xs text-gray-400 leading-relaxed">Add the MCP endpoint to Claude, Cursor, or Copilot. Your agent can now build Solana transactions from prompts.</p>
             </div>
           </div>
         </div>
@@ -244,6 +272,74 @@ export default function Home(): JSX.Element {
           <div>
             <p className="text-secondary font-semibold text-sm">Solana Network</p>
             <p className="text-gray-500 text-xs mt-0.5">Mainnet · Devnet · Testnet</p>
+          </div>
+        </div>
+      </section>
+
+      {/* MCP / AI Agents Section */}
+      <section className="max-w-6xl mx-auto px-6">
+        <div className="card overflow-hidden">
+          <div className="grid md:grid-cols-2 gap-0">
+            {/* Left — copy */}
+            <div className="p-8 md:p-10 flex flex-col justify-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="badge badge-secondary text-xs">New</span>
+                <span className="text-gray-500 text-xs">Model Context Protocol</span>
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold leading-snug">
+                <span className="text-white">AI Agents Can Now</span>
+                <br />
+                <span className="gradient-text">Talk to Solana Programs</span>
+              </h2>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                Every public program in Orquestra is instantly accessible to Claude, Cursor, and GitHub Copilot
+                via the Model Context Protocol. Your agent can search programs, inspect instructions,
+                derive PDAs, and build unsigned transactions — all from a single prompt.
+              </p>
+              <ul className="space-y-3">
+                {[
+                  { label: 'search_programs', desc: 'Find any Solana program by name or ID' },
+                  { label: 'build_instruction', desc: 'Build a base58 transaction ready for signing' },
+                  { label: 'derive_pda', desc: 'Compute PDA addresses from seed values' },
+                ].map(({ label, desc }) => (
+                  <li key={label} className="flex items-start gap-3">
+                    <span className="mt-0.5 w-2 h-2 rounded-full bg-secondary flex-shrink-0" />
+                    <span className="text-sm text-gray-300">
+                      <span className="font-mono text-secondary">{label}</span>
+                      {' '}— {desc}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to="/docs/mcp"
+                className="btn-secondary text-sm px-5 py-2.5 w-fit"
+              >
+                Connect your AI agent →
+              </Link>
+            </div>
+
+            {/* Right — code block */}
+            <div className="bg-surface-elevated border-t md:border-t-0 md:border-l border-white/5 p-8 md:p-10 flex flex-col justify-center gap-4">
+              <p className="text-xs text-gray-500 font-mono">claude_desktop_config.json</p>
+              <pre className="text-xs font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300 select-all">
+{`{
+  "mcpServers": {
+    "orquestra": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/client-streamable-http",
+        "https://api.orquestra.dev/mcp"
+      ]
+    }
+  }
+}`}
+              </pre>
+              <p className="text-xs text-gray-600">
+                Works with Claude Desktop, Cursor, VS Code Copilot, and any MCP-compatible client.
+              </p>
+            </div>
           </div>
         </div>
       </section>

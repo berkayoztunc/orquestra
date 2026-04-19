@@ -78,7 +78,7 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
       // No search: return recent projects
       if (userId) {
         const query =
-          'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 OR p.user_id = ? ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
+          'SELECT p.*, u.username, u.avatar_url, pc.category FROM projects p JOIN users u ON p.user_id = u.id LEFT JOIN program_categories pc ON pc.project_id = p.id WHERE p.is_public = 1 OR p.user_id = ? ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
         const params = [userId, limit, offset]
         const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1 OR user_id = ?'
         const countParams = [userId]
@@ -98,7 +98,7 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
         })
       } else {
         const query =
-          'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
+          'SELECT p.*, u.username, u.avatar_url, pc.category FROM projects p JOIN users u ON p.user_id = u.id LEFT JOIN program_categories pc ON pc.project_id = p.id WHERE p.is_public = 1 ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
         const params = [limit, offset]
         const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1'
 

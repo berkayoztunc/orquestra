@@ -5,6 +5,8 @@ import { validateIDL, parseIDL } from '../services/idl-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateIDLUpload } from '../services/validation'
 import { autoSeedCategory } from '../services/program-auto-detect'
+import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
+import { setCategoryAndAliases } from '../services/search'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
@@ -27,6 +29,7 @@ type Env = {
     DB: any
     IDLS: any  // KV namespace
     CACHE: any // KV namespace
+    AI: Ai
     API_BASE_URL: string
   }
 }
@@ -120,6 +123,32 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
 
     // Auto-detect and seed category if known program
     await autoSeedCategory(db, projectId, body.name)
+
+    // Fire AI categorization in the background (non-blocking)
+    if (c.env?.AI) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const existing = await db
+              ?.prepare('SELECT id FROM program_categories WHERE project_id = ? LIMIT 1')
+              .bind(projectId)
+              .first()
+            if (!existing) {
+              const result = await categorizeProgramWithAI(c.env.AI, {
+                name: body.name,
+                description: body.description,
+                programId: body.programId,
+                instructions: extractInstructionNames(body.idl),
+                accounts: extractAccountNames(body.idl),
+              })
+              await setCategoryAndAliases(db, projectId, result.category, result.tags, result.aliases)
+            }
+          } catch (err) {
+            console.error('[idl] Background AI categorization failed:', err)
+          }
+        })()
+      )
+    }
 
     // Cache IDL in KV
     if (kv) {

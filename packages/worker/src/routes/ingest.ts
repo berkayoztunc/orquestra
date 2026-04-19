@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { autoSeedCategory } from '../services/program-auto-detect'
+import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
+import { setCategoryAndAliases } from '../services/search'
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
@@ -20,6 +22,7 @@ type Env = {
     DB: any
     IDLS: any
     CACHE: any
+    AI: Ai
     API_BASE_URL: string
     INGEST_API_KEY: string
   }
@@ -112,6 +115,33 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
 
       // Auto-detect and seed category if known program
       await autoSeedCategory(db, projectId, programName)
+
+      // Fire AI categorization in the background (non-blocking)
+      if (c.env?.AI) {
+        c.executionCtx.waitUntil(
+          (async () => {
+            try {
+              // Only run if autoSeedCategory didn't already set a category
+              const existing = await db
+                .prepare('SELECT id FROM program_categories WHERE project_id = ? LIMIT 1')
+                .bind(projectId)
+                .first()
+              if (!existing) {
+                const result = await categorizeProgramWithAI(c.env.AI, {
+                  name: programName,
+                  description: programDescription,
+                  programId: body.programId,
+                  instructions: extractInstructionNames(body.idl),
+                  accounts: extractAccountNames(body.idl),
+                })
+                await setCategoryAndAliases(db, projectId, result.category, result.tags, result.aliases)
+              }
+            } catch (err) {
+              console.error('[ingest] Background AI categorization failed:', err)
+            }
+          })()
+        )
+      }
 
       created = true
     } else {

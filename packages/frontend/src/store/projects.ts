@@ -16,6 +16,7 @@ interface Project {
   latestVersionDate?: string
   isOwner?: boolean
   socials?: Record<string, string>
+  category?: string | null
 }
 
 interface ProjectsState {

@@ -33,23 +33,16 @@ interface FTSRow {
 }
 
 /**
- * Compute relevance score based on match position and field weight
- * Lower rank (closer to 0) = better match
- * Weight: name > tags/aliases > category > description
+ * Determine which field most likely matched the search term
+ * by checking which columns contain the query string.
  */
-function computeRelevanceScore(rank: number, matchType: string): number {
-  // FTS5 rank is negative, closer to 0 is better
-  // Higher relevance_score is better, so we negate and apply weights
-  const weights: Record<string, number> = {
-    name: 10,
-    tags: 8,
-    aliases: 8,
-    category: 5,
-    description: 2,
-  }
-  
-  const weight = weights[matchType] || 1
-  return Math.abs(rank) * (1 / weight)
+function detectMatchType(row: FTSRow, query: string): SearchResult['match_type'] {
+  const q = query.toLowerCase()
+  if (row.name?.toLowerCase().includes(q)) return 'name'
+  if (row.aliases?.toLowerCase().includes(q)) return 'aliases'
+  if (row.tags?.toLowerCase().includes(q)) return 'tags'
+  if (row.category?.toLowerCase().includes(q)) return 'category'
+  return 'description'
 }
 
 /**
@@ -89,11 +82,12 @@ export async function searchProjects(
     const countResult = await db.prepare(countSQL).bind(...countParams).first<{ count: number }>()
     const total = countResult?.count || 0
 
-    // Get ranked results
+    // Get ranked results using BM25 with per-column weights:
+    // column order in FTS5: project_id(0), name(10), description(2), category(5), tags(8), aliases(8)
     const resultSQL = userId
       ? `
         SELECT 
-          projects_fts.rank,
+          bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
           p.id,
           p.name,
           p.description,
@@ -108,12 +102,12 @@ export async function searchProjects(
         JOIN users u ON p.user_id = u.id
         LEFT JOIN program_categories pc ON p.id = pc.project_id
         WHERE projects_fts MATCH ? AND (p.is_public = 1 OR p.user_id = ?)
-        ORDER BY projects_fts.rank ASC
+        ORDER BY rank ASC
         LIMIT ? OFFSET ?
       `
       : `
         SELECT 
-          projects_fts.rank,
+          bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
           p.id,
           p.name,
           p.description,
@@ -128,7 +122,7 @@ export async function searchProjects(
         JOIN users u ON p.user_id = u.id
         LEFT JOIN program_categories pc ON p.id = pc.project_id
         WHERE projects_fts MATCH ? AND p.is_public = 1
-        ORDER BY projects_fts.rank ASC
+        ORDER BY rank ASC
         LIMIT ? OFFSET ?
       `
 
@@ -139,8 +133,8 @@ export async function searchProjects(
     const rows = await db.prepare(resultSQL).bind(...resultParams).all<FTSRow>()
     const results = (rows.results || []).map((row) => ({
       ...row,
-      relevance_score: computeRelevanceScore(row.rank, 'name'), // Simplified for now
-      match_type: 'name' as const,
+      relevance_score: Math.abs(row.rank),
+      match_type: detectMatchType(row, searchQuery),
     }))
 
     return { results, total }

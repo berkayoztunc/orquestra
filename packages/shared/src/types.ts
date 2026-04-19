@@ -19,6 +19,7 @@ export interface Project {
   is_public: boolean
   created_at: string
   updated_at: string
+  category?: string | null
 }
 
 // IDL Version types

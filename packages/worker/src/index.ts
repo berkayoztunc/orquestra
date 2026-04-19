@@ -21,6 +21,7 @@ import authRoutes from './routes/auth'
 import llmsRoutes from './routes/llms'
 import ingestRoutes from './routes/ingest'
 import aiRoutes from './routes/ai'
+import adminRoutes from './routes/admin'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -75,6 +76,7 @@ app.use('/api/*', apiRateLimit)
 app.use('/api/*', publicApiCache)
 app.route('/api/idl', idlRoutes)
 app.route('/api/ingest', ingestRoutes)
+app.route('/api/admin', adminRoutes)
 app.route('/api', aiRoutes)
 app.route('/api', apiRoutes)
 

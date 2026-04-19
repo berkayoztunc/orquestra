@@ -35,6 +35,9 @@ id = "f9bd92f54c1149fba41a7c6c3ef20760"
 binding = "CACHE"
 id = "00550acbdd544169b8af0e5eb7a34bdd"
 
+[ai]
+binding = "AI"
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -56,6 +59,9 @@ id = "f9bd92f54c1149fba41a7c6c3ef20760"
 binding = "CACHE"
 id = "00550acbdd544169b8af0e5eb7a34bdd"
 
+[env.production.ai]
+binding = "AI"
+
 # Environment: Development
 [env.development]
 name = "orquestra-worker-dev"
@@ -74,6 +80,9 @@ id = "ab1db1fef1094ee89aa4b7876c1b7d38"
 [[env.development.kv_namespaces]]
 binding = "CACHE"
 id = "5868c26cb04949fd88ff75c0d315d475"
+
+[env.development.ai]
+binding = "AI"
 
 # Environment Variables - Production
 [env.production.vars]

@@ -1,5 +1,20 @@
 import { Link } from 'react-router-dom'
 
+const CATEGORY_LABELS: Record<string, string> = {
+  'dex-amm': 'DEX / AMM',
+  'lending': 'Lending',
+  'staking': 'Staking',
+  'nft-marketplace': 'NFT Market',
+  'token-launch': 'Token Launch',
+  'gaming': 'Gaming',
+  'payments': 'Payments',
+  'governance': 'Governance',
+  'perpetuals': 'Perpetuals',
+  'derivatives': 'Derivatives',
+  'infrastructure': 'Infrastructure',
+  'social': 'Social',
+}
+
 interface ProjectCardProps {
   project: {
     id: string
@@ -11,6 +26,7 @@ interface ProjectCardProps {
     updated_at: string
     username?: string
     avatar_url?: string
+    category?: string | null
   }
   isOwner?: boolean
 }
@@ -51,6 +67,14 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
 
       {project.description && (
         <p className="text-gray-400 text-sm mb-4 line-clamp-2 leading-relaxed">{project.description}</p>
+      )}
+
+      {project.category && project.category !== 'other' && CATEGORY_LABELS[project.category] && (
+        <div className="mb-3">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+            {CATEGORY_LABELS[project.category]}
+          </span>
+        </div>
       )}
 
       <div className="flex items-center justify-between text-xs text-gray-400 pt-3 border-t border-white/5">

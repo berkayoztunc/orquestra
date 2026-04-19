@@ -1,8 +1,14 @@
 import { Outlet } from 'react-router-dom'
+import { useEffect } from 'react'
 import Header from './Header'
 import Footer from './Footer'
+import { registerWebMcpTools } from '@/lib/webmcp'
 
 export default function Layout(): JSX.Element {
+  useEffect(() => {
+    return registerWebMcpTools()
+  }, [])
+
   return (
     <div className="min-h-screen flex flex-col bg-surface">
       <Header />

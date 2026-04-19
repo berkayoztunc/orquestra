@@ -1,0 +1,8 @@
+{
+  "resource": "https://api.orquestra.dev/api",
+  "authorization_servers": ["https://api.orquestra.dev"],
+  "scopes_supported": ["read:user", "user:email"],
+  "bearer_methods_supported": ["header"],
+  "resource_name": "Orquestra API",
+  "resource_documentation": "https://orquestra.dev/docs/api"
+}

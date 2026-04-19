@@ -1,0 +1,40 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://api.orquestra.dev/api",
+      "service-desc": [
+        {
+          "href": "https://api.orquestra.dev/openapi.json",
+          "type": "application/openapi+json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://orquestra.dev/docs/api",
+          "type": "text/html"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://api.orquestra.dev/health",
+          "type": "application/json"
+        }
+      ]
+    },
+    {
+      "anchor": "https://api.orquestra.dev/mcp",
+      "service-doc": [
+        {
+          "href": "https://orquestra.dev/docs/mcp",
+          "type": "text/html"
+        }
+      ],
+      "status": [
+        {
+          "href": "https://api.orquestra.dev/health",
+          "type": "application/json"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/server-card.json",
+  "serverInfo": {
+    "name": "orquestra",
+    "version": "1.0.0",
+    "description": "Orquestra exposes Solana program discovery and unsigned transaction building over MCP."
+  },
+  "transports": [
+    {
+      "type": "streamable-http",
+      "endpoint": "https://api.orquestra.dev/mcp"
+    }
+  ],
+  "capabilities": {
+    "tools": [
+      { "name": "search_programs" },
+      { "name": "list_instructions" },
+      { "name": "build_instruction" },
+      { "name": "list_pda_accounts" },
+      { "name": "derive_pda" },
+      { "name": "read_llms_txt" },
+      { "name": "get_ai_analysis" }
+    ],
+    "resources": [],
+    "prompts": []
+  }
+}

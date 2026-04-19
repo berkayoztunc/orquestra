@@ -22,6 +22,7 @@ import llmsRoutes from './routes/llms'
 import ingestRoutes from './routes/ingest'
 import aiRoutes from './routes/ai'
 import adminRoutes from './routes/admin'
+import discoveryRoutes from './routes/discovery'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -71,6 +72,7 @@ app.use(
 app.route('/health', healthRoutes)
 app.route('/auth', authRoutes)
 app.route('/', llmsRoutes)
+app.route('/', discoveryRoutes)
 app.use('/api/*', requestLogger)
 app.use('/api/*', apiRateLimit)
 app.use('/api/*', publicApiCache)

@@ -1,6 +1,20 @@
 import { Context, Next } from 'hono'
 import { verifyJWT, type JWTPayload } from '../services/jwt'
 
+function resourceMetadataUrl(c: Context): string {
+  return `${new URL(c.req.url).origin}/.well-known/oauth-protected-resource`
+}
+
+function unauthorizedJson(c: Context, message: string, scheme = 'Bearer') {
+  return c.json(
+    { error: 'Unauthorized', message },
+    401,
+    {
+      'WWW-Authenticate': `${scheme} realm="orquestra", resource_metadata="${resourceMetadataUrl(c)}"`,
+    },
+  )
+}
+
 /**
  * Authentication middleware - validates JWT token from Authorization header
  * Sets user info on context variables if valid
@@ -9,7 +23,7 @@ export async function authMiddleware(c: Context, next: Next) {
   const authHeader = c.req.header('Authorization')
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized', message: 'Missing or invalid Authorization header' }, 401)
+    return unauthorizedJson(c, 'Missing or invalid Authorization header')
   }
 
   const token = authHeader.slice(7)
@@ -27,7 +41,7 @@ export async function authMiddleware(c: Context, next: Next) {
 
     await next()
   } catch (err) {
-    return c.json({ error: 'Unauthorized', message: 'Invalid or expired token' }, 401)
+    return unauthorizedJson(c, 'Invalid or expired token')
   }
 }
 
@@ -65,7 +79,7 @@ export async function ingestKeyMiddleware(c: Context, next: Next) {
   const ingestKey = c.req.header('X-Ingest-Key')
 
   if (!ingestKey) {
-    return c.json({ error: 'Unauthorized', message: 'Missing X-Ingest-Key header' }, 401)
+    return unauthorizedJson(c, 'Missing X-Ingest-Key header', 'ApiKey')
   }
 
   const expectedKey = c.env?.INGEST_API_KEY
@@ -75,7 +89,7 @@ export async function ingestKeyMiddleware(c: Context, next: Next) {
 
   // Constant-time comparison to prevent timing attacks
   if (ingestKey.length !== expectedKey.length || ingestKey !== expectedKey) {
-    return c.json({ error: 'Unauthorized', message: 'Invalid ingest key' }, 401)
+    return unauthorizedJson(c, 'Invalid ingest key', 'ApiKey')
   }
 
   await next()
@@ -89,7 +103,7 @@ export async function apiKeyMiddleware(c: Context, next: Next) {
   const apiKey = c.req.header('X-API-Key')
 
   if (!apiKey) {
-    return c.json({ error: 'Unauthorized', message: 'Missing X-API-Key header' }, 401)
+    return unauthorizedJson(c, 'Missing X-API-Key header', 'ApiKey')
   }
 
   try {
@@ -109,7 +123,7 @@ export async function apiKeyMiddleware(c: Context, next: Next) {
       .first()
 
     if (!result) {
-      return c.json({ error: 'Unauthorized', message: 'Invalid or expired API key' }, 401)
+      return unauthorizedJson(c, 'Invalid or expired API key', 'ApiKey')
     }
 
     // Update last_used timestamp

@@ -58,6 +58,16 @@ export default function Header(): JSX.Element {
                 >
                   <div className="rounded-xl border border-white/10 bg-dark-900/95 backdrop-blur-md shadow-xl py-1.5">
                     <Link
+                      to="/docs/api"
+                      role="menuitem"
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:bg-primary/10"
+                    >
+                      <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 11-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 115.656 5.656l-1.5 1.5" />
+                      </svg>
+                      API
+                    </Link>
+                    <Link
                       to="/docs/sign-and-send"
                       role="menuitem"
                       className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-300 hover:text-primary hover:bg-primary/10 transition-colors focus-visible:outline-none focus-visible:bg-primary/10"
@@ -186,6 +196,13 @@ export default function Header(): JSX.Element {
               >
                 Explorer
               </Link>
+                <Link
+                  to="/docs/api"
+                  onClick={closeMobileMenu}
+                  className="text-gray-300 hover:text-primary transition-colors text-sm font-medium py-2 pl-2"
+                >
+                  Docs - API
+                </Link>
                 <Link
                   to="/docs/sign-and-send"
                   onClick={closeMobileMenu}

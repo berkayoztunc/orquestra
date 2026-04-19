@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "sitemap",
+      "type": "skill-md",
+      "description": "Discover Orquestra's dynamic sitemap and canonical URLs.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/sitemap/SKILL.md",
+      "digest": "sha256:1d9dd10d00abca5ad1dc6d0766941a39c28e2e9e1526462c66034c63178d9f4d"
+    },
+    {
+      "name": "link-headers",
+      "type": "skill-md",
+      "description": "Discover the Link headers published on Orquestra HTML responses.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/link-headers/SKILL.md",
+      "digest": "sha256:daa22eadebbf3b39c815ae5e50e3c76538c4aa10a796e1364430a7be825ee69c"
+    },
+    {
+      "name": "markdown-negotiation",
+      "type": "skill-md",
+      "description": "Request markdown representations of Orquestra HTML pages.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/markdown-negotiation/SKILL.md",
+      "digest": "sha256:fba017952424b97fe3d424b2ab05fba5c3f16e1f3d24a0132c94a4b73d47a39a"
+    },
+    {
+      "name": "api-catalog",
+      "type": "skill-md",
+      "description": "Discover the Orquestra API catalog and related machine-readable artifacts.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/api-catalog/SKILL.md",
+      "digest": "sha256:401e4c17a384426aaab05c02c52e6011bb14200a260419d443db2449a16f3d30"
+    },
+    {
+      "name": "oauth-discovery",
+      "type": "skill-md",
+      "description": "Locate OAuth and OpenID discovery metadata for the Orquestra API.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/oauth-discovery/SKILL.md",
+      "digest": "sha256:72f11060ebfd871ea13aa0aa0118679cd6da5f669bc75001cee5b6bd833464a8"
+    },
+    {
+      "name": "oauth-protected-resource",
+      "type": "skill-md",
+      "description": "Locate OAuth protected resource metadata for the Orquestra API.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/oauth-protected-resource/SKILL.md",
+      "digest": "sha256:d2e639b1051d3c76cc0b233b322f0e3cbc457ef90cc3bfedaae078b2b4c32b8f"
+    },
+    {
+      "name": "mcp-server-card",
+      "type": "skill-md",
+      "description": "Discover the MCP server card for the Orquestra MCP endpoint.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/mcp-server-card/SKILL.md",
+      "digest": "sha256:26acc82d99e09733f8217a6ebb52377deefe266a392c01899461404ccee3118d"
+    },
+    {
+      "name": "agent-skills",
+      "type": "skill-md",
+      "description": "Discover the Agent Skills index published by Orquestra.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/agent-skills/SKILL.md",
+      "digest": "sha256:c4f64c2966238aa80fd294db793cb810adaa134980209f7a1ae8621e619ba189"
+    },
+    {
+      "name": "webmcp",
+      "type": "skill-md",
+      "description": "Use WebMCP tools exposed by the Orquestra web app.",
+      "url": "https://orquestra.dev/.well-known/agent-skills/webmcp/SKILL.md",
+      "digest": "sha256:c5edd86a25cd90984bd46c896e75017d505bad2b2a556970265c10773305a508"
+    }
+  ]
+}

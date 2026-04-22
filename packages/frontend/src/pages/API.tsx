@@ -3,6 +3,8 @@ import {
   BookOpenIcon,
   CheckIcon,
   CopyIcon,
+  DatabaseIcon,
+  GlobeIcon,
   KeyIcon,
   ListIcon,
   SearchIcon,
@@ -81,6 +83,13 @@ const endpoints = [
     path: '/api/{projectId}/pda',
     summary: 'Discover PDA-derivable accounts and seed schemas.',
     detail: 'Shows which accounts can be derived and what seed inputs are required for deterministic address generation.',
+  },
+  {
+    method: 'GET',
+    path: '/api/{projectId}/pda/fetch/{address}',
+    summary: 'Fetch on-chain account data and decode it against the project IDL.',
+    detail: 'Fetches raw account bytes from the Solana RPC, detects the account type via discriminator, and deserializes all fields as JSON. Accepts a ?network= query parameter (mainnet-beta · devnet · testnet). Returns data: null with a raw base64 field when the account type is not recognized in the IDL.',
+    network: true,
   },
   {
     method: 'POST',
@@ -284,17 +293,75 @@ export default function API(): JSX.Element {
           {endpoints.map((endpoint) => (
             <div key={endpoint.path} className="rounded-xl border border-white/5 bg-surface-elevated p-4">
               <div className="space-y-2">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                <div className="flex flex-wrap gap-2 md:flex-row md:items-center md:gap-3">
                   <span className="w-fit rounded-full bg-primary/10 px-2.5 py-1 font-mono text-xs text-primary">
                     {endpoint.method}
                   </span>
                   <code className="break-all text-sm text-white">{endpoint.path}</code>
+                  {'network' in endpoint && endpoint.network && (
+                    <span className="flex w-fit items-center gap-1 rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
+                      <GlobeIcon className="h-2.5 w-2.5" />
+                      ?network=
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-gray-300">{endpoint.summary}</p>
               </div>
               <p className="mt-3 text-xs leading-relaxed text-gray-500">{endpoint.detail}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="card space-y-5 p-5 sm:p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-secondary/20 bg-secondary/10">
+            <GlobeIcon className="h-5 w-5 text-secondary" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white sm:text-2xl">Network parameter</h2>
+            <p className="mt-0.5 text-xs text-gray-500">Endpoints that query live on-chain data</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-400 leading-relaxed">
+          Endpoints marked with{' '}
+          <span className="inline-flex items-center gap-1 rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
+            <GlobeIcon className="h-2.5 w-2.5" />?network=
+          </span>{' '}
+          accept an optional{' '}
+          <code className="rounded bg-surface-elevated px-1.5 py-0.5 font-mono text-xs text-gray-300">network</code>{' '}
+          query parameter to target a specific Solana cluster. Omitting it defaults to{' '}
+          <span className="font-mono text-xs text-primary">mainnet-beta</span>.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {[
+            { value: 'mainnet-beta', label: 'Mainnet', desc: 'Default — live production cluster.', primary: true },
+            { value: 'devnet', label: 'Devnet', desc: 'Solana devnet for development and testing.', primary: false },
+            { value: 'testnet', label: 'Testnet', desc: 'Solana testnet for validator staging.', primary: false },
+          ].map((net) => (
+            <div
+              key={net.value}
+              className={`rounded-xl border p-4 ${net.primary ? 'border-primary/20 bg-primary/5' : 'border-white/5 bg-surface-elevated'}`}
+            >
+              <div className="mb-1.5 flex items-center gap-2">
+                <DatabaseIcon className={`h-4 w-4 ${net.primary ? 'text-primary' : 'text-gray-500'}`} />
+                <span className={`text-sm font-semibold ${net.primary ? 'text-primary' : 'text-white'}`}>{net.label}</span>
+                {net.primary && (
+                  <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] text-primary">default</span>
+                )}
+              </div>
+              <code className="block font-mono text-xs text-gray-400">?network={net.value}</code>
+              <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{net.desc}</p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-white/5 bg-dark-900 p-4">
+          <p className="mb-2 font-mono text-xs text-gray-500">example — devnet account fetch</p>
+          <code className="block break-all font-mono text-xs text-gray-300">
+            {'GET '}
+            {API_BASE}
+            {'/api/{projectId}/pda/fetch/{address}?network=devnet'}
+          </code>
         </div>
       </section>
 

@@ -4,6 +4,7 @@ import {
   CopyIcon,
   BookOpenIcon,
   BotIcon,
+  DatabaseIcon,
   SearchIcon,
   ListIcon,
   ZapIcon,
@@ -127,6 +128,11 @@ const TOOLS = [
     name: 'get_ai_analysis',
     desc: 'Get AI analysis summary, tags, and metadata for a project.',
   },
+  {
+    icon: DatabaseIcon,
+    name: 'fetch_pda_data',
+    desc: 'Fetch a Solana account by address and decode its fields using the project IDL. Accepts an optional cluster param (mainnet-beta · devnet · testnet).',
+  },
 ]
 
 function CopyButton({ text }: { text: string }) {
@@ -180,7 +186,7 @@ export default function MCP(): JSX.Element {
 
         <p className="text-gray-400 max-w-2xl leading-relaxed">
           Connect Orquestra to any MCP-capable assistant and let your agent inspect Solana IDLs,
-          derive PDAs, and build unsigned transactions directly from prompts.
+          derive PDAs, fetch live on-chain account data, and build unsigned transactions directly from prompts.
         </p>
       </div>
 
@@ -254,7 +260,7 @@ export default function MCP(): JSX.Element {
       <div className="card p-5 sm:p-6 space-y-4" id="tools">
         <h2 className="text-xl sm:text-2xl font-bold text-white">Available MCP tools</h2>
         <p className="text-sm text-gray-400">
-          These tools are read-oriented plus transaction building only. Signing and broadcasting stay on your client side.
+          These tools are read-oriented plus transaction building and live account fetching. Signing and broadcasting stay on your client side.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

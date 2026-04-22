@@ -6,6 +6,14 @@
       "dest": "https://api.orquestra.dev/$1"
     },
     {
+      "src": "^/auth/callback$",
+      "dest": "/index.html"
+    },
+    {
+      "src": "^/auth/error$",
+      "dest": "/index.html"
+    },
+    {
       "src": "^/auth/(.*)$",
       "dest": "https://api.orquestra.dev/auth/$1"
     },

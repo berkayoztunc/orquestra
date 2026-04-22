@@ -122,7 +122,7 @@ export default {
       return proxyRequest(request, `${API_ORIGIN}${url.pathname}${url.search}`)
     }
 
-    if (url.pathname.startsWith('/auth/')) {
+    if (url.pathname.startsWith('/auth/') && url.pathname !== '/auth/callback' && url.pathname !== '/auth/error') {
       return proxyRequest(request, `${API_ORIGIN}${url.pathname}${url.search}`)
     }
 

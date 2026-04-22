@@ -77,3 +77,79 @@ export function rpcUrlHost(rpcUrl: string): string {
     return 'unknown'
   }
 }
+
+// ────────────────────────────────────────────────────────
+// On-chain account fetching
+// ────────────────────────────────────────────────────────
+
+export interface RawAccountInfo {
+  /** Raw account data as a base64 string. */
+  data: string
+  executable: boolean
+  lamports: number
+  /** Owner program public key (base58). */
+  owner: string
+  rentEpoch: number
+  /** Slot at which this snapshot was taken. */
+  slot: number
+}
+
+/**
+ * Fetch a Solana account via JSON-RPC getAccountInfo.
+ * Returns null if the account does not exist.
+ * Uses pure fetch() — Workers-compatible, no Node.js deps.
+ */
+export async function fetchAccountInfo(
+  address: string,
+  rpcUrl: string,
+): Promise<RawAccountInfo | null> {
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'getAccountInfo',
+    params: [address, { encoding: 'base64', commitment: 'confirmed' }],
+  })
+
+  const response = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  })
+
+  if (!response.ok) {
+    throw new Error(`RPC request failed: HTTP ${response.status}`)
+  }
+
+  const json = (await response.json()) as {
+    result?: {
+      context?: { slot?: number }
+      value?: {
+        data?: [string, string]
+        executable?: boolean
+        lamports?: number
+        owner?: string
+        rentEpoch?: number
+      } | null
+    }
+    error?: { message?: string }
+  }
+
+  if (json.error) {
+    throw new Error(`RPC error: ${json.error.message ?? JSON.stringify(json.error)}`)
+  }
+
+  const value = json.result?.value
+  if (!value) return null
+
+  const dataField = value.data
+  const dataBase64 = Array.isArray(dataField) ? dataField[0] : ''
+
+  return {
+    data: dataBase64,
+    executable: value.executable ?? false,
+    lamports: value.lamports ?? 0,
+    owner: value.owner ?? '',
+    rentEpoch: value.rentEpoch ?? 0,
+    slot: json.result?.context?.slot ?? 0,
+  }
+}

@@ -43,3 +43,4 @@ logs
 .env.example
 .wrangler
 /scripts
+/next

@@ -23,8 +23,9 @@ import {
 } from '../api/client'
 import InstructionExplorer from '../components/InstructionExplorer'
 import PDAExplorer from '../components/PDAExplorer'
+import AccountDataViewer from '../components/AccountDataViewer'
 
-type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'docs' | 'addresses' | 'settings'
+type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'live' | 'docs' | 'addresses' | 'settings'
 
 export default function ProjectDetail(): JSX.Element {
   const { programId } = useParams<{ programId: string }>()
@@ -193,6 +194,7 @@ export default function ProjectDetail(): JSX.Element {
     { id: 'errors', label: 'Errors' },
     { id: 'events', label: 'Events' },
     { id: 'pda', label: 'PDA Finder' },
+    { id: 'live', label: 'Live Data' },
     { id: 'docs', label: 'Docs' },
     { id: 'addresses', label: 'Addresses' },
     ...(!isSystemProject && selectedProject.isOwner ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
@@ -956,6 +958,11 @@ export default function ProjectDetail(): JSX.Element {
                 programId={pdaData.programId}
                 pdaAccounts={pdaData.pdaAccounts || []}
               />
+            )}
+
+            {/* Live Data Tab */}
+            {activeTab === 'live' && (
+              <AccountDataViewer projectId={projectId!} />
             )}
 
             {/* Settings Tab */}

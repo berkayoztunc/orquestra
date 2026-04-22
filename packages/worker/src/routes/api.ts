@@ -5,8 +5,9 @@ import { invalidateCache } from '../middleware/cache'
 import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL } from '../services/idl-parser'
 import type { AnchorIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
-import { resolveSolanaRpcUrl, rpcUrlHost } from '../utils/solana-rpc'
+import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda } from '../services/pda'
+import { detectAccountType, deserializeAccountData } from '../services/account-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
 import { fetchAnchorIDLFromChain } from '../services/idl-fetcher'
@@ -793,6 +794,74 @@ app.post('/:projectId/pda/derive', async (c) => {
     return c.json(result)
   } catch (err) {
     return c.json({ error: 'Failed to derive PDA', details: (err as Error).message }, 400)
+  }
+})
+
+// Fetch and parse an on-chain account by address
+app.get('/:projectId/pda/fetch/:address', async (c) => {
+  const projectId = c.req.param('projectId')
+  const address = c.req.param('address')
+  const network = c.req.query('network') || 'mainnet-beta'
+
+  // Basic address validation
+  if (!address || address.length < 32 || address.length > 44) {
+    return c.json({ error: 'Invalid address: must be a base58 public key (32-44 chars)' }, 400)
+  }
+
+  try {
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    if (!data) {
+      return c.json({ error: 'Project not found or not public' }, 404)
+    }
+
+    const { rpcUrl, cluster } = resolveSolanaRpcUrl({ network, env: c.env })
+
+    let rawInfo
+    try {
+      rawInfo = await fetchAccountInfo(address, rpcUrl)
+    } catch (rpcErr) {
+      return c.json(
+        { error: 'RPC request failed', details: (rpcErr as Error).message, rpcHost: rpcUrlHost(rpcUrl) },
+        502,
+      )
+    }
+
+    if (!rawInfo) {
+      return c.json({ error: 'Account not found', address, cluster }, 404)
+    }
+
+    // Decode base64 account data
+    const rawBytes = Uint8Array.from(atob(rawInfo.data), (c) => c.charCodeAt(0))
+
+    // Detect account type via IDL discriminators
+    const accountDef = await detectAccountType(rawBytes, data.idl)
+
+    let parsedData: Record<string, unknown> | null = null
+    let parseError: string | undefined
+
+    if (accountDef) {
+      try {
+        parsedData = deserializeAccountData(rawBytes, accountDef, data.idl)
+      } catch (parseErr) {
+        parseError = (parseErr as Error).message
+      }
+    }
+
+    return c.json({
+      address,
+      accountType: accountDef?.name ?? null,
+      programId: rawInfo.owner,
+      lamports: rawInfo.lamports,
+      executable: rawInfo.executable,
+      rentEpoch: rawInfo.rentEpoch,
+      cluster,
+      slot: rawInfo.slot,
+      data: parsedData,
+      raw: rawInfo.data,
+      ...(parseError ? { parseError } : {}),
+    })
+  } catch (err) {
+    return c.json({ error: 'Failed to fetch account', details: (err as Error).message }, 500)
   }
 })
 

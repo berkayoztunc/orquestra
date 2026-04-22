@@ -270,4 +270,34 @@ export async function derivePda(
   return res.data
 }
 
+// ─── Account Data (On-chain Parsing) ─────────────────
+
+export interface ParsedAccountResponse {
+  address: string
+  accountType: string | null
+  programId: string
+  lamports: number
+  executable: boolean
+  rentEpoch: number
+  cluster: string
+  slot: number
+  /** Decoded field values. null when account type could not be matched. */
+  data: Record<string, unknown> | null
+  /** Raw account data as base64. Always present. */
+  raw: string
+  /** Set when parsing failed but the account was found. */
+  parseError?: string
+}
+
+export async function fetchAccountData(
+  projectId: string,
+  address: string,
+  network: string = 'mainnet-beta',
+): Promise<ParsedAccountResponse> {
+  const res = await api.get(`/${projectId}/pda/fetch/${address}`, {
+    params: { network },
+  })
+  return res.data
+}
+
 export default api

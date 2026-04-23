@@ -6,4 +6,4 @@
 -- We add a new unique index on program_id alone. The old composite unique still exists
 -- but the new stricter index enforces global uniqueness.
 
-CREATE UNIQUE INDEX idx_projects_program_id_unique ON projects(program_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_program_id_unique ON projects(program_id);

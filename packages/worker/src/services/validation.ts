@@ -108,6 +108,15 @@ export interface ValidatedIDLUpload {
 export function validateIDLUpload(body: unknown): ValidationResult<ValidatedIDLUpload> {
   const errors: ValidationError[] = []
 
+  function pickIDLStringField(idl: Record<string, unknown>, key: 'name' | 'version'): string | null {
+    const rootValue = idl[key]
+    if (isNonEmptyString(rootValue)) return rootValue
+    if (isObject(idl.metadata) && isNonEmptyString(idl.metadata[key])) {
+      return idl.metadata[key] as string
+    }
+    return null
+  }
+
   if (!isObject(body)) {
     return { success: false, errors: [{ field: 'body', message: 'Request body must be a JSON object' }] }
   }
@@ -116,10 +125,10 @@ export function validateIDLUpload(body: unknown): ValidationResult<ValidatedIDLU
     errors.push({ field: 'idl', message: 'IDL must be a valid JSON object' })
   } else {
     const idl = body.idl as Record<string, unknown>
-    if (!isNonEmptyString(idl.name)) {
+    if (!pickIDLStringField(idl, 'name')) {
       errors.push({ field: 'idl.name', message: 'IDL must have a name field' })
     }
-    if (!isNonEmptyString(idl.version)) {
+    if (!pickIDLStringField(idl, 'version')) {
       errors.push({ field: 'idl.version', message: 'IDL must have a version field' })
     }
     if (!isArray(idl.instructions)) {

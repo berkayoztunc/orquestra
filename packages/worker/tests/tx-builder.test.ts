@@ -1,5 +1,12 @@
 import { describe, test, expect } from 'bun:test'
-import { validateBuildRequest } from '../src/services/tx-builder'
+import { buildTransaction, validateBuildRequest } from '../src/services/tx-builder'
+
+async function getLegacyAnchorDiscriminatorHex(instructionName: string): Promise<string> {
+  const data = new TextEncoder().encode(`global:${instructionName}`)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const discriminator = new Uint8Array(hashBuffer).slice(0, 8)
+  return Array.from(discriminator).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 describe('Transaction Builder', () => {
   describe('validateBuildRequest', () => {
@@ -151,6 +158,72 @@ describe('Transaction Builder', () => {
       )
       // Without idlTypes, struct field validation is skipped
       expect(result.valid).toBe(true)
+    })
+  })
+
+  describe('buildTransaction discriminator compatibility', () => {
+    test('uses explicit discriminator bytes when provided in IDL instruction', async () => {
+      const idl = {
+        name: 'root_program',
+        version: '0.31.0',
+        instructions: [
+          {
+            name: 'initialize',
+            discriminator: [1, 2, 3, 4, 5, 6, 7, 8],
+            accounts: [],
+            args: [],
+          },
+        ],
+      }
+
+      const result = await buildTransaction(
+        idl as any,
+        'initialize',
+        {
+          accounts: {},
+          args: {},
+          feePayer: '11111111111111111111111111111111',
+          recentBlockhash: '11111111111111111111111111111111',
+        },
+        '11111111111111111111111111111111',
+        'https://example-rpc.invalid',
+        { cluster: 'devnet', rpcUrlHost: 'example-rpc.invalid' },
+      )
+
+      expect(result.instruction.data.startsWith('0102030405060708')).toBe(true)
+      expect(result.message).toContain('root_program.initialize')
+    })
+
+    test('falls back to legacy hash-based discriminator when explicit one is absent', async () => {
+      const idl = {
+        name: 'fallback_program',
+        version: '0.31.0',
+        instructions: [
+          {
+            name: 'initialize',
+            accounts: [],
+            args: [],
+          },
+        ],
+      }
+
+      const result = await buildTransaction(
+        idl as any,
+        'initialize',
+        {
+          accounts: {},
+          args: {},
+          feePayer: '11111111111111111111111111111111',
+          recentBlockhash: '11111111111111111111111111111111',
+        },
+        '11111111111111111111111111111111',
+        'https://example-rpc.invalid',
+        { cluster: 'devnet', rpcUrlHost: 'example-rpc.invalid' },
+      )
+
+      const expectedHex = await getLegacyAnchorDiscriminatorHex('initialize')
+      expect(result.instruction.data.startsWith(expectedHex)).toBe(true)
+      expect(result.instruction.data.startsWith('0102030405060708')).toBe(false)
     })
   })
 })

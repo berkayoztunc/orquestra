@@ -9,7 +9,7 @@
  */
 
 import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType } from './idl-parser'
-import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField } from './idl-parser'
+import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField, getIDLProgramName } from './idl-parser'
 import type { ResolvedCluster } from '../utils/solana-rpc'
 
 export interface BuildTransactionRequest {
@@ -63,9 +63,25 @@ export interface InstructionInfo {
 }
 
 // Anchor instruction discriminator: first 8 bytes of SHA-256("global:<instruction_name>")
-async function getInstructionDiscriminator(instructionName: string): Promise<Uint8Array> {
+function getExplicitInstructionDiscriminator(instruction: AnchorInstruction): Uint8Array | null {
+  if (!Array.isArray(instruction.discriminator) || instruction.discriminator.length !== 8) {
+    return null
+  }
+  const allBytes = instruction.discriminator.every(
+    (value) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255,
+  )
+  if (!allBytes) return null
+  return new Uint8Array(instruction.discriminator)
+}
+
+async function getInstructionDiscriminator(instruction: AnchorInstruction): Promise<Uint8Array> {
+  const explicit = getExplicitInstructionDiscriminator(instruction)
+  if (explicit) {
+    return explicit
+  }
+
   const encoder = new TextEncoder()
-  const data = encoder.encode(`global:${instructionName}`)
+  const data = encoder.encode(`global:${instruction.name}`)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   return new Uint8Array(hashBuffer).slice(0, 8)
 }
@@ -238,8 +254,9 @@ export async function buildTransaction(
   // Validate required accounts
   const missingAccounts: string[] = []
   for (const acc of instruction.accounts) {
-    if (!acc.isOptional && !request.accounts[acc.name]) {
-      missingAccounts.push(acc.name)
+    const norm = normalizeAccountMeta(acc)
+    if (!norm.isOptional && !request.accounts[norm.name]) {
+      missingAccounts.push(norm.name)
     }
   }
   if (missingAccounts.length > 0) {
@@ -258,7 +275,7 @@ export async function buildTransaction(
   }
 
   // Get instruction discriminator
-  const discriminator = await getInstructionDiscriminator(instructionName)
+  const discriminator = await getInstructionDiscriminator(instruction)
 
   // Encode arguments (pass IDL types for defined type resolution)
   const encodedArgs = encodeArgs(request.args, instruction.args, idl.types)
@@ -327,7 +344,7 @@ export async function buildTransaction(
   return {
     transaction: txBase58,
     serializedTransaction,
-    message: `Transaction for ${idl.metadata.name}.${instructionName}`,
+    message: `Transaction for ${(getIDLProgramName(idl) || 'program')}.${instructionName}`,
     accounts: accountInfos,
     instruction: {
       name: instructionName,

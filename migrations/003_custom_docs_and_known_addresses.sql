@@ -1,5 +1,5 @@
 -- Add custom documentation support (owner-editable docs)
-ALTER TABLE projects ADD COLUMN IF NOT EXISTS custom_docs TEXT;
+ALTER TABLE projects ADD COLUMN custom_docs TEXT;
 
 -- Known public key addresses for a project
 CREATE TABLE IF NOT EXISTS known_addresses (

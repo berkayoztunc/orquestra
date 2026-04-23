@@ -79,13 +79,13 @@ describe('IDL Parser', () => {
     })
 
     test('rejects IDL without name', () => {
-      const result = validateIDL({ ...sampleIDL, metadata: { ...sampleIDL.metadata, name: undefined } })
+      const result = validateIDL({ ...sampleIDL, name: undefined, metadata: { ...sampleIDL.metadata, name: undefined } })
       expect(result.valid).toBe(false)
       expect(result.errors.length).toBeGreaterThan(0)
     })
 
     test('rejects IDL without version', () => {
-      const result = validateIDL({ ...sampleIDL, metadata: { ...sampleIDL.metadata, version: undefined } })
+      const result = validateIDL({ ...sampleIDL, version: undefined, metadata: { ...sampleIDL.metadata, version: undefined } })
       expect(result.valid).toBe(false)
     })
 
@@ -104,6 +104,25 @@ describe('IDL Parser', () => {
       expect(validateIDL('hello').valid).toBe(false)
       expect(validateIDL(42).valid).toBe(false)
     })
+
+    test('accepts IDL with root-level name/version only', () => {
+      const result = validateIDL({
+        name: 'root_only_program',
+        version: '0.31.0',
+        instructions: [],
+      })
+      expect(result.valid).toBe(true)
+      expect(result.errors).toEqual([])
+    })
+
+    test('accepts IDL with metadata name/version only', () => {
+      const result = validateIDL({
+        metadata: { name: 'metadata_only_program', version: '0.30.1' },
+        instructions: [],
+      })
+      expect(result.valid).toBe(true)
+      expect(result.errors).toEqual([])
+    })
   })
 
   describe('parseIDL', () => {
@@ -121,6 +140,16 @@ describe('IDL Parser', () => {
       const parsed = parseIDL(sampleIDL as any)
       expect(parsed.idl).toBeDefined()
       expect(parsed.idl.name).toBe('test_program')
+    })
+
+    test('parses IDL when name/version exist only at root', () => {
+      const parsed = parseIDL({
+        name: 'anchor_031_program',
+        version: '0.31.0',
+        instructions: [],
+      } as any)
+      expect(parsed.programName).toBe('anchor_031_program')
+      expect(parsed.version).toBe('0.31.0')
     })
   })
 

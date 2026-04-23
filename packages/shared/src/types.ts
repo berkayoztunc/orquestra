@@ -66,8 +66,8 @@ export interface KnownAddress {
 
 // Solana IDL types (simplified)
 export interface AnchorIDL {
-  version: string
-  name: string
+  version?: string
+  name?: string
   metadata?: any
   instructions: AnchorInstruction[]
   accounts?: AnchorAccount[]
@@ -80,6 +80,7 @@ export interface AnchorInstruction {
   name: string
   accounts: AnchorAccountMeta[]
   args: AnchorArg[]
+  discriminator?: number[]
   docs?: string[]
 }
 

@@ -4,8 +4,8 @@
 
 // Types imported inline to avoid path resolution issues in Workers
 interface AnchorIDL {
-  version: string
-  name: string
+  version?: string
+  name?: string
   metadata?: any
   instructions: AnchorInstruction[]
   accounts?: AnchorAccount[]
@@ -18,6 +18,7 @@ interface AnchorInstruction {
   name: string
   accounts: AnchorAccountMeta[]
   args: AnchorArg[]
+  discriminator?: number[]
   docs?: string[]
 }
 
@@ -127,6 +128,30 @@ export interface ValidationResult {
   warnings: string[]
 }
 
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null) return null
+  return value as Record<string, unknown>
+}
+
+function readStringField(obj: Record<string, unknown> | null, key: string): string | null {
+  const value = obj?.[key]
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+export function getIDLProgramName(idlJson: unknown): string | null {
+  const idl = toRecord(idlJson)
+  if (!idl) return null
+  const metadata = toRecord(idl.metadata)
+  return readStringField(metadata, 'name') || readStringField(idl, 'name')
+}
+
+export function getIDLProgramVersion(idlJson: unknown): string | null {
+  const idl = toRecord(idlJson)
+  if (!idl) return null
+  const metadata = toRecord(idl.metadata)
+  return readStringField(metadata, 'version') || readStringField(idl, 'version')
+}
+
 /**
  * Validate an IDL JSON structure
  */
@@ -139,13 +164,12 @@ export function validateIDL(idlJson: unknown): ValidationResult {
   }
 
   const idl = idlJson as Record<string, unknown>
-  // Required fields
-  const metadata = idl.metadata as Record<string, unknown> | undefined
-  if (!metadata?.version || typeof metadata.version !== 'string') {
+  // Required fields can exist at root or under metadata for multi-version support.
+  if (!getIDLProgramVersion(idl)) {
     errors.push('IDL must have a "version" field (string)')
   }
 
-  if (!metadata?.name || typeof metadata.name !== 'string') {
+  if (!getIDLProgramName(idl)) {
     errors.push('IDL must have a "name" field (string)')
   }
 
@@ -200,8 +224,8 @@ export function parseIDL(idlJson: unknown): ParsedIDL {
 
   return {
     idl,
-    programName: idl.metadata.name,
-    version: idl.metadata.version,
+    programName: getIDLProgramName(idl) || 'unknown',
+    version: getIDLProgramVersion(idl) || 'unknown',
     instructionCount: idl.instructions?.length || 0,
     accountCount: idl.accounts?.length || 0,
     errorCount: idl.errors?.length || 0,

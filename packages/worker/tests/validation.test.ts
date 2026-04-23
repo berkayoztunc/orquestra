@@ -112,6 +112,16 @@ describe('validateIDLUpload', () => {
     expect(result.success).toBe(false)
     expect(result.errors?.some(e => e.field === 'idl.name')).toBe(true)
   })
+
+  test('accepts IDL when name/version are only in metadata', () => {
+    const result = validateIDLUpload({
+      idl: {
+        metadata: { name: 'metadata_program', version: '0.31.0' },
+        instructions: [],
+      },
+    })
+    expect(result.success).toBe(true)
+  })
 })
 
 describe('validateBuildRequest', () => {

@@ -105,7 +105,6 @@ packages/
 └── shared/       # Shared types & utilities
 
 migrations/      # D1 database schemas
-scripts/         # Build and utility scripts
 .github/         # GitHub Actions CI/CD
 ```
 
@@ -151,7 +150,7 @@ Files:
 ### Database Development
 
 ```bash
-npm run db:migrate:dev   # Apply migrations
+npm run db:migrate:dev   # Apply tracked D1 migrations
 npm run db:seed          # Seed sample data
 npm run db:reset         # Reset database (dev only)
 ```
@@ -320,7 +319,6 @@ Include:
 - **Discord:** [Community Server](https://discord.gg/orquestra)
 - **GitHub Discussions:** Q&A and discussions
 - **Issues:** Bug reports and feature requests
-- **Documentation:** [SETUP_GUIDE.md](./SETUP_GUIDE.md)
 
 ## Code of Conduct
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CheckIcon, CopyIcon, CodeIcon, BookOpenIcon, ZapIcon, SendIcon } from 'lucide-react'
+import { CodeIcon, BookOpenIcon, ZapIcon, SendIcon } from 'lucide-react'
+import CodeBlock from '../components/CodeBlock'
 
 type Language = 'typescript' | 'python' | 'rust'
 
@@ -307,40 +308,6 @@ const STEPS = [
   },
 ]
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-        bg-white/5 border border-white/10 text-gray-400
-        hover:bg-primary/10 hover:border-primary/30 hover:text-primary
-        transition-all duration-200 select-none"
-      title="Copy code"
-    >
-      {copied ? (
-        <>
-          <CheckIcon className="w-3.5 h-3.5" />
-          Copied
-        </>
-      ) : (
-        <>
-          <CopyIcon className="w-3.5 h-3.5" />
-          Copy
-        </>
-      )}
-    </button>
-  )
-}
-
 const CODE_MAP: Record<Language, string> = {
   typescript: JS_CODE,
   python: PY_CODE,
@@ -477,13 +444,19 @@ export default function SignAndSend(): JSX.Element {
                 {lang === 'typescript' ? 'sign-and-send.ts' : lang === 'python' ? 'sign_and_send.py' : 'sign_and_send.rs'}
               </span>
             </div>
-            <CopyButton text={code} />
           </div>
 
           {/* Code content */}
-          <pre className="overflow-x-auto p-5 text-xs sm:text-sm leading-relaxed font-mono bg-surface text-gray-300 max-h-[600px] overflow-y-auto scrollbar-thin">
-            <code>{code}</code>
-          </pre>
+          <div className="p-5 bg-surface">
+            <CodeBlock
+              key={lang}
+              title={`${meta.badge} · ${meta.label} example`}
+              code={code}
+              language={lang === 'typescript' ? 'typescript' : lang === 'python' ? 'python' : 'rust'}
+              wrapLongLines
+              maxHeightClassName="max-h-[600px] overflow-y-auto scrollbar-thin"
+            />
+          </div>
         </div>
       </div>
 

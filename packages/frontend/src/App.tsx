@@ -12,6 +12,7 @@ import SignAndSend from '@/pages/SignAndSend'
 import CLI from '@/pages/CLI'
 import MCP from '@/pages/MCP'
 import API from '@/pages/API'
+import Pricing from '@/pages/Pricing'
 import { ToastProvider } from '@/components/Toast'
 import { useAuthStore } from '@/store/auth'
 
@@ -37,6 +38,7 @@ function App(): JSX.Element {
             <Route path="/docs/cli" element={<CLI />} />
             <Route path="/docs/mcp" element={<MCP />} />
             <Route path="/docs/api" element={<API />} />
+            <Route path="/pricing" element={<Pricing />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

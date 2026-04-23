@@ -1,36 +1,4 @@
-import { useState } from 'react'
-import { CheckIcon, CopyIcon } from 'lucide-react'
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-
-  return (
-    <button
-      onClick={handleCopy}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200 select-none"
-      title="Copy"
-    >
-      {copied ? (
-        <>
-          <CheckIcon className="w-3.5 h-3.5" />
-          Copied
-        </>
-      ) : (
-        <>
-          <CopyIcon className="w-3.5 h-3.5" />
-          Copy
-        </>
-      )}
-    </button>
-  )
-}
+import CodeBlock from '../components/CodeBlock'
 
 const FEATURES = [
   {
@@ -192,15 +160,13 @@ export default function CLI(): JSX.Element {
               Homebrew <span className="text-gray-500 font-normal">(macOS — recommended)</span>
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-gray-500 font-mono">brew</p>
-            <CopyButton text={`brew tap berkayoztunc/orquestra-cli https://github.com/berkayoztunc/orquestra-cli\nbrew install orquestra-cli`} />
-          </div>
-          <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-            <span className="text-gray-500"># Add the tap{'\n'}</span>
-            brew tap berkayoztunc/orquestra-cli https://github.com/berkayoztunc/orquestra-cli{'\n'}
-            brew install orquestra-cli
-          </pre>
+          <CodeBlock
+            title="brew"
+            language="bash"
+            code={`# Add the tap
+brew tap berkayoztunc/orquestra-cli https://github.com/berkayoztunc/orquestra-cli
+brew install orquestra-cli`}
+          />
         </div>
 
         {/* Binary */}
@@ -248,10 +214,11 @@ export default function CLI(): JSX.Element {
               </tbody>
             </table>
           </div>
-          <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-            tar -xzf orquestra-*.tar.gz{'\n'}
-            mv orquestra /usr/local/bin/
-          </pre>
+          <CodeBlock
+            language="bash"
+            code={`tar -xzf orquestra-*.tar.gz
+mv orquestra /usr/local/bin/`}
+          />
         </div>
 
         {/* Build from source */}
@@ -264,12 +231,13 @@ export default function CLI(): JSX.Element {
               Build from source <span className="text-gray-500 font-normal">(Rust 1.75+)</span>
             </p>
           </div>
-          <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-            git clone https://github.com/berkayoztunc/orquestra-cli{'\n'}
-            cd orquestra-cli{'\n'}
-            cargo build --release{'\n'}
-            <span className="text-gray-500"># binary → target/release/orquestra</span>
-          </pre>
+          <CodeBlock
+            language="bash"
+            code={`git clone https://github.com/berkayoztunc/orquestra-cli
+cd orquestra-cli
+cargo build --release
+# binary -> target/release/orquestra`}
+          />
         </div>
       </div>
 
@@ -310,13 +278,14 @@ export default function CLI(): JSX.Element {
         <div className="space-y-3">
           <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
             <p className="text-white font-semibold text-sm">API mode config</p>
-            <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-              orquestra config set \{'\n'}
-              {'  '}--project-id &lt;your-project-id&gt; \{'\n'}
-              {'  '}--api-key    &lt;your-api-key&gt;    \{'\n'}
-              {'  '}--rpc        https://api.mainnet-beta.solana.com \{'\n'}
-              {'  '}--keypair    ~/.config/solana/id.json
-            </pre>
+            <CodeBlock
+              language="bash"
+              code={`orquestra config set \\
+  --project-id <your-project-id> \\
+  --api-key    <your-api-key> \\
+  --rpc        https://api.mainnet-beta.solana.com \\
+  --keypair    ~/.config/solana/id.json`}
+            />
             <p className="text-gray-500 text-xs">
               Sign in at{' '}
               <a href="/" className="text-primary hover:underline">
@@ -328,12 +297,13 @@ export default function CLI(): JSX.Element {
 
           <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
             <p className="text-white font-semibold text-sm">Local IDL file mode config</p>
-            <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-              orquestra config set \{'\n'}
-              {'  '}--idl     /path/to/program.json \{'\n'}
-              {'  '}--rpc     https://api.mainnet-beta.solana.com \{'\n'}
-              {'  '}--keypair ~/.config/solana/id.json
-            </pre>
+            <CodeBlock
+              language="bash"
+              code={`orquestra config set \\
+  --idl     /path/to/program.json \\
+  --rpc     https://api.mainnet-beta.solana.com \\
+  --keypair ~/.config/solana/id.json`}
+            />
             <p className="text-gray-500 text-xs">
               When <code className="text-gray-300 bg-white/5 px-1 rounded">idl_path</code> is set the CLI
               operates in file mode. To switch back:{' '}
@@ -350,59 +320,79 @@ export default function CLI(): JSX.Element {
         <div className="space-y-4">
           <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
             <p className="text-white font-semibold text-sm">List instructions</p>
-            <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-              orquestra list{'\n\n'}
-              <span className="text-primary">▸ 4 instructions in my-program{'\n\n'}</span>
-              {'  '}initialize    Initializes a new vault account{'\n'}
-              {'  '}deposit       Deposit tokens into the vault{'\n'}
-              {'  '}withdraw      Withdraw tokens from the vault{'\n'}
-              {'  '}close         Close the vault and reclaim rent
-            </pre>
+            <CodeBlock
+              language="bash"
+              code={`orquestra list
+
+> 4 instructions in my-program
+
+  initialize    Initializes a new vault account
+  deposit       Deposit tokens into the vault
+  withdraw      Withdraw tokens from the vault
+  close         Close the vault and reclaim rent`}
+            />
           </div>
 
           <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
             <p className="text-white font-semibold text-sm">Run an instruction (interactive)</p>
-            <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-              orquestra run{'\n\n'}
-              <span className="text-gray-500">? Select instruction  › deposit{'\n\n'}</span>
-              Instruction: deposit{'\n\n'}
-              Arguments{'\n'}
-              {'  '}amount (u64): 1000000{'\n\n'}
-              Accounts{'\n'}
-              {'  '}authority [signer]: Gk3...abc  <span className="text-gray-500">(pre-filled from keypair)</span>{'\n'}
-              {'  '}vault [mut]:        Fv9...xyz{'\n\n'}
-              ────────────────────────────────────────{'\n'}
-              Summary{'\n'}
-              {'  '}Instruction : deposit{'\n'}
-              {'  '}Args        : amount = 1000000{'\n'}
-              {'  '}Accounts    : authority = Gk3...abc / vault = Fv9...xyz{'\n'}
-              ────────────────────────────────────────{'\n\n'}
-              <span className="text-gray-500">? Build transaction for 'deposit'? › Yes{'\n\n'}</span>
-              <span className="text-green-400">✓ Transaction built successfully!{'\n'}</span>
-              {'  '}Estimated fee : 5000 lamports{'\n\n'}
-              <span className="text-gray-500">? Sign and send transaction to Solana? › Yes{'\n\n'}</span>
-              <span className="text-green-400">✓ Transaction confirmed!{'\n'}</span>
-              {'  '}Signature : 5KtP...Xz{'\n'}
-              {'  '}Explorer  : https://explorer.solana.com/tx/5KtP...Xz
-            </pre>
+            <CodeBlock
+              language="bash"
+              code={`orquestra run
+
+? Select instruction  > deposit
+
+Instruction: deposit
+
+Arguments
+  amount (u64): 1000000
+
+Accounts
+  authority [signer]: Gk3...abc (pre-filled from keypair)
+  vault [mut]:        Fv9...xyz
+
+----------------------------------------
+Summary
+  Instruction : deposit
+  Args        : amount = 1000000
+  Accounts    : authority = Gk3...abc / vault = Fv9...xyz
+----------------------------------------
+
+? Build transaction for 'deposit'? > Yes
+
+Transaction built successfully!
+  Estimated fee : 5000 lamports
+
+? Sign and send transaction to Solana? > Yes
+
+Transaction confirmed!
+  Signature : 5KtP...Xz
+  Explorer  : https://explorer.solana.com/tx/5KtP...Xz`}
+            />
           </div>
 
           <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
             <p className="text-white font-semibold text-sm">Derive a PDA</p>
-            <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-              orquestra pda{'\n\n'}
-              <span className="text-primary">▸ 2 PDA accounts in my-program (BUYu...){'\n\n'}</span>
-              <span className="text-gray-500">? Select PDA account  › vault (owner){'\n\n'}</span>
-              Seed values{'\n'}
-              {'  '}owner (publicKey): Gk3...abc{'\n\n'}
-              <span className="text-green-400">✓ PDA derived!{'\n\n'}</span>
-              {'  '}Address:   Fv9...xyz{'\n'}
-              {'  '}Bump:      254{'\n'}
-              {'  '}Program:   BUYu...{'\n\n'}
-              Seeds:{'\n'}
-              {'  '}const  vault_seed  [76617...]{'\n'}
-              {'  '}arg    owner       = Gk3...abc [0a1b...]
-            </pre>
+            <CodeBlock
+              language="bash"
+              code={`orquestra pda
+
+> 2 PDA accounts in my-program (BUYu...)
+
+? Select PDA account  > vault (owner)
+
+Seed values
+  owner (publicKey): Gk3...abc
+
+PDA derived!
+
+  Address:   Fv9...xyz
+  Bump:      254
+  Program:   BUYu...
+
+Seeds:
+  const  vault_seed  [76617...]
+  arg    owner       = Gk3...abc [0a1b...]`}
+            />
           </div>
 
           <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
@@ -410,12 +400,14 @@ export default function CLI(): JSX.Element {
             <p className="text-gray-500 text-xs">
               If no keypair is configured, the CLI prints an unsigned base58 transaction for manual wallet signing.
             </p>
-            <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-              Base58 encoded transaction (unsigned):{'\n'}
-              {'  '}4h8nK3F9x2rP...vQm7L2wN{'\n\n'}
-              {'  '}Sign with your wallet and broadcast to Solana.{'\n'}
-              {'  '}https://orquestra.dev/docs/sign-and-send
-            </pre>
+            <CodeBlock
+              language="text"
+              code={`Base58 encoded transaction (unsigned):
+  4h8nK3F9x2rP...vQm7L2wN
+
+  Sign with your wallet and broadcast to Solana.
+  https://orquestra.dev/docs/sign-and-send`}
+            />
           </div>
         </div>
       </div>
@@ -423,22 +415,27 @@ export default function CLI(): JSX.Element {
       {/* Command reference */}
       <div className="card p-5 sm:p-6 space-y-4" id="commands">
         <h2 className="text-xl sm:text-2xl font-bold text-white">Command reference</h2>
-        <pre className="text-xs sm:text-sm font-mono leading-loose bg-surface-elevated border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-          <span className="text-gray-500"># Interactive top-level menu{'\n'}</span>
-          orquestra{'\n\n'}
-          <span className="text-gray-500"># Instructions{'\n'}</span>
-          orquestra list{'\n'}
-          orquestra run [INSTRUCTION]{'\n\n'}
-          <span className="text-gray-500"># PDAs{'\n'}</span>
-          orquestra pda [ACCOUNT]{'\n\n'}
-          <span className="text-gray-500"># Config{'\n'}</span>
-          orquestra config set [--project-id] [--api-key] [--rpc] [--keypair] [--api-base] [--idl]{'\n'}
-          orquestra config show{'\n'}
-          orquestra config reset{'\n\n'}
-          <span className="text-gray-500"># Meta{'\n'}</span>
-          orquestra --version{'\n'}
-          orquestra --help
-        </pre>
+        <CodeBlock
+          language="bash"
+          code={`# Interactive top-level menu
+orquestra
+
+# Instructions
+orquestra list
+orquestra run [INSTRUCTION]
+
+# PDAs
+orquestra pda [ACCOUNT]
+
+# Config
+orquestra config set [--project-id] [--api-key] [--rpc] [--keypair] [--api-base] [--idl]
+orquestra config show
+orquestra config reset
+
+# Meta
+orquestra --version
+orquestra --help`}
+        />
       </div>
 
       {/* Security note */}

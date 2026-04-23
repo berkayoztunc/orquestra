@@ -13,6 +13,7 @@ import {
   FileTextIcon,
   SparklesIcon,
 } from 'lucide-react'
+import CodeBlock from '../components/CodeBlock'
 
 type Client = 'claude' | 'cursor' | 'vscode'
 
@@ -244,14 +245,12 @@ export default function MCP(): JSX.Element {
         </div>
 
         <div className="p-5 sm:p-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-gray-500 font-mono">{current.filename}</p>
-            <CopyButton text={current.config} />
-          </div>
-
-          <pre className="text-xs sm:text-sm font-mono leading-relaxed bg-surface-elevated border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300">
-            <code>{current.config}</code>
-          </pre>
+          <CodeBlock
+            title={current.filename}
+            code={current.config}
+            language="json"
+            wrapLongLines
+          />
 
           <p className="text-xs text-gray-500">{current.hint}</p>
         </div>

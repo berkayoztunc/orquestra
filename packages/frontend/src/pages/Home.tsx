@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { getGitHubLoginUrl } from '../api/client'
+import CodeBlock from '../components/CodeBlock'
 
 export default function Home(): JSX.Element {
   const { isAuthenticated } = useAuthStore()
@@ -321,9 +322,10 @@ export default function Home(): JSX.Element {
 
             {/* Right — code block */}
             <div className="bg-surface-elevated border-t md:border-t-0 md:border-l border-white/5 p-8 md:p-10 flex flex-col justify-center gap-4">
-              <p className="text-xs text-gray-500 font-mono">claude_desktop_config.json</p>
-              <pre className="text-xs font-mono leading-relaxed bg-dark-900 border border-white/5 rounded-xl p-4 overflow-x-auto text-gray-300 select-all">
-{`{
+              <CodeBlock
+                title="claude_desktop_config.json"
+                language="json"
+                code={`{
   "mcpServers": {
     "orquestra": {
       "command": "npx",
@@ -335,7 +337,7 @@ export default function Home(): JSX.Element {
     }
   }
 }`}
-              </pre>
+              />
               <p className="text-xs text-gray-600">
                 Works with Claude Desktop, Cursor, VS Code Copilot, and any MCP-compatible client.
               </p>
@@ -470,6 +472,87 @@ export default function Home(): JSX.Element {
             </ul>
           </div>
         </div>
+      </section>
+
+      {/* Pricing Teaser */}
+      <section className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-10">
+          <span className="badge badge-primary text-xs mb-4 inline-block">Pricing</span>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            <span className="text-white">Start free. Upgrade </span>
+            <span className="gradient-text">when you're ready.</span>
+          </h2>
+          <p className="text-gray-400 max-w-xl mx-auto">
+            The REST API is always free. Upgrade to Pro for private projects and full MCP agent access.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4 max-w-3xl mx-auto">
+          {/* Free teaser */}
+          <div className="card p-6 flex flex-col gap-4">
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-widest mb-2">Free</p>
+              <div className="flex items-end gap-2">
+                <span className="text-4xl font-bold text-white">$0</span>
+                <span className="text-gray-500 text-sm mb-1">/ forever</span>
+              </div>
+            </div>
+            <ul className="space-y-2 flex-1">
+              {[
+                'Unlimited public projects',
+                'Full REST API — all endpoints',
+                'MCP server — read access',
+              ].map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm text-gray-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <Link to="/pricing" className="btn-secondary text-sm py-2.5 text-center w-full block">
+              Get started free →
+            </Link>
+          </div>
+
+          {/* Pro teaser */}
+          <div className="relative rounded-2xl overflow-hidden">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-secondary/15 via-primary/5 to-transparent pointer-events-none" />
+            <div className="relative card border-secondary/25 p-6 flex flex-col gap-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-widest mb-2">Pro</p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-4xl font-bold text-white">$19</span>
+                    <span className="text-gray-500 text-sm mb-1">/ mo</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">or <span className="text-secondary">$49 / quarter</span> — save 14%</p>
+                </div>
+                <span className="badge badge-secondary text-xs flex-shrink-0">Popular</span>
+              </div>
+              <ul className="space-y-2 flex-1">
+                {[
+                  'Private projects',
+                  'MCP full write — build transactions',
+                  'API keys + higher rate limits',
+                ].map((f) => (
+                  <li key={f} className="flex items-center gap-2 text-sm text-gray-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary flex-shrink-0" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link to="/pricing" className="btn-primary text-sm py-2.5 text-center w-full block">
+                See Pro features →
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-center mt-6">
+          <Link to="/pricing" className="text-sm text-gray-500 hover:text-primary transition-colors">
+            See full pricing & FAQ →
+          </Link>
+        </p>
       </section>
 
     </div>

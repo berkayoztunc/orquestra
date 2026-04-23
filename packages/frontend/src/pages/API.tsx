@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   ZapIcon,
 } from 'lucide-react'
+import CodeBlock from '../components/CodeBlock'
 
 const API_BASE = 'https://api.orquestra.dev'
 
@@ -372,13 +373,7 @@ export default function API(): JSX.Element {
             Build an unsigned instruction payload, then hand the response to your wallet or signing layer.
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-xs text-gray-500">curl transaction build example</p>
-          <CopyButton text={curlExample} />
-        </div>
-        <pre className="overflow-x-auto rounded-xl border border-white/5 bg-dark-900 p-4 text-xs leading-relaxed text-gray-300 sm:text-sm">
-          <code>{curlExample}</code>
-        </pre>
+        <CodeBlock title="curl transaction build example" code={curlExample} language="bash" />
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">

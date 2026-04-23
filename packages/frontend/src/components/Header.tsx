@@ -33,6 +33,9 @@ export default function Header(): JSX.Element {
             <Link to="/explorer" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
               Explorer
             </Link>
+            <Link to="/pricing" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
+              Pricing
+            </Link>
               {/* Docs dropdown */}
               <div className="relative group">
                 <button
@@ -195,6 +198,13 @@ export default function Header(): JSX.Element {
                 className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
               >
                 Explorer
+              </Link>
+              <Link
+                to="/pricing"
+                onClick={closeMobileMenu}
+                className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
+              >
+                Pricing
               </Link>
                 <Link
                   to="/docs/api"

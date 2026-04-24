@@ -4,7 +4,6 @@ workers_dev = true
 main = "packages/worker/src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "packages/frontend/dist"
 
 # Development Variables (used by `wrangler dev` without --env flag)
 [vars]
@@ -104,11 +103,6 @@ JWT_EXPIRY = "30d"
 FRONTEND_URL = "http://localhost:5173"
 API_BASE_URL = "http://localhost:8787"
 CORS_ORIGIN = "http://localhost:5173"
-
-# Build configuration
-[build]
-command = "bun run build"
-cwd = "./"
 
 # Secrets (set via: wrangler secret put <NAME>)
 # Required secrets for production:

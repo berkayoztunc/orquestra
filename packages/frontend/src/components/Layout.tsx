@@ -5,9 +5,9 @@ import Footer from './Footer'
 import { registerWebMcpTools } from '@/lib/webmcp'
 
 export default function Layout(): JSX.Element {
-  useEffect(() => {
-    return registerWebMcpTools()
-  }, [])
+  // useEffect(() => {
+  //   return registerWebMcpTools()
+  // }, [])
 
   return (
     <div className="min-h-screen flex flex-col bg-surface">

@@ -4,6 +4,7 @@ workers_dev = true
 main = "packages/worker/src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "packages/frontend/dist"
 
 # Development Variables (used by `wrangler dev` without --env flag)
 [vars]

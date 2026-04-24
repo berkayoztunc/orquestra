@@ -1,17 +1,14 @@
 name: Database Migrations
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - 'migrations/**'
+  workflow_dispatch:
 
 jobs:
   migrate:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        environment: [ development, production ]
+        environment: [ development ]
     steps:
       - uses: actions/checkout@v4
 
@@ -27,9 +24,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ "${{ matrix.environment }}" = "production" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            bun run db:migrate
-          elif [ "${{ matrix.environment }}" = "development" ]; then
-            bun run db:migrate:dev
-          fi
+        run: bun run db:migrate:dev

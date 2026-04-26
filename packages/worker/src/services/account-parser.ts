@@ -328,7 +328,7 @@ function decodeDefinedType(
   }
 
   if (kind === 'enum') {
-    const variantIndex = reader.readU32()
+    const variantIndex = reader.readU8()
     const variants = typeDef.type?.variants || []
     if (variantIndex >= variants.length) {
       throw new Error(`Enum variant index ${variantIndex} out of range for type "${typeName}"`)

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/auth'
 import { getGitHubLoginUrl } from '../api/client'
 import CodeBlock from '../components/CodeBlock'
+import TwitterWall from '../components/TwitterWall'
 
 export default function Home(): JSX.Element {
   const { isAuthenticated } = useAuthStore()
@@ -474,10 +475,20 @@ export default function Home(): JSX.Element {
         </div>
       </section>
 
+      {/* Social Proof — Twitter Wall */}
+      <div className="space-y-10">
+        <div className="max-w-6xl mx-auto px-6 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+            <span className="text-white">Loved by </span>
+            <span className="gradient-text">Solana builders</span>
+          </h2>
+        </div>
+        <TwitterWall />
+      </div>
+
       {/* Pricing Teaser */}
       <section className="max-w-6xl mx-auto px-6">
         <div className="text-center mb-10">
-          <span className="badge badge-primary text-xs mb-4 inline-block">Pricing</span>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">
             <span className="text-white">Start free. Upgrade </span>
             <span className="gradient-text">when you're ready.</span>

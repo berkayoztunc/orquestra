@@ -44,8 +44,13 @@ export default {
         'glow': 'glow 2s ease-in-out infinite alternate',
         'slide-up': 'slide-up 0.3s ease-out',
         'fade-in': 'fade-in 0.2s ease-out',
+        'marquee': 'marquee 35s linear infinite',
       },
       keyframes: {
+        'marquee': {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
         'pulse-primary': {
           '0%, 100%': { opacity: '1', color: '#14F195' },
           '50%': { opacity: '.8', color: '#10b573' },

@@ -71,8 +71,27 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       }
     }
 
+    const knownAddresses = await db
+      ?.prepare(
+        'SELECT label, address, description FROM known_addresses WHERE project_id = ? ORDER BY label ASC'
+      )
+      .bind(projectId)
+      .all()
+
     const projectName = (project.name as string) || projectId
     const apiBase = `${apiBaseUrl}/api/${projectId}`
+
+    const knownAddressesSection: string[] = []
+    if (knownAddresses?.results?.length) {
+      knownAddressesSection.push('## Known Addresses', '')
+      knownAddressesSection.push('| Label | Address | Description |')
+      knownAddressesSection.push('|-------|---------|-------------|')
+      for (const row of knownAddresses.results as Array<{ label: string; address: string; description: string | null }>) {
+        const desc = row.description ?? ''
+        knownAddressesSection.push(`| ${row.label} | \`${row.address}\` | ${desc} |`)
+      }
+      knownAddressesSection.push('')
+    }
 
     const llmsText = [
       '# Orquestra llms.txt',
@@ -100,6 +119,7 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       '- Use POST /pda/derive to compute a PDA address before building a transaction.',
       '- If details are missing or ambiguous, ask for clarification or fetch the relevant endpoint.',
       '',
+      ...knownAddressesSection,
       '---',
       '',
       docsText,

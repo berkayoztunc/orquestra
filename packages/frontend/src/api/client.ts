@@ -300,4 +300,46 @@ export async function fetchAccountData(
   return res.data
 }
 
+// ─── Analytics ───────────────────────────────────────
+
+export interface PublicStats {
+  total_users: number
+  total_projects: number
+  total_known_addresses: number
+}
+
+export interface DailyApiEntry {
+  date: number
+  total: number
+}
+
+export interface DailyMcpEntry {
+  date: number
+  tool_id: number
+  total: number
+}
+
+export interface TopProgram {
+  project_id: string
+  name: string | null
+  total: number
+}
+
+export interface AdminAnalytics {
+  daily_api: DailyApiEntry[]
+  daily_mcp: DailyMcpEntry[]
+  top_programs: TopProgram[]
+}
+
+export async function getPublicStats(): Promise<PublicStats> {
+  const res = await api.get('/stats')
+  return res.data
+}
+
+export async function getAdminAnalytics(): Promise<AdminAnalytics> {
+  const workerBase = import.meta.env.VITE_WORKER_URL || 'https://api.orquestra.dev'
+  const res = await axios.get(`${workerBase}/api/admin/analytics`)
+  return res.data
+}
+
 export default api

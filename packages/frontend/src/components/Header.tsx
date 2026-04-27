@@ -103,6 +103,9 @@ export default function Header(): JSX.Element {
                   </div>
                 </div>
               </div>
+            <Link to="/analytics" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
+              Analytics
+            </Link>
             {isAuthenticated ? (
               <>
                 <Link to="/dashboard" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
@@ -234,6 +237,13 @@ export default function Header(): JSX.Element {
                 >
                   Docs - CLI
                 </Link>
+              <Link
+                to="/analytics"
+                onClick={closeMobileMenu}
+                className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
+              >
+                Analytics
+              </Link>
               {isAuthenticated ? (
                 <>
                   <Link

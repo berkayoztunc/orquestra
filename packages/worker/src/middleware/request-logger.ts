@@ -1,5 +1,6 @@
 import { createMiddleware } from 'hono/factory'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
+import { incrementEvent, EVENT_TYPE } from '../services/analytics'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -77,4 +78,16 @@ export const requestLogger = createMiddleware<Env>(async (c, next) => {
   }
 
   console.log(JSON.stringify(logEntry))
+
+  // Extract project_id from paths like /api/:projectId/instructions
+  // Skip known non-project prefixes so we don't store route names as IDs.
+  const projectIdMatch = path.match(
+    /^\/api\/(?!projects|admin|ingest|idl|stats|ai)([^/]+)/,
+  )
+  const projectId = projectIdMatch ? projectIdMatch[1] : ''
+
+  incrementEvent(c.env.DB, c.executionCtx, {
+    eventType: EVENT_TYPE.api,
+    projectId,
+  })
 })

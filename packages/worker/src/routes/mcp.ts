@@ -31,6 +31,7 @@ import { listPdaAccounts, derivePda } from '../services/pda'
 import { detectAccountType, deserializeAccountData } from '../services/account-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { searchProjects } from '../services/search'
+import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
 
@@ -96,7 +97,7 @@ async function fetchIDL(
 
 // ── MCP server factory ────────────────────────────────────────────────────────
 
-function createServer(env: Bindings): McpServer {
+function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
   const server = new McpServer({ name: 'orquestra', version: '1.0.0' })
 
   // ── Tool 1: search_programs ──────────────────────────────────────────────────
@@ -124,6 +125,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ query, programId, limit }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.search_programs })
         const db = env.DB
         let results: any[] = []
 
@@ -196,6 +198,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.list_instructions, projectId })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -297,6 +300,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.build_instruction, projectId })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -378,6 +382,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.list_pda_accounts, projectId })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -449,6 +454,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId, instruction, account, seedValues }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.derive_pda, projectId })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -496,6 +502,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.read_llms_txt, projectId })
         const db = env.DB
         const project = await db
           ?.prepare(
@@ -578,6 +585,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.get_ai_analysis, projectId })
         const db = env.DB
 
         const project = await db
@@ -691,6 +699,7 @@ function createServer(env: Bindings): McpServer {
     },
     async ({ projectId, address, cluster }) => {
       try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.fetch_pda_data, projectId })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -776,8 +785,9 @@ function createServer(env: Bindings): McpServer {
 export async function handleMcpRequest(
   request: Request,
   env: Bindings,
+  ctx: ExecutionContext,
 ): Promise<Response> {
-  const server = createServer(env)
+  const server = createServer(env, ctx)
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     // No sessionIdGenerator → stateless mode: no session headers, no auth requirement

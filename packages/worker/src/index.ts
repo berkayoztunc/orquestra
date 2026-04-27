@@ -93,7 +93,7 @@ export default {
   fetch(request: Request, env: Env['Bindings'], ctx: ExecutionContext): Response | Promise<Response> {
     const url = new URL(request.url)
     if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
-      return handleMcpRequest(request, env as any)
+      return handleMcpRequest(request, env as any, ctx)
     }
     return app.fetch(request, env, ctx)
   },

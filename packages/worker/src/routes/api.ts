@@ -38,7 +38,25 @@ type Env = {
 
 const app = new Hono<Env>()
 
-// ── Project Management ────────────────────────────────
+// ── Public Stats ──────────────────────────────────────
+
+app.get('/stats', async (c) => {
+  const db = c.env.DB
+  try {
+    const [users, projects, addresses] = await Promise.all([
+      db.prepare('SELECT COUNT(*) as count FROM users WHERE id != ?').bind('system').first(),
+      db.prepare('SELECT COUNT(*) as count FROM projects WHERE is_public = 1').first(),
+      db.prepare('SELECT COUNT(*) as count FROM known_addresses').first(),
+    ])
+    return c.json({
+      total_users: (users?.count as number) ?? 0,
+      total_projects: (projects?.count as number) ?? 0,
+      total_known_addresses: (addresses?.count as number) ?? 0,
+    })
+  } catch {
+    return c.json({ error: 'Failed to fetch stats' }, 500)
+  }
+})
 
 // List all public projects (+ user's private projects if authenticated)
 // Uses full-text search with relevance ranking

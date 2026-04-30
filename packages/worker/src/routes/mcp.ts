@@ -261,7 +261,7 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
 
   server.tool(
     'build_instruction',
-      'Build a serialized Solana transaction for a specific instruction. Returns a base58 transaction string that can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
+      'Build a serialized Solana transaction for a specific instruction. Returns a base58 transaction string by default (pass `encoding: "base64"` for the modern Solana standard). The result can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
     {
       projectId: z.string().describe('The orquestra project ID'),
       instruction: z.string().describe('Instruction name (exact or camelCase/snake_case variant)'),
@@ -297,8 +297,14 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
         .describe(
           'If true, runs simulateTransaction on the same RPC after building (preflight, unsigned).',
         ),
+      encoding: z
+        .enum(['base58', 'base64'])
+        .optional()
+        .describe(
+          'Encoding for the serializedTransaction in the response. Defaults to base58. Use base64 for the modern Solana standard (recommended for sendTransaction with encoding: base64).',
+        ),
     },
-    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate }) => {
+    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate, encoding }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.build_instruction, projectId })
         const data = await fetchIDL(projectId, env)
@@ -324,6 +330,7 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
             feePayer,
             recentBlockhash,
             simulate,
+            encoding,
           },
           data.programId,
           resolvedRpc,
@@ -333,7 +340,7 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
         const output = [
           `**Transaction built for \`${instruction}\`**`,
           '',
-          `Serialized transaction (base58):`,
+          `Serialized transaction (${result.encoding}):`,
           `\`${result.serializedTransaction}\``,
           '',
           `**Cluster / RPC:** \`${result.network}\` — \`${result.rpcUrlHost}\` (blockhash source: ${result.blockhashSource})`,

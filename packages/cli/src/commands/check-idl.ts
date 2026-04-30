@@ -30,6 +30,8 @@ export interface CheckIdlOptions {
   skipAi: boolean
   /** Max concurrent AI+ingest calls (default: 5) */
   ingestConcurrency: number
+  /** Fast mode: only check new-style PDA, skip IDL decode — much faster, no idlData saved */
+  fast: boolean
 }
 
 function sanitizeFilePart(value: string): string {
@@ -355,7 +357,8 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
       process.stdout.write(
         `\r  Progress: ${processedCount}/${totalToProcess} (${pct}%) — ${elapsedSec}s elapsed`
       )
-    }
+    },
+    opts.fast
   )
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)

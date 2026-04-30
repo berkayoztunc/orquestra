@@ -146,6 +146,7 @@ export async function buildTransaction(
     network?: string
     rpcUrl?: string
     simulate?: boolean
+    encoding?: 'base58' | 'base64'
   }
 ) {
   const res = await api.post(`/${projectId}/instructions/${instructionName}/build`, data)

@@ -73,11 +73,15 @@ function deriveIdlAddress(programIdBase58: string): string {
  * Check a batch of programs for on-chain Anchor IDL.
  * Derives both old-style (createWithSeed) and new-style (PDA) IDL addresses,
  * then checks if either account exists.
+ *
+ * @param fast  When true: only checks new-style PDA (halves RPC calls) and skips
+ *              IDL data decoding — much faster, sets idlData to null on hits.
  */
 export async function checkIdlBatch(
   rpc: RpcClient,
   programIds: string[],
-  concurrency: number = 10
+  concurrency: number = 10,
+  fast: boolean = false
 ): Promise<IdlCheckResult[]> {
   const { PublicKey } = await import('@solana/web3.js')
 
@@ -95,19 +99,23 @@ export async function checkIdlBatch(
     try {
       const programPubkey = new PublicKey(pid)
 
-      // Old-style: base = PDA([], program), then createWithSeed(base, "anchor:idl", program)
-      const [base] = PublicKey.findProgramAddressSync([], programPubkey)
-      const oldIdl = await PublicKey.createWithSeed(base, 'anchor:idl', programPubkey)
-
       // New-style: PDA(["anchor:idl", program], program)
       const [newIdl] = PublicKey.findProgramAddressSync(
         [Buffer.from('anchor:idl'), programPubkey.toBuffer()],
         programPubkey
       )
 
+      let oldIdlAddress: string | null = null
+      if (!fast) {
+        // Old-style: base = PDA([], program), then createWithSeed(base, "anchor:idl", program)
+        const [base] = PublicKey.findProgramAddressSync([], programPubkey)
+        const oldIdl = await PublicKey.createWithSeed(base, 'anchor:idl', programPubkey)
+        oldIdlAddress = oldIdl.toBase58()
+      }
+
       derivations.push({
         programId: pid,
-        oldIdlAddress: oldIdl.toBase58(),
+        oldIdlAddress,
         newIdlAddress: newIdl.toBase58(),
         error: null,
       })
@@ -143,11 +151,11 @@ export async function checkIdlBatch(
     }
 
     try {
-      // Collect all addresses to check: old + new for each program
+      // Collect all addresses to check: old + new for each program (or just new in fast mode)
       // getMultipleAccounts can handle up to 100 addresses per call
       const allAddresses: string[] = []
       for (const d of addressesToCheck) {
-        allAddresses.push(d.oldIdlAddress!)
+        if (d.oldIdlAddress) allAddresses.push(d.oldIdlAddress)
         allAddresses.push(d.newIdlAddress!)
       }
 
@@ -185,61 +193,74 @@ export async function checkIdlBatch(
             error: d.error,
           })
         } else {
-          const oldInfo = accountInfos[pairIdx * 2]
-          const newInfo = accountInfos[pairIdx * 2 + 1]
+          // In fast mode each program has 1 address (new PDA only); otherwise 2 (old + new)
+          const stride = fast ? 1 : 2
+          const oldInfo = fast ? null : accountInfos[pairIdx * stride]
+          const newInfo = accountInfos[fast ? pairIdx : pairIdx * stride + 1]
           pairIdx++
 
           const oldErr = oldInfo instanceof Error ? oldInfo.message : null
           const newErr = newInfo instanceof Error ? newInfo.message : null
 
-          const oldExists = !(oldInfo instanceof Error) && oldInfo !== null && oldInfo !== undefined
+          const oldExists = !fast && !(oldInfo instanceof Error) && oldInfo !== null && oldInfo !== undefined
           const newExists = !(newInfo instanceof Error) && newInfo !== null && newInfo !== undefined
 
-          const oldBase64 = oldExists ? oldInfo?.data?.[0] ?? null : null
-          const newBase64 = newExists ? newInfo?.data?.[0] ?? null : null
-          const oldIdlData = oldBase64 ? await decodeIdlFromAccountData(oldBase64) : null
-          const newIdlData = newBase64 ? await decodeIdlFromAccountData(newBase64) : null
-
-          if (oldIdlData) {
+          if (fast) {
+            // Fast mode: just record existence, no decoding
             results.push({
               programId: d.programId,
-              hasOnchainIdl: true,
-              idlAccount: d.oldIdlAddress,
-              idlData: oldIdlData,
-              error: null,
-            })
-          } else if (newIdlData) {
-            results.push({
-              programId: d.programId,
-              hasOnchainIdl: true,
-              idlAccount: d.newIdlAddress,
-              idlData: newIdlData,
-              error: null,
-            })
-          } else if (oldExists) {
-            results.push({
-              programId: d.programId,
-              hasOnchainIdl: true,
-              idlAccount: d.oldIdlAddress,
+              hasOnchainIdl: newExists,
+              idlAccount: newExists ? d.newIdlAddress : null,
               idlData: null,
-              error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
-            })
-          } else if (newExists) {
-            results.push({
-              programId: d.programId,
-              hasOnchainIdl: true,
-              idlAccount: d.newIdlAddress,
-              idlData: null,
-              error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
+              error: newErr || null,
             })
           } else {
-            results.push({
-              programId: d.programId,
-              hasOnchainIdl: false,
-              idlAccount: d.oldIdlAddress,
-              idlData: null,
-              error: oldErr || newErr || null,
-            })
+            const oldBase64 = oldExists ? oldInfo?.data?.[0] ?? null : null
+            const newBase64 = newExists ? newInfo?.data?.[0] ?? null : null
+            const oldIdlData = oldBase64 ? await decodeIdlFromAccountData(oldBase64) : null
+            const newIdlData = newBase64 ? await decodeIdlFromAccountData(newBase64) : null
+
+            if (oldIdlData) {
+              results.push({
+                programId: d.programId,
+                hasOnchainIdl: true,
+                idlAccount: d.oldIdlAddress,
+                idlData: oldIdlData,
+                error: null,
+              })
+            } else if (newIdlData) {
+              results.push({
+                programId: d.programId,
+                hasOnchainIdl: true,
+                idlAccount: d.newIdlAddress,
+                idlData: newIdlData,
+                error: null,
+              })
+            } else if (oldExists) {
+              results.push({
+                programId: d.programId,
+                hasOnchainIdl: true,
+                idlAccount: d.oldIdlAddress,
+                idlData: null,
+                error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
+              })
+            } else if (newExists) {
+              results.push({
+                programId: d.programId,
+                hasOnchainIdl: true,
+                idlAccount: d.newIdlAddress,
+                idlData: null,
+                error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
+              })
+            } else {
+              results.push({
+                programId: d.programId,
+                hasOnchainIdl: false,
+                idlAccount: d.oldIdlAddress,
+                idlData: null,
+                error: oldErr || newErr || null,
+              })
+            }
           }
         }
       }
@@ -269,7 +290,8 @@ export async function checkIdlStream(
   programIds: string[],
   batchSize: number,
   concurrency: number,
-  onBatch: (results: IdlCheckResult[], batchIndex: number) => void | Promise<void>
+  onBatch: (results: IdlCheckResult[], batchIndex: number) => void | Promise<void>,
+  fast: boolean = false
 ): Promise<{ total: number; withIdl: number; withoutIdl: number; errors: number }> {
   let total = 0
   let withIdl = 0
@@ -279,7 +301,7 @@ export async function checkIdlStream(
 
   for (let i = 0; i < programIds.length; i += batchSize) {
     const batch = programIds.slice(i, i + batchSize)
-    const results = await checkIdlBatch(rpc, batch, concurrency)
+    const results = await checkIdlBatch(rpc, batch, concurrency, fast)
 
     for (const r of results) {
       total++

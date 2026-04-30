@@ -710,6 +710,8 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
       rpcUrl?: string
       /** Run simulateTransaction on the same RPC after building (no wallet). */
       simulate?: boolean
+      /** Encoding for serializedTransaction in the response. Defaults to 'base58'. Use 'base64' for the modern Solana standard. */
+      encoding?: 'base58' | 'base64'
     }>()
 
     if (!body.accounts || !body.args || !body.feePayer) {
@@ -747,6 +749,7 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
         feePayer: body.feePayer,
         recentBlockhash: body.recentBlockhash,
         simulate: body.simulate,
+        encoding: body.encoding,
       },
       data.programId,
       rpcUrl,

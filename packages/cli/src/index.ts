@@ -26,6 +26,7 @@
 
 import { scanPrograms, type ScanProgramsOptions } from './commands/scan-programs'
 import { checkIdl, type CheckIdlOptions } from './commands/check-idl'
+import { analysis, type AnalysisOptions } from './commands/analysis'
 
 // ─── Argument Parsing ────────────────────────────────────────────────
 function parseArgs(argv: string[]): { command: string; flags: Record<string, string | boolean> } {
@@ -70,6 +71,11 @@ function parseArgs(argv: string[]): { command: string; flags: Record<string, str
       continue
     }
 
+    if (arg === '--fast') {
+      flags['fast'] = true
+      continue
+    }
+
     if (arg.startsWith('--') && i + 1 < argv.length) {
       const key = arg.slice(2)
       flags[key] = argv[++i]
@@ -91,6 +97,7 @@ COMMANDS:
   scan        Discover all executable programs on the cluster → programs.csv
   check-idl   Check on-chain Anchor IDL for each program → program_idl_status.csv
   full        Run scan + check-idl sequentially
+  analysis    Print summary stats from existing output CSVs (no RPC needed)
 
 OPTIONS:
   --rpc-url <url>          Solana RPC endpoint (required, or SOLANA_RPC_URL env)
@@ -105,6 +112,7 @@ OPTIONS:
   --rps <n>                Max requests per second (default: 10)
   --enable-ingest          Generate AI description & save to Orquestra DB for each IDL found
   --skip-ai                Skip AI step (ingest IDL without AI description)
+  --fast                   Fast IDL scan: only check new-style PDA, skip decode (no IDL data saved)
   --ingest-concurrency <n> Max concurrent AI+ingest calls (default: 5)
   --help                   Show this help
 
@@ -146,9 +154,9 @@ async function main() {
     process.exit(0)
   }
 
-  // Resolve RPC URL
+  // Resolve RPC URL (not required for the 'analysis' command)
   const rpcUrl = (flags['rpc-url'] as string) || process.env.SOLANA_RPC_URL
-  if (!rpcUrl) {
+  if (!rpcUrl && command !== 'analysis') {
     console.error('Error: --rpc-url is required or set SOLANA_RPC_URL environment variable')
     process.exit(1)
   }
@@ -165,9 +173,10 @@ async function main() {
   const enableIngest = !!flags['enable-ingest']
   const skipAi = !!flags['skip-ai']
   const ingestConcurrency = parseInt((flags['ingest-concurrency'] as string) || '5', 10)
+  const fast = !!flags['fast']
 
   const scanOpts: ScanProgramsOptions = {
-    rpcUrl,
+    rpcUrl: rpcUrl!,
     outDir,
     maxPrograms,
     includeLegacyV2,
@@ -177,7 +186,7 @@ async function main() {
   }
 
   const idlOpts: CheckIdlOptions = {
-    rpcUrl,
+    rpcUrl: rpcUrl!,
     outDir,
     inputFile,
     batchSize,
@@ -187,6 +196,7 @@ async function main() {
     enableIngest,
     skipAi,
     ingestConcurrency,
+    fast,
   }
 
   switch (command) {
@@ -205,6 +215,12 @@ async function main() {
       console.log()
       await checkIdl(idlOpts)
       break
+
+    case 'analysis': {
+      const analysisOpts: AnalysisOptions = { outDir }
+      await analysis(analysisOpts)
+      break
+    }
 
     default:
       console.error(`Unknown command: ${command}`)

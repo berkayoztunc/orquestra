@@ -20,11 +20,15 @@ export interface BuildTransactionRequest {
   network?: 'mainnet-beta' | 'devnet' | 'testnet'
   /** When true, runs JSON-RPC simulateTransaction on the same RPC (unsigned wire bytes). No wallet required. */
   simulate?: boolean
+  /** Encoding for serializedTransaction in the response. Defaults to 'base58'. Use 'base64' for the modern Solana standard. */
+  encoding?: 'base58' | 'base64'
 }
 
 export interface BuildTransactionResponse {
-  transaction: string               // base58 serialized transaction message
-  serializedTransaction: string     // base58 Solana legacy wire transaction, compatible with Transaction.from(bs58.decode(...))
+  transaction: string               // serialized transaction message (encoding matches the request; default base58)
+  serializedTransaction: string     // Solana legacy wire transaction (encoding matches the request; default base58)
+  /** Encoding used for transaction and serializedTransaction fields. */
+  encoding: 'base58' | 'base64'
   message: string                   // human-readable description
   accounts: AccountInfo[]           // account details used
   instruction: InstructionInfo      // instruction info
@@ -321,8 +325,8 @@ export async function buildTransaction(
     }],
   }
 
-  const txBytes = new TextEncoder().encode(JSON.stringify(txData))
-  const txBase58 = base58Encode(txBytes)
+  const txRawBytes = new TextEncoder().encode(JSON.stringify(txData))
+  const encoding = request.encoding === 'base64' ? 'base64' : 'base58'
 
   // Build real Solana wire-format transaction (compatible with Transaction.from())
   const msgBytes = buildSolanaMessage(request.feePayer, accountInfos, programId, instructionData, blockhash)
@@ -331,7 +335,9 @@ export async function buildTransaction(
   wireBytes.set(sigCountBytes, 0)
   // bytes [sigCountBytes.length .. sigCountBytes.length+63] stay zero (empty signature slot)
   wireBytes.set(msgBytes, sigCountBytes.length + 64)
-  const serializedTransaction = base58Encode(wireBytes)
+
+  const txBase58 = encoding === 'base64' ? uint8ArrayToBase64(txRawBytes) : base58Encode(txRawBytes)
+  const serializedTransaction = encoding === 'base64' ? uint8ArrayToBase64(wireBytes) : base58Encode(wireBytes)
 
   let simulationError: unknown | null = null
   let simulationLogs: string[] | null = null
@@ -344,6 +350,7 @@ export async function buildTransaction(
   return {
     transaction: txBase58,
     serializedTransaction,
+    encoding,
     message: `Transaction for ${(getIDLProgramName(idl) || 'program')}.${instructionName}`,
     accounts: accountInfos,
     instruction: {

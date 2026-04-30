@@ -159,11 +159,16 @@ export interface TransactionBuildRequest {
   args: Record<string, any>
   feePayer?: string
   recentBlockhash?: string
+  /** Encoding for serializedTransaction in the response. Defaults to 'base58'. Use 'base64' for the modern Solana standard. */
+  encoding?: 'base58' | 'base64'
 }
 
 export interface TransactionBuildResponse {
   transaction: string
+  serializedTransaction?: string
   message: string
+  /** Encoding used for transaction and serializedTransaction fields. */
+  encoding?: 'base58' | 'base64'
   blockHash?: string
   /** Cluster used for RPC blockhash / simulation */
   network?: 'mainnet-beta' | 'devnet' | 'testnet' | 'custom'

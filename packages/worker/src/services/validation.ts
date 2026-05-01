@@ -291,8 +291,9 @@ export function validatePdaRequest(body: unknown): ValidationResult<ValidatedPda
     return { success: false, errors: [{ field: 'body', message: 'Request body must be a JSON object' }] }
   }
 
-  if (!isNonEmptyString(body.instruction)) {
-    errors.push({ field: 'instruction', message: 'Instruction name is required' })
+  // instruction is optional for Codama PDAs (which are not tied to an instruction)
+  if (body.instruction !== undefined && body.instruction !== null && body.instruction !== '' && typeof body.instruction !== 'string') {
+    errors.push({ field: 'instruction', message: 'Instruction name must be a string' })
   }
 
   if (!isNonEmptyString(body.account)) {
@@ -310,7 +311,7 @@ export function validatePdaRequest(body: unknown): ValidationResult<ValidatedPda
   return {
     success: true,
     data: {
-      instruction: (body.instruction as string).trim(),
+      instruction: typeof body.instruction === 'string' ? body.instruction.trim() : '',
       account: (body.account as string).trim(),
       seedValues: (body.seedValues as Record<string, any>) || {},
     },

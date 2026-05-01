@@ -6,8 +6,8 @@ import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructi
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
-import { listPdaAccounts, derivePda } from '../services/pda'
-import { detectAccountType, deserializeAccountData } from '../services/account-parser'
+import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
+import { detectAccountType, deserializeAccountData, detectCodamaAccountType, deserializeCodamaAccountData } from '../services/account-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
 import { fetchAnchorIDLFromChain } from '../services/idl-fetcher'
@@ -857,6 +857,14 @@ app.get('/:projectId/pda', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch: list program.pdas ─────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const pdaAccounts = listCodamaPdaAccounts(codamaIdl)
+      return c.json({ projectId, programId: data.programId, pdaAccounts })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const pdaAccounts = listPdaAccounts(data.idl)
 
     return c.json({
@@ -887,6 +895,15 @@ app.post('/:projectId/pda/derive', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch: derive from program.pdas by PDA name ──────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      // For Codama, `account` param holds the PDA name; `instruction` is unused
+      const result = await deriveCodamaPda(codamaIdl, data.programId, account, seedValues)
+      return c.json(result)
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const result = await derivePda(
       data.idl,
       data.programId,
@@ -937,23 +954,38 @@ app.get('/:projectId/pda/fetch/:address', async (c) => {
     // Decode base64 account data
     const rawBytes = Uint8Array.from(atob(rawInfo.data), (c) => c.charCodeAt(0))
 
-    // Detect account type via IDL discriminators
-    const accountDef = await detectAccountType(rawBytes, data.idl)
-
+    let accountTypeName: string | null = null
     let parsedData: Record<string, unknown> | null = null
     let parseError: string | undefined
 
-    if (accountDef) {
-      try {
-        parsedData = deserializeAccountData(rawBytes, accountDef, data.idl)
-      } catch (parseErr) {
-        parseError = (parseErr as Error).message
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      // ── Codama branch ───────────────────────────────────────────────────────
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const codamaAccDef = await detectCodamaAccountType(rawBytes, codamaIdl)
+      if (codamaAccDef) {
+        accountTypeName = codamaAccDef.name
+        try {
+          parsedData = deserializeCodamaAccountData(rawBytes, codamaAccDef.data, codamaIdl)
+        } catch (parseErr) {
+          parseError = (parseErr as Error).message
+        }
+      }
+    } else {
+      // ── Anchor branch ───────────────────────────────────────────────────────
+      const accountDef = await detectAccountType(rawBytes, data.idl)
+      if (accountDef) {
+        accountTypeName = accountDef.name
+        try {
+          parsedData = deserializeAccountData(rawBytes, accountDef, data.idl)
+        } catch (parseErr) {
+          parseError = (parseErr as Error).message
+        }
       }
     }
 
     return c.json({
       address,
-      accountType: accountDef?.name ?? null,
+      accountType: accountTypeName,
       programId: rawInfo.owner,
       lamports: rawInfo.lamports,
       executable: rawInfo.executable,
@@ -1068,7 +1100,16 @@ app.get('/:projectId/events', async (c) => {
     // ── Codama branch ──────────────────────────────────────────────────────────
     if (detectIDLFormat(data.idl as unknown) === 'codama') {
       const codamaIdl = data.idl as unknown as CodamaIDL
-      return c.json({ projectId, programName: codamaIdl.program.name, events: [] })
+      const prog = codamaIdl.program
+      const events = (prog.events || []).map((e: any) => ({
+        name: e.name || e.kind || 'unknown',
+        discriminator: [],
+        fields: (e.fields || []).map((f: any) => ({
+          name: f.name,
+          type: f.type ? resolveCodamaType(f.type) : 'unknown',
+        })),
+      }))
+      return c.json({ projectId, programName: prog.name, events })
     }
 
     // ── Anchor branch ─────────────────────────────────────────────────────────

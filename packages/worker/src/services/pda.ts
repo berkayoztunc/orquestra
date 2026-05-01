@@ -4,8 +4,8 @@
  * Pure Web Crypto + BigInt — no Node.js deps, Workers-compatible.
  */
 
-import type { AnchorIDL, AnchorInstruction } from './idl-parser'
-import { getInstruction } from './idl-parser'
+import type { AnchorIDL, AnchorInstruction, CodamaIDL, CodamaTypeNode } from './idl-parser'
+import { getInstruction, resolveCodamaType } from './idl-parser'
 
 // ────────────────────────────────────────────────────────
 // Ed25519 curve check  (GF(2^255 − 19))
@@ -375,6 +375,128 @@ export async function derivePda(
     pda: base58Encode(pdaBytes),
     bump,
     programId: deriveProgramId,
+    seeds: seedInfo,
+  }
+}
+
+// ────────────────────────────────────────────────────────
+// Codama PDA support
+// ────────────────────────────────────────────────────────
+
+/**
+ * Encode a Codama variable PDA seed value to bytes based on CodamaTypeNode.
+ * Reuses encodeSeedValue for numeric/primitive types via the resolved type string.
+ */
+function encodeCodamaSeedValue(value: any, type: CodamaTypeNode | undefined): Uint8Array {
+  if (!type) return new TextEncoder().encode(String(value))
+  switch (type.kind) {
+    case 'publicKeyTypeNode': return base58Decode(String(value))
+    case 'stringTypeNode': return new TextEncoder().encode(String(value))
+    case 'booleanTypeNode': return new Uint8Array([value ? 1 : 0])
+    case 'numberTypeNode': return encodeSeedValue(value, type.format)
+    case 'bytesTypeNode': {
+      try { return Uint8Array.from(atob(String(value)), (c) => c.charCodeAt(0)) }
+      catch { return new TextEncoder().encode(String(value)) }
+    }
+    default: return new TextEncoder().encode(String(value))
+  }
+}
+
+/**
+ * List all PDA definitions from a Codama IDL's program.pdas array.
+ * Returns the same PdaAccountInfo shape the frontend expects.
+ */
+export function listCodamaPdaAccounts(idl: CodamaIDL): PdaAccountInfo[] {
+  return (idl.program.pdas || []).map((pda) => {
+    const seeds: PdaAccountInfo['seeds'] = (pda.seeds || []).map((s) => {
+      if (s.kind === 'constantPdaSeedNode') {
+        let description = ''
+        if (s.value) {
+          const v = s.value as any
+          if (v.kind === 'stringValueNode') description = v.string
+          else if (v.kind === 'bytesValueNode') description = v.data || ''
+          else description = JSON.stringify(v)
+        } else if ((s as any).bytes) {
+          description = (s as any).bytes
+        }
+        return { kind: 'const', description }
+      }
+      if (s.kind === 'variablePdaSeedNode') {
+        return { kind: 'arg', name: s.name, type: s.type ? resolveCodamaType(s.type) : undefined }
+      }
+      if (s.kind === 'programIdPdaSeedNode') {
+        return { kind: 'const', description: 'program_id' }
+      }
+      return { kind: s.kind, name: s.name }
+    })
+    return { instruction: '', account: pda.name, seeds, customProgram: null }
+  })
+}
+
+/**
+ * Derive a PDA from a Codama IDL program.pdas definition.
+ * The pdaName corresponds to the PDA's name in program.pdas (used as 'account' param).
+ */
+export async function deriveCodamaPda(
+  idl: CodamaIDL,
+  programId: string,
+  pdaName: string,
+  seedValues: Record<string, any>,
+): Promise<PdaDerivationResult> {
+  const pdaDef = (idl.program.pdas || []).find((p) => p.name === pdaName)
+  if (!pdaDef) throw new Error(`PDA "${pdaName}" not found in IDL`)
+
+  const seedBuffers: Uint8Array[] = []
+  const seedInfo: PdaDerivationResult['seeds'] = []
+
+  for (const s of pdaDef.seeds) {
+    if (s.kind === 'constantPdaSeedNode') {
+      let bytes: Uint8Array
+      if (s.value) {
+        const v = s.value as any
+        if (v.kind === 'stringValueNode') bytes = new TextEncoder().encode(v.string)
+        else if (v.kind === 'bytesValueNode') bytes = Uint8Array.from(atob(v.data || ''), (c) => c.charCodeAt(0))
+        else bytes = new TextEncoder().encode('')
+      } else if ((s as any).bytes) {
+        bytes = Uint8Array.from(atob((s as any).bytes), (c) => c.charCodeAt(0))
+      } else {
+        bytes = new Uint8Array(0)
+      }
+      let desc: string
+      try { desc = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { desc = `0x${toHex(bytes)}` }
+      seedBuffers.push(bytes)
+      seedInfo.push({ kind: 'const', description: desc, hex: toHex(bytes) })
+      continue
+    }
+
+    if (s.kind === 'variablePdaSeedNode') {
+      const name = s.name || ''
+      const val = seedValues[name]
+      if (val === undefined || val === null || val === '') {
+        throw new Error(`Missing seed value for "${name}"`)
+      }
+      const bytes = encodeCodamaSeedValue(val, s.type)
+      seedBuffers.push(bytes)
+      seedInfo.push({ kind: 'arg', name, value: val, hex: toHex(bytes) })
+      continue
+    }
+
+    if (s.kind === 'programIdPdaSeedNode') {
+      const bytes = base58Decode(programId)
+      seedBuffers.push(bytes)
+      seedInfo.push({ kind: 'const', description: 'program_id', hex: toHex(bytes) })
+      continue
+    }
+    // Unknown seed kinds are skipped
+  }
+
+  const programBytes = base58Decode(programId)
+  const [pdaBytes, bump] = await findProgramAddress(seedBuffers, programBytes)
+
+  return {
+    pda: base58Encode(pdaBytes),
+    bump,
+    programId,
     seeds: seedInfo,
   }
 }

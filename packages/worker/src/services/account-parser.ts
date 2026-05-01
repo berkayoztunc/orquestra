@@ -6,7 +6,7 @@
  * Pure Web Crypto + BigInt — no Node.js deps, Workers-compatible.
  */
 
-import type { AnchorIDL, AnchorAccount, AnchorType } from './idl-parser'
+import type { AnchorIDL, AnchorAccount, AnchorType, CodamaIDL, CodamaTypeNode } from './idl-parser'
 import { normalizeField, lookupType, getDefinedTypeName } from './idl-parser'
 
 // ────────────────────────────────────────────────────────
@@ -402,4 +402,114 @@ export function deserializeAccountData(
     result[field.name] = decodeValue(reader, field.type, idl, 0)
   }
   return result
+}
+
+// ────────────────────────────────────────────────────────
+// Codama account detection & deserialization
+// ────────────────────────────────────────────────────────
+
+/**
+ * Find a matching Codama account by comparing the first 8 bytes of raw on-chain
+ * data against SHA-256("account:<Name>")[:8] for every account in the IDL.
+ * Also checks explicit discriminator bytes stored in the IDL if present.
+ */
+export async function detectCodamaAccountType(
+  rawData: Uint8Array,
+  idl: CodamaIDL,
+): Promise<{ name: string; data: CodamaTypeNode } | null> {
+  const accounts = idl.program.accounts || []
+  if (!accounts.length || rawData.length < 8) return null
+  const dataDisc = rawData.slice(0, 8)
+
+  for (const account of accounts) {
+    // Try explicit discriminator bytes from the IDL (any kind that carries bytes)
+    const explicitBytes = (account.discriminators || []).flatMap((d: any) => d.bytes || [])
+    if (explicitBytes.length >= 8) {
+      if (discriminatorsMatch(explicitBytes, dataDisc)) return { name: account.name, data: account.data }
+    } else {
+      // Fall back to Anchor-compatible: SHA-256("account:<Name>")[:8]
+      const computed = await computeAccountDiscriminator(account.name)
+      if (discriminatorsMatch(computed, dataDisc)) return { name: account.name, data: account.data }
+    }
+  }
+  return null
+}
+
+/**
+ * Borsh-decode Codama account data (skips the 8-byte discriminator).
+ * Handles the most common CodamaTypeNode kinds. Returns null for unknown types.
+ */
+export function deserializeCodamaAccountData(
+  rawData: Uint8Array,
+  accountData: CodamaTypeNode,
+  idl: CodamaIDL,
+): Record<string, unknown> {
+  const reader = new BorshReader(rawData, 8)
+  return decodeCodamaNode(reader, accountData, idl, 0) as Record<string, unknown>
+}
+
+function decodeCodamaNode(reader: BorshReader, type: CodamaTypeNode, idl: CodamaIDL, depth: number): unknown {
+  if (depth > 12) throw new Error('Max recursion depth exceeded')
+  switch (type.kind) {
+    case 'numberTypeNode': {
+      switch (type.format) {
+        case 'u8':   return reader.readU8()
+        case 'u16':  return reader.readU16()
+        case 'u32':  return reader.readU32()
+        case 'u64':  { const v = reader.readU64(); return v <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : v.toString() }
+        case 'u128': return reader.readU128().toString()
+        case 'i8':   return reader.readI8()
+        case 'i16':  return reader.readI16()
+        case 'i32':  return reader.readI32()
+        case 'i64':  { const v = reader.readI64(); const abs = v < 0n ? -v : v; return abs <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(v) : v.toString() }
+        case 'i128': return reader.readI128().toString()
+        case 'f32':  return reader.readF32()
+        case 'f64':  return reader.readF64()
+        default:     return null
+      }
+    }
+    case 'publicKeyTypeNode': return reader.readPublicKey()
+    case 'booleanTypeNode':  return reader.readBool()
+    case 'stringTypeNode':   return reader.readString()
+    case 'bytesTypeNode':    return btoa(String.fromCharCode(...reader.readByteVec()))
+    case 'optionTypeNode': {
+      const tag = reader.readU8()
+      if (tag === 0) return null
+      return decodeCodamaNode(reader, type.item, idl, depth + 1)
+    }
+    case 'zeroableOptionTypeNode': {
+      return decodeCodamaNode(reader, type.item, idl, depth + 1)
+    }
+    case 'arrayTypeNode': {
+      let count: number
+      if (type.count.kind === 'fixedCountNode') count = type.count.value
+      else if (type.count.kind === 'prefixedCountNode') count = reader.readU32()
+      else count = 0
+      const arr: unknown[] = []
+      for (let i = 0; i < count; i++) arr.push(decodeCodamaNode(reader, type.item, idl, depth + 1))
+      return arr
+    }
+    case 'structTypeNode': {
+      const obj: Record<string, unknown> = {}
+      for (const field of type.fields) {
+        obj[field.name] = decodeCodamaNode(reader, field.type, idl, depth + 1)
+      }
+      return obj
+    }
+    case 'enumTypeNode': {
+      const idx = reader.readU8()
+      const variant = type.variants[idx]
+      return variant ? variant.name : idx
+    }
+    case 'definedTypeLinkNode': {
+      const typeDef = (idl.program.definedTypes || []).find((t) => t.name === type.name)
+      if (!typeDef) throw new Error(`Type "${type.name}" not found in Codama IDL`)
+      return decodeCodamaNode(reader, typeDef.type, idl, depth + 1)
+    }
+    case 'tupleTypeNode': {
+      return type.items.map((item) => decodeCodamaNode(reader, item, idl, depth + 1))
+    }
+    default:
+      return null
+  }
 }

@@ -142,7 +142,7 @@ export default function Pricing(): JSX.Element {
               </ul>
 
               <a
-                href="mailto:hello@orquestra.dev?subject=Orquestra Pro"
+                href="mailto:support@orquestra.dev?subject=Orquestra Pro"
                 className="btn-primary text-sm py-3 text-center block"
               >
                 Get Pro Access

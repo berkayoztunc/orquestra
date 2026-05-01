@@ -23,11 +23,14 @@ import {
   expandInstructionArgs,
   normalizeAccountMeta,
   resolveType,
+  detectIDLFormat,
+  getCodamaUserArgs,
+  resolveCodamaType,
 } from '../services/idl-parser'
-import type { AnchorIDL } from '../services/idl-parser'
+import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
 import { buildTransaction } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
-import { listPdaAccounts, derivePda } from '../services/pda'
+import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData } from '../services/account-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { searchProjects } from '../services/search'
@@ -214,6 +217,38 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
           '',
         ]
 
+        // ── Codama branch ──────────────────────────────────────────────────
+        if (detectIDLFormat(data.idl as unknown) === 'codama') {
+          const codamaIdl = data.idl as unknown as CodamaIDL
+          for (const ix of codamaIdl.program.instructions) {
+            lines.push(`## ${ix.name}`)
+            if ((ix as any).docs?.length) lines.push(`> ${(ix as any).docs.join(' ')}`)
+            lines.push('')
+            const userArgs = getCodamaUserArgs(ix)
+            if (userArgs.length > 0) {
+              lines.push('**Arguments:**')
+              for (const arg of userArgs) {
+                lines.push(`  - \`${arg.name}\`: ${resolveCodamaType(arg.type)}`)
+              }
+              lines.push('')
+            }
+            if (ix.accounts.length > 0) {
+              lines.push('**Accounts:**')
+              for (const acc of ix.accounts) {
+                const flags = [
+                  acc.isWritable ? 'writable' : 'readonly',
+                  acc.isSigner ? 'signer' : '',
+                  (acc as any).isOptional ? 'optional' : '',
+                ].filter(Boolean).join(', ')
+                lines.push(`  - \`${acc.name}\` [${flags}]`)
+              }
+              lines.push('')
+            }
+          }
+          return { content: [{ type: 'text', text: lines.join('\n') }] }
+        }
+
+        // ── Anchor branch ──────────────────────────────────────────────────
         for (const ix of idl.instructions) {
           lines.push(`## ${ix.name}`)
           if (ix.docs?.length) lines.push(`> ${ix.docs.join(' ')}`)
@@ -398,7 +433,10 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
           }
         }
 
-        const pdaAccounts = listPdaAccounts(data.idl)
+        const isCodama = detectIDLFormat(data.idl as unknown) === 'codama'
+        const pdaAccounts = isCodama
+          ? listCodamaPdaAccounts(data.idl as unknown as CodamaIDL)
+          : listPdaAccounts(data.idl)
 
         if (pdaAccounts.length === 0) {
           return {
@@ -470,13 +508,24 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
           }
         }
 
-        const result = await derivePda(
-          data.idl,
-          data.programId,
-          instruction,
-          account,
-          seedValues as Record<string, any>,
-        )
+        let result
+        if (detectIDLFormat(data.idl as unknown) === 'codama') {
+          // For Codama, `account` holds the PDA name (instruction is unused)
+          result = await deriveCodamaPda(
+            data.idl as unknown as CodamaIDL,
+            data.programId,
+            account,
+            seedValues as Record<string, any>,
+          )
+        } else {
+          result = await derivePda(
+            data.idl,
+            data.programId,
+            instruction,
+            account,
+            seedValues as Record<string, any>,
+          )
+        }
 
         const lines = [
           `**Derived PDA for \`${account}\`**`,

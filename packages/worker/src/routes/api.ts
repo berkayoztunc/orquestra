@@ -2,8 +2,8 @@ import { Hono } from 'hono'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 import { buildRateLimit } from '../middleware/rate-limit'
 import { invalidateCache } from '../middleware/cache'
-import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL } from '../services/idl-parser'
-import type { AnchorIDL } from '../services/idl-parser'
+import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL, detectIDLFormat, getCodamaInstruction, getCodamaUserArgs, resolveCodamaType } from '../services/idl-parser'
+import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda } from '../services/pda'
@@ -601,6 +601,49 @@ app.get('/:projectId/instructions', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch ──────────────────────────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const prog = codamaIdl.program
+      const instructions = prog.instructions.map((ix) => {
+        const userArgs = getCodamaUserArgs(ix)
+        const userAccounts = ix.accounts.filter(
+          (a) => !a.defaultValue || a.defaultValue.kind !== 'publicKeyValueNode'
+        )
+        return {
+          name: ix.name,
+          docs: Array.isArray(ix.docs) ? ix.docs.filter((d) => typeof d === 'string') : [],
+          accountCount: userAccounts.length,
+          argCount: userArgs.length,
+          accounts: userAccounts.map((a) => ({
+            name: a.name,
+            isMut: a.isWritable,
+            isSigner: a.isSigner === true || a.isSigner === 'either',
+            isOptional: !!a.isOptional,
+          })),
+          args: userArgs.map((a) => {
+            const isDefinedType = a.type.kind === 'definedTypeLinkNode'
+            return {
+              name: a.name,
+              type: resolveCodamaType(a.type),
+              isDefinedType,
+              definedTypeName: isDefinedType ? (a.type as any).name : null,
+              fields: a.type.kind === 'structTypeNode'
+                ? (a.type as any).fields.map((f: any) => ({
+                    name: f.name,
+                    type: resolveCodamaType(f.type),
+                    isDefinedType: false,
+                    nestedFields: null,
+                  }))
+                : null,
+            }
+          }),
+        }
+      })
+      return c.json({ projectId, programName: prog.name, programId: data.programId, instructions })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const instructions = data.idl.instructions.map((ix) => ({
       name: ix.name,
       docs: Array.isArray(ix.docs) ? ix.docs.filter((d) => typeof d === 'string') : [],
@@ -651,6 +694,46 @@ app.get('/:projectId/instructions/:name', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch ──────────────────────────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const codamaIx = getCodamaInstruction(codamaIdl, instructionName)
+      if (!codamaIx) {
+        return c.json({ error: `Instruction "${instructionName}" not found` }, 404)
+      }
+      const userArgs = getCodamaUserArgs(codamaIx)
+      const userAccounts = codamaIx.accounts.filter(
+        (a) => !a.defaultValue || a.defaultValue.kind !== 'publicKeyValueNode'
+      )
+      return c.json({
+        projectId,
+        programId: data.programId,
+        instruction: {
+          name: codamaIx.name,
+          docs: Array.isArray(codamaIx.docs) ? codamaIx.docs.filter((d) => typeof d === 'string') : [],
+          accounts: userAccounts.map((a) => ({
+            name: a.name,
+            isMut: a.isWritable,
+            isSigner: a.isSigner === true || a.isSigner === 'either',
+            isOptional: !!a.isOptional,
+            pda: null,
+          })),
+          args: userArgs.map((a) => {
+            const isDefinedType = a.type.kind === 'definedTypeLinkNode'
+            return {
+              name: a.name,
+              type: resolveCodamaType(a.type),
+              defaultValue: null,
+              isDefinedType,
+              definedTypeName: isDefinedType ? (a.type as any).name : null,
+              fields: null,
+            }
+          }),
+        },
+      })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const ix = getInstruction(data.idl, instructionName)
     if (!ix) {
       return c.json({ error: `Instruction "${instructionName}" not found` }, 404)
@@ -896,6 +979,26 @@ app.get('/:projectId/accounts', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch ──────────────────────────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const prog = codamaIdl.program
+      const accounts = prog.accounts.map((acc) => ({
+        name: acc.name,
+        kind: 'struct',
+        docs: acc.docs || [],
+        discriminator: acc.discriminators?.flatMap((d) => (d as any).bytes || []) || [],
+        fields: acc.data.kind === 'structTypeNode'
+          ? (acc.data as any).fields.map((f: any) => ({
+              name: f.name,
+              type: resolveCodamaType(f.type),
+            }))
+          : [],
+      }))
+      return c.json({ projectId, programName: prog.name, accounts })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const accounts = (data.idl.accounts || []).map((acc) => {
       const resolved = resolveAccountFields(data.idl, acc)
       return {
@@ -930,6 +1033,18 @@ app.get('/:projectId/errors', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch ──────────────────────────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const prog = codamaIdl.program
+      return c.json({
+        projectId,
+        programName: prog.name,
+        errors: prog.errors.map((e) => ({ name: e.name, code: e.code, msg: e.message })),
+      })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     return c.json({
       projectId,
       programName: data.idl.name,
@@ -950,6 +1065,13 @@ app.get('/:projectId/events', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch ──────────────────────────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      return c.json({ projectId, programName: codamaIdl.program.name, events: [] })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const events = (data.idl.events || []).map((event) => {
       const resolved = resolveEventFields(data.idl, event)
       return {
@@ -982,6 +1104,24 @@ app.get('/:projectId/types', async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // ── Codama branch ──────────────────────────────────────────────────────────
+    if (detectIDLFormat(data.idl as unknown) === 'codama') {
+      const codamaIdl = data.idl as unknown as CodamaIDL
+      const prog = codamaIdl.program
+      const types = prog.definedTypes.map((t) => ({
+        name: t.name,
+        kind: t.type.kind === 'structTypeNode' ? 'struct' : t.type.kind === 'enumTypeNode' ? 'enum' : 'unknown',
+        fields: t.type.kind === 'structTypeNode'
+          ? (t.type as any).fields.map((f: any) => ({
+              name: f.name,
+              type: resolveCodamaType(f.type),
+            }))
+          : [],
+      }))
+      return c.json({ projectId, programName: prog.name, types })
+    }
+
+    // ── Anchor branch ─────────────────────────────────────────────────────────
     const types = (data.idl.types || []).map((t) => ({
       name: t.name,
       kind: t.type?.kind || 'unknown',

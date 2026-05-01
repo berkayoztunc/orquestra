@@ -248,5 +248,161 @@ export interface IngestResponse {
 
 // Constants
 export const API_VERSION = 'v1'
+
+// ─── IDL Standard ─────────────────────────────────────────────────────────────
+
+export type IDLStandard = 'anchor' | 'codama'
+
+// ─── Codama IDL types ─────────────────────────────────────────────────────────
+// Reference: https://github.com/codama-idl/codama
+
+/** Discriminated union of all Codama type nodes */
+export type CodamaTypeNode =
+  | { kind: 'numberTypeNode'; format: 'u8' | 'u16' | 'u32' | 'u64' | 'u128' | 'i8' | 'i16' | 'i32' | 'i64' | 'i128' | 'f32' | 'f64'; endian?: 'le' | 'be' }
+  | { kind: 'publicKeyTypeNode' }
+  | { kind: 'booleanTypeNode' }
+  | { kind: 'stringTypeNode'; encoding?: string }
+  | { kind: 'bytesTypeNode' }
+  | { kind: 'definedTypeLinkNode'; name: string }
+  | { kind: 'optionTypeNode'; item: CodamaTypeNode; prefix?: CodamaTypeNode }
+  | { kind: 'zeroableOptionTypeNode'; item: CodamaTypeNode }
+  | { kind: 'arrayTypeNode'; item: CodamaTypeNode; count: CodamaCountNode }
+  | { kind: 'structTypeNode'; fields: CodamaStructField[] }
+  | { kind: 'enumTypeNode'; variants: CodamaEnumVariant[]; size?: CodamaTypeNode }
+  | { kind: 'tupleTypeNode'; items: CodamaTypeNode[] }
+  | { kind: 'mapTypeNode'; key: CodamaTypeNode; value: CodamaTypeNode; count: CodamaCountNode }
+  | { kind: 'setTypeNode'; item: CodamaTypeNode; count: CodamaCountNode }
+
+export type CodamaCountNode =
+  | { kind: 'fixedCountNode'; value: number }
+  | { kind: 'prefixedCountNode'; prefix: CodamaTypeNode }
+  | { kind: 'remainderCountNode' }
+
+export interface CodamaStructField {
+  kind: 'structFieldTypeNode'
+  name: string
+  type: CodamaTypeNode
+  defaultValue?: CodamaValueNode
+  defaultValueStrategy?: 'optional' | 'omitted'
+  docs?: string[]
+}
+
+export interface CodamaEnumVariant {
+  kind: 'enumEmptyVariantTypeNode' | 'enumStructVariantTypeNode' | 'enumTupleVariantTypeNode'
+  name: string
+  fields?: CodamaStructField[]
+  items?: CodamaTypeNode[]
+}
+
+/** Discriminated union of Codama value nodes */
+export type CodamaValueNode =
+  | { kind: 'publicKeyValueNode'; publicKey: string }
+  | { kind: 'numberValueNode'; number: number }
+  | { kind: 'booleanValueNode'; boolean: boolean }
+  | { kind: 'stringValueNode'; string: string }
+  | { kind: 'bytesValueNode'; data: string; encoding: string }
+  | { kind: 'noneValueNode' }
+  | { kind: 'someValueNode'; value: CodamaValueNode }
+  | { kind: 'constantValueNode'; type: CodamaTypeNode; value: CodamaValueNode }
+  | { kind: 'enumValueNode'; enum: string; variant: string }
+  | { kind: 'arrayValueNode'; items: CodamaValueNode[] }
+  | { kind: 'mapValueNode'; entries: Array<{ key: CodamaValueNode; value: CodamaValueNode }> }
+  | { kind: 'structValueNode'; fields: Array<{ name: string; value: CodamaValueNode }> }
+  | { kind: 'tupleValueNode'; items: CodamaValueNode[] }
+
+export interface CodamaInstructionAccount {
+  kind: 'instructionAccountNode'
+  name: string
+  isWritable: boolean
+  isSigner: boolean | 'either'
+  isOptional?: boolean
+  defaultValue?: CodamaValueNode
+  docs?: string[]
+}
+
+export interface CodamaInstructionArgument {
+  kind: 'instructionArgumentNode'
+  name: string
+  type: CodamaTypeNode
+  defaultValue?: CodamaValueNode
+  defaultValueStrategy?: 'optional' | 'omitted'
+  docs?: string[]
+}
+
+export interface CodamaDiscriminator {
+  kind: 'fieldDiscriminatorNode' | 'sizeDiscriminatorNode' | 'constantDiscriminatorNode' | 'accountDiscriminatorNode'
+  name?: string  // for fieldDiscriminatorNode
+  offset?: number
+}
+
+export interface CodamaInstruction {
+  kind: 'instructionNode'
+  name: string
+  accounts: CodamaInstructionAccount[]
+  arguments: CodamaInstructionArgument[]
+  discriminators?: CodamaDiscriminator[]
+  optionalAccountStrategy?: 'omitted' | 'programId'
+  docs?: string[]
+}
+
+export interface CodamaError {
+  kind: 'errorNode'
+  name: string
+  code: number
+  message: string
+  docs?: string[]
+}
+
+export interface CodamaPdaSeed {
+  kind: 'variablePdaSeedNode' | 'constantPdaSeedNode' | 'programIdPdaSeedNode'
+  name?: string
+  type?: CodamaTypeNode
+  value?: CodamaValueNode
+  bytes?: string
+}
+
+export interface CodamaPda {
+  kind: 'pdaNode'
+  name: string
+  seeds: CodamaPdaSeed[]
+  docs?: string[]
+}
+
+export interface CodamaDefinedType {
+  kind: 'definedTypeNode'
+  name: string
+  type: CodamaTypeNode
+  docs?: string[]
+}
+
+export interface CodamaAccount {
+  kind: 'accountNode'
+  name: string
+  data: CodamaTypeNode
+  discriminators?: CodamaDiscriminator[]
+  docs?: string[]
+}
+
+export interface CodamaProgram {
+  kind: 'programNode'
+  name: string
+  publicKey: string
+  version: string
+  instructions: CodamaInstruction[]
+  accounts: CodamaAccount[]
+  definedTypes: CodamaDefinedType[]
+  pdas: CodamaPda[]
+  errors: CodamaError[]
+  events?: any[]
+  docs?: string[]
+}
+
+export interface CodamaIDL {
+  kind: 'rootNode'
+  standard: 'codama'
+  version: string
+  program: CodamaProgram
+  additionalPrograms?: CodamaProgram[]
+}
 export const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 export const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB

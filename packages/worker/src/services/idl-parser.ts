@@ -1,6 +1,251 @@
 /**
- * IDL Parser Service - Validates, parses, and processes Anchor IDL files
+ * IDL Parser Service - Validates, parses, and processes Anchor IDL files.
+ * Supports both Anchor IDL format and the Codama IDL standard natively.
  */
+
+// ─── Codama types (defined inline — worker doesn't import @shared at runtime) ──
+
+export type IDLStandard = 'anchor' | 'codama'
+
+export type CodamaTypeNode =
+  | { kind: 'numberTypeNode'; format: 'u8'|'u16'|'u32'|'u64'|'u128'|'i8'|'i16'|'i32'|'i64'|'i128'|'f32'|'f64'; endian?: 'le'|'be' }
+  | { kind: 'publicKeyTypeNode' }
+  | { kind: 'booleanTypeNode' }
+  | { kind: 'stringTypeNode'; encoding?: string }
+  | { kind: 'bytesTypeNode' }
+  | { kind: 'definedTypeLinkNode'; name: string }
+  | { kind: 'optionTypeNode'; item: CodamaTypeNode; prefix?: CodamaTypeNode }
+  | { kind: 'zeroableOptionTypeNode'; item: CodamaTypeNode }
+  | { kind: 'arrayTypeNode'; item: CodamaTypeNode; count: { kind: 'fixedCountNode'; value: number } | { kind: 'prefixedCountNode'; prefix: CodamaTypeNode } | { kind: 'remainderCountNode' } }
+  | { kind: 'structTypeNode'; fields: Array<{ kind: string; name: string; type: CodamaTypeNode; defaultValue?: CodamaValueNode; defaultValueStrategy?: 'optional'|'omitted'; docs?: string[] }> }
+  | { kind: 'enumTypeNode'; variants: Array<{ kind: string; name: string; fields?: any[]; items?: any[] }>; size?: CodamaTypeNode }
+  | { kind: 'tupleTypeNode'; items: CodamaTypeNode[] }
+  | { kind: 'mapTypeNode'; key: CodamaTypeNode; value: CodamaTypeNode; count: any }
+  | { kind: 'setTypeNode'; item: CodamaTypeNode; count: any }
+
+export type CodamaValueNode =
+  | { kind: 'publicKeyValueNode'; publicKey: string }
+  | { kind: 'numberValueNode'; number: number }
+  | { kind: 'booleanValueNode'; boolean: boolean }
+  | { kind: 'stringValueNode'; string: string }
+  | { kind: 'noneValueNode' }
+  | { kind: string; [key: string]: any }
+
+export interface CodamaInstructionAccount {
+  kind: 'instructionAccountNode'
+  name: string
+  isWritable: boolean
+  isSigner: boolean | 'either'
+  isOptional?: boolean
+  defaultValue?: CodamaValueNode
+  docs?: string[]
+}
+
+export interface CodamaInstructionArgument {
+  kind: 'instructionArgumentNode'
+  name: string
+  type: CodamaTypeNode
+  defaultValue?: CodamaValueNode
+  defaultValueStrategy?: 'optional' | 'omitted'
+  docs?: string[]
+}
+
+export interface CodamaDiscriminator {
+  kind: 'fieldDiscriminatorNode' | 'sizeDiscriminatorNode' | 'constantDiscriminatorNode' | 'accountDiscriminatorNode'
+  name?: string
+  offset?: number
+}
+
+export interface CodamaInstruction {
+  kind: 'instructionNode'
+  name: string
+  accounts: CodamaInstructionAccount[]
+  arguments: CodamaInstructionArgument[]
+  discriminators?: CodamaDiscriminator[]
+  optionalAccountStrategy?: 'omitted' | 'programId'
+  docs?: string[]
+}
+
+export interface CodamaProgram {
+  kind?: 'programNode'
+  name: string
+  publicKey: string
+  version: string
+  instructions: CodamaInstruction[]
+  accounts: Array<{ kind?: string; name: string; data: CodamaTypeNode; discriminators?: CodamaDiscriminator[]; docs?: string[] }>
+  definedTypes: Array<{ kind?: string; name: string; type: CodamaTypeNode; docs?: string[] }>
+  pdas: Array<{ kind?: string; name: string; seeds: Array<{ kind: string; name?: string; type?: CodamaTypeNode; value?: CodamaValueNode; bytes?: string }>; docs?: string[] }>
+  errors: Array<{ kind?: string; name: string; code: number; message: string; docs?: string[] }>
+  events?: any[]
+  docs?: string[]
+}
+
+export interface CodamaIDL {
+  kind: 'rootNode'
+  standard: 'codama'
+  version: string
+  program: CodamaProgram
+  additionalPrograms?: CodamaProgram[]
+}
+
+// ─── Codama detection ─────────────────────────────────────────────────────────
+
+/**
+ * Detect whether a raw IDL object follows the Codama standard or the Anchor format.
+ */
+export function detectIDLFormat(raw: unknown): IDLStandard {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const r = raw as Record<string, unknown>
+    if (r.kind === 'rootNode' && r.standard === 'codama') return 'codama'
+  }
+  return 'anchor'
+}
+
+/**
+ * Validate a Codama IDL structure.
+ */
+export function validateCodamaIDL(raw: unknown): ValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!raw || typeof raw !== 'object') {
+    return { valid: false, errors: ['Codama IDL must be a JSON object'], warnings }
+  }
+
+  const r = raw as Record<string, unknown>
+  const program = r.program as Record<string, unknown> | undefined
+
+  if (!program || typeof program !== 'object') {
+    errors.push('Codama IDL must have a "program" object')
+    return { valid: false, errors, warnings }
+  }
+
+  if (!program.name || typeof program.name !== 'string') {
+    errors.push('Codama IDL program must have a "name" field')
+  }
+  if (!r.version || typeof r.version !== 'string') {
+    warnings.push('Codama IDL has no root-level "version" field')
+  }
+  if (!Array.isArray(program.instructions)) {
+    errors.push('Codama IDL program must have an "instructions" array')
+  } else {
+    for (let i = 0; i < program.instructions.length; i++) {
+      const ix = program.instructions[i] as Record<string, unknown>
+      if (!ix.name || typeof ix.name !== 'string') {
+        errors.push(`Codama instruction at index ${i} must have a "name" field`)
+      }
+      if (!Array.isArray(ix.accounts)) {
+        errors.push(`Codama instruction "${ix.name || i}" must have an "accounts" array`)
+      }
+      if (!Array.isArray(ix.arguments)) {
+        errors.push(`Codama instruction "${ix.name || i}" must have an "arguments" array`)
+      }
+    }
+  }
+
+  if (!Array.isArray(program.errors) || program.errors.length === 0) {
+    warnings.push('Codama IDL has no "errors" definitions')
+  }
+  if (!Array.isArray(program.definedTypes) || program.definedTypes.length === 0) {
+    warnings.push('Codama IDL has no "definedTypes" definitions')
+  }
+  if (!Array.isArray(program.pdas) || program.pdas.length === 0) {
+    warnings.push('Codama IDL has no "pdas" definitions')
+  }
+
+  return { valid: errors.length === 0, errors, warnings }
+}
+
+/**
+ * Parse a Codama IDL into a ParsedIDL.
+ */
+export function parseCodamaIDL(raw: CodamaIDL): ParsedIDL {
+  const program = raw.program
+  return {
+    idl: raw as unknown as AnchorIDL,   // stored raw, cast for ParsedIDL compat
+    programName: program.name || 'unknown',
+    version: raw.version || program.version || 'unknown',
+    instructionCount: program.instructions?.length || 0,
+    accountCount: program.accounts?.length || 0,
+    errorCount: program.errors?.length || 0,
+    eventCount: program.events?.length || 0,
+  }
+}
+
+/**
+ * Get a Codama instruction by name (camelCase and snake_case fuzzy match).
+ */
+export function getCodamaInstruction(idl: CodamaIDL, name: string): CodamaInstruction | undefined {
+  return idl.program.instructions.find(
+    (ix) => ix.name === name || ix.name === toCamelCase(name) || ix.name === toSnakeCase(name)
+  )
+}
+
+/**
+ * Resolve a Codama type node to a human-readable string.
+ */
+export function resolveCodamaType(type: CodamaTypeNode | undefined | null): string {
+  if (!type) return 'unknown'
+  switch (type.kind) {
+    case 'numberTypeNode': return type.format
+    case 'publicKeyTypeNode': return 'publicKey'
+    case 'booleanTypeNode': return 'bool'
+    case 'stringTypeNode': return 'string'
+    case 'bytesTypeNode': return 'bytes'
+    case 'definedTypeLinkNode': return type.name
+    case 'optionTypeNode': return `Option<${resolveCodamaType(type.item)}>`
+    case 'zeroableOptionTypeNode': return `Option<${resolveCodamaType(type.item)}>`
+    case 'arrayTypeNode': {
+      const inner = resolveCodamaType(type.item)
+      if (type.count.kind === 'fixedCountNode') return `[${inner}; ${type.count.value}]`
+      if (type.count.kind === 'remainderCountNode') return `[${inner}]`
+      return `Vec<${inner}>`
+    }
+    case 'tupleTypeNode': return `(${type.items.map(resolveCodamaType).join(', ')})`
+    case 'mapTypeNode': return `Map<${resolveCodamaType(type.key)}, ${resolveCodamaType(type.value)}>`
+    case 'setTypeNode': return `Set<${resolveCodamaType(type.item)}>`
+    case 'structTypeNode': return `{ ${type.fields.map((f) => `${f.name}: ${resolveCodamaType(f.type)}`).join(', ')} }`
+    case 'enumTypeNode': return `enum { ${type.variants.map((v) => v.name).join(' | ')} }`
+    default: return 'unknown'
+  }
+}
+
+/**
+ * Get the user-facing args of a Codama instruction.
+ * Filters out args that are internal/auto-filled (defaultValueStrategy === 'omitted').
+ * The discriminator arg is considered a separate concern and excluded here too
+ * (identified via instruction.discriminators[]).
+ */
+export function getCodamaUserArgs(instruction: CodamaInstruction): CodamaInstructionArgument[] {
+  // Names that are auto-discriminators (referenced in instruction.discriminators)
+  const discriminatorArgNames = new Set(
+    (instruction.discriminators || [])
+      .filter((d) => d.kind === 'fieldDiscriminatorNode' && d.name)
+      .map((d) => d.name as string)
+  )
+  return instruction.arguments.filter(
+    (arg) => arg.defaultValueStrategy !== 'omitted' && !discriminatorArgNames.has(arg.name)
+  )
+}
+
+/**
+ * Extract the discriminator byte value from a Codama instruction.
+ * Reads the defaultValue of the argument referenced in instruction.discriminators[0].
+ * Returns a 1-element Uint8Array, or null if not found.
+ */
+export function getCodamaDiscriminatorBytes(instruction: CodamaInstruction): Uint8Array | null {
+  const fieldDisc = (instruction.discriminators || []).find((d) => d.kind === 'fieldDiscriminatorNode' && d.name)
+  if (!fieldDisc || !fieldDisc.name) return null
+
+  const arg = instruction.arguments.find((a) => a.name === fieldDisc.name)
+  if (!arg?.defaultValue) return null
+
+  const dv = arg.defaultValue
+  if (dv.kind === 'numberValueNode') {
+    return new Uint8Array([dv.number])
+  }
+  return null
+}
 
 // Types imported inline to avoid path resolution issues in Workers
 interface AnchorIDL {
@@ -153,9 +398,19 @@ export function getIDLProgramVersion(idlJson: unknown): string | null {
 }
 
 /**
- * Validate an IDL JSON structure
+ * Validate an IDL JSON structure — dispatches to Anchor or Codama validator.
  */
 export function validateIDL(idlJson: unknown): ValidationResult {
+  if (detectIDLFormat(idlJson) === 'codama') {
+    return validateCodamaIDL(idlJson)
+  }
+  return validateAnchorIDL(idlJson)
+}
+
+/**
+ * Validate an Anchor IDL JSON structure.
+ */
+function validateAnchorIDL(idlJson: unknown): ValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -212,7 +467,7 @@ export function validateIDL(idlJson: unknown): ValidationResult {
 }
 
 /**
- * Parse an IDL JSON into a structured format
+ * Parse an IDL JSON into a structured format — dispatches to Anchor or Codama parser.
  */
 export function parseIDL(idlJson: unknown): ParsedIDL {
   const validation = validateIDL(idlJson)
@@ -220,8 +475,11 @@ export function parseIDL(idlJson: unknown): ParsedIDL {
     throw new Error(`Invalid IDL: ${validation.errors.join(', ')}`)
   }
 
-  const idl = idlJson as AnchorIDL
+  if (detectIDLFormat(idlJson) === 'codama') {
+    return parseCodamaIDL(idlJson as CodamaIDL)
+  }
 
+  const idl = idlJson as AnchorIDL
   return {
     idl,
     programName: getIDLProgramName(idl) || 'unknown',

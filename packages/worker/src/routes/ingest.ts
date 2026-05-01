@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
+import { detectIDLFormat } from '../services/idl-parser'
 import { autoSeedCategory } from '../services/program-auto-detect'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
@@ -83,6 +84,7 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       body.programName ||
       (typeof body.idl.name === 'string' ? body.idl.name : null) ||
       (body.idl.metadata && typeof body.idl.metadata.name === 'string' ? body.idl.metadata.name : null) ||
+      (body.idl.program && typeof body.idl.program.name === 'string' ? body.idl.program.name : null) || // Codama
       body.programId
 
     const programName = rawProgramName.trim() || body.programId
@@ -164,11 +166,12 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       // New version needed
       idlVersionId = generateId()
       const nextVersion = existingVersionNum + 1
+      const idlStandard = detectIDLFormat(body.idl)
       await db
         .prepare(
-          'INSERT INTO idl_versions (id, project_id, idl_json, idl_hash, version, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+          'INSERT INTO idl_versions (id, project_id, idl_json, idl_hash, version, created_at, idl_standard) VALUES (?, ?, ?, ?, ?, ?, ?)'
         )
-        .bind(idlVersionId, projectId, idlStr, body.idlHash, nextVersion, now)
+        .bind(idlVersionId, projectId, idlStr, body.idlHash, nextVersion, now, idlStandard)
         .run()
 
       // Cache in KV

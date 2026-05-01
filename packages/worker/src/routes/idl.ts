@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
 import { uploadRateLimit } from '../middleware/rate-limit'
-import { validateIDL, parseIDL } from '../services/idl-parser'
+import { validateIDL, parseIDL, detectIDLFormat } from '../services/idl-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateIDLUpload } from '../services/validation'
 import { autoSeedCategory } from '../services/program-auto-detect'
@@ -106,11 +106,12 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
 
     // Create IDL version
     const idlVersionId = generateId()
+    const idlStandard = detectIDLFormat(body.idl)
     await db
       ?.prepare(
-        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at, idl_standard) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, 1, now)
+      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, 1, now, idlStandard)
       .run()
 
     // Create default socials entry
@@ -158,7 +159,7 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
 
     // Generate documentation and cache
     const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
-    const docs = generateDocumentation(parsed.idl, body.programId, apiBaseUrl, projectId, body.cpiMd)
+    const docs = generateDocumentation(body.idl, body.programId, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
     }
@@ -319,11 +320,12 @@ app.put('/:projectId', authMiddleware, async (c) => {
     const now = getCurrentTimestamp()
 
     // Insert new version
+    const idlStandard2 = detectIDLFormat(body.idl)
     await db
       ?.prepare(
-        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at, idl_standard) VALUES (?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, newVersion, now)
+      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, newVersion, now, idlStandard2)
       .run()
 
     // Update project timestamp
@@ -338,7 +340,7 @@ app.put('/:projectId', authMiddleware, async (c) => {
 
     // Regenerate docs
     const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
-    const docs = generateDocumentation(parsed.idl, project.program_id as string, apiBaseUrl, projectId, body.cpiMd)
+    const docs = generateDocumentation(body.idl, project.program_id as string, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
     }

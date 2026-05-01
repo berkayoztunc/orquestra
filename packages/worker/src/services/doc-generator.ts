@@ -3,8 +3,8 @@
  * Generates Markdown documentation from Anchor IDL
  */
 
-import type { AnchorIDL, AnchorInstruction, AnchorAccount, AnchorError, AnchorEvent } from './idl-parser'
-import { resolveType, extractPDASeeds, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, normalizeField } from './idl-parser'
+import type { AnchorIDL, AnchorInstruction, AnchorAccount, AnchorError, AnchorEvent, CodamaIDL, CodamaInstructionAccount, CodamaInstructionArgument } from './idl-parser'
+import { resolveType, extractPDASeeds, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, normalizeField, detectIDLFormat, getCodamaUserArgs, resolveCodamaType } from './idl-parser'
 import { listPdaAccounts } from './pda'
 
 export interface GeneratedDocs {
@@ -19,9 +19,23 @@ export interface GeneratedDocs {
 }
 
 /**
- * Generate complete Markdown documentation from an IDL
+ * Generate complete Markdown documentation from an IDL.
+ * Dispatches to Anchor or Codama generator based on IDL format.
  */
 export function generateDocumentation(
+  idl: AnchorIDL | CodamaIDL,
+  programId: string,
+  apiBaseUrl: string,
+  projectSlug: string,
+  cpiMd?: string | null,
+): GeneratedDocs {
+  if (detectIDLFormat(idl) === 'codama') {
+    return generateCodamaDocumentation(idl as CodamaIDL, programId, apiBaseUrl, projectSlug, cpiMd)
+  }
+  return generateAnchorDocumentation(idl as AnchorIDL, programId, apiBaseUrl, projectSlug, cpiMd)
+}
+
+function generateAnchorDocumentation(
   idl: AnchorIDL,
   programId: string,
   apiBaseUrl: string,
@@ -393,4 +407,257 @@ function generateTypesDocs(idl: AnchorIDL): string {
   }
 
   return md
+}
+
+// ─── Codama doc generator ──────────────────────────────────────────────────
+
+function generateCodamaDocumentation(
+  idl: CodamaIDL,
+  programId: string,
+  apiBaseUrl: string,
+  projectSlug: string,
+  cpiMd?: string | null,
+): GeneratedDocs {
+  const normalizedApiBase = normalizeApiBaseUrl(apiBaseUrl)
+  const base = `${normalizedApiBase}/${projectSlug}`
+  const prog = idl.program
+
+  const overview = generateCodamaOverview(idl, programId, normalizedApiBase, projectSlug)
+  const instructions = generateCodamaInstructionsDocs(idl, normalizedApiBase, projectSlug)
+  const accounts = generateCodamaAccountsDocs(idl)
+  const errors = generateCodamaErrorsDocs(idl)
+  const types = generateCodamaTypesDocs(idl)
+  const pdaAccounts = generateCodamaPdaDocs(idl, normalizedApiBase, projectSlug)
+
+  let full = [overview, pdaAccounts, instructions, accounts, types, errors].join('\n\n---\n\n')
+  if (cpiMd) {
+    full += `\n\n---\n\n## CPI Integration\n\n${cpiMd}`
+  }
+
+  return { full, instructions, accounts, errors, events: '', types, overview, pdaAccounts }
+}
+
+function generateCodamaOverview(
+  idl: CodamaIDL,
+  programId: string,
+  apiBaseUrl: string,
+  projectSlug: string,
+): string {
+  const prog = idl.program
+  const base = `${apiBaseUrl}/${projectSlug}`
+  return `# ${prog.name}
+
+> Auto-generated documentation from Codama IDL
+
+**Program ID:** \`${prog.publicKey || programId}\`  
+**Version:** ${prog.version || idl.version || 'unknown'}  
+**Standard:** Codama  
+**API Base:** \`${base}\`
+
+## Summary
+
+| Item | Count |
+|------|-------|
+| Instructions | ${prog.instructions?.length || 0} |
+| Accounts | ${prog.accounts?.length || 0} |
+| Types | ${prog.definedTypes?.length || 0} |
+| Errors | ${prog.errors?.length || 0} |
+| PDAs | ${prog.pdas?.length || 0} |
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | \`${base}/instructions\` | List all instructions |
+| GET | \`${base}/instructions/:name\` | Get a single instruction |
+| POST | \`${base}/instructions/:name/build\` | Build a base58 transaction |
+| GET | \`${base}/pda\` | List all PDA-derivable accounts with seed schemas |
+| POST | \`${base}/pda/derive\` | Derive a PDA address from seed values |
+| GET | \`${base}/accounts\` | List all account types |
+| GET | \`${base}/errors\` | List all error codes |
+| GET | \`${base}/types\` | List all custom types |
+| GET | \`${base}/docs\` | Full documentation (this content) |
+
+## Quick Start
+
+### Build a transaction
+\`\`\`bash
+curl -X POST ${base}/instructions/{name}/build \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "accounts": { "account_name": "pubkey..." },
+    "args": { "arg_name": "value" },
+    "feePayer": "your_pubkey..."
+  }'
+\`\`\``
+}
+
+function generateCodamaInstructionsDocs(
+  idl: CodamaIDL,
+  apiBaseUrl: string,
+  projectSlug: string,
+): string {
+  const prog = idl.program
+  if (!prog.instructions?.length) {
+    return '## Instructions\n\nNo instructions defined.'
+  }
+
+  let md = '## Instructions\n\n'
+
+  for (const ix of prog.instructions) {
+    md += `### \`${ix.name}\`\n\n`
+    md += `**Endpoint:** \`POST ${apiBaseUrl}/${projectSlug}/instructions/${ix.name}/build\`\n\n`
+
+    // Accounts table
+    if (ix.accounts?.length) {
+      md += '#### Accounts\n\n'
+      md += '| Name | Writable | Signer | Optional | Auto-filled |\n'
+      md += '|------|----------|--------|----------|-------------|\n'
+      for (const acc of ix.accounts) {
+        const autoFill = acc.defaultValue?.kind === 'publicKeyValueNode'
+          ? `\`${acc.defaultValue.publicKey}\``
+          : '-'
+        md += `| \`${acc.name}\` | ${acc.isWritable ? '✅' : '❌'} | ${acc.isSigner === true || acc.isSigner === 'either' ? '✅' : '❌'} | ${acc.isOptional ? '✅' : '❌'} | ${autoFill} |\n`
+      }
+      md += '\n'
+    }
+
+    // User-visible args (excludes discriminator args and omitted defaults)
+    const userArgs = getCodamaUserArgs(ix)
+    if (userArgs.length) {
+      md += '#### Arguments\n\n'
+      md += '| Name | Type |\n'
+      md += '|------|------|\n'
+      for (const arg of userArgs) {
+        md += `| \`${arg.name}\` | \`${resolveCodamaType(arg.type)}\` |\n`
+      }
+      md += '\n'
+    }
+
+    // Example
+    md += '#### Example\n\n'
+    md += '```bash\n'
+    md += `curl -X POST ${apiBaseUrl}/${projectSlug}/instructions/${ix.name}/build \\\n`
+    md += '  -H "Content-Type: application/json" \\\n'
+    md += '  -d \'{\n'
+
+    const userAccounts = ix.accounts?.filter((a: CodamaInstructionAccount) => a.defaultValue?.kind !== 'publicKeyValueNode') ?? []
+    if (userAccounts.length) {
+      md += '    "accounts": {\n'
+      md += userAccounts.map((a: CodamaInstructionAccount) => `      "${a.name}": "<pubkey>"`).join(',\n') + '\n'
+      md += '    },\n'
+    }
+    if (userArgs.length) {
+      md += '    "args": {\n'
+      md += userArgs.map((a) => `      "${a.name}": <${resolveCodamaType(a.type)}>`).join(',\n') + '\n'
+      md += '    },\n'
+    }
+    md += '    "feePayer": "<your_pubkey>"\n'
+    md += '  }\'\n'
+    md += '```\n\n'
+  }
+
+  return md
+}
+
+function generateCodamaAccountsDocs(idl: CodamaIDL): string {
+  const prog = idl.program
+  if (!prog.accounts?.length) {
+    return '## Account Types\n\nNo account types defined.'
+  }
+
+  let md = '## Account Types\n\n'
+  for (const acc of prog.accounts) {
+    md += `### \`${acc.name}\`\n\n`
+    if (acc.data?.kind === 'structTypeNode' && acc.data.fields?.length) {
+      md += '| Field | Type |\n'
+      md += '|-------|------|\n'
+      for (const field of acc.data.fields) {
+        md += `| \`${field.name}\` | \`${resolveCodamaType(field.type)}\` |\n`
+      }
+      md += '\n'
+    }
+  }
+  return md
+}
+
+function generateCodamaErrorsDocs(idl: CodamaIDL): string {
+  const prog = idl.program
+  if (!prog.errors?.length) {
+    return '## Error Codes\n\nNo custom errors defined.'
+  }
+
+  let md = '## Error Codes\n\n'
+  md += '| Code | Name | Message |\n'
+  md += '|------|------|----------|\n'
+  for (const err of prog.errors) {
+    md += `| ${err.code} | \`${err.name}\` | ${err.message} |\n`
+  }
+  return md
+}
+
+function generateCodamaTypesDocs(idl: CodamaIDL): string {
+  const prog = idl.program
+  if (!prog.definedTypes?.length) {
+    return '## Types\n\nNo custom types defined.'
+  }
+
+  let md = '## Types\n\n'
+  for (const t of prog.definedTypes) {
+    md += `### \`${t.name}\`\n\n`
+    if (t.type?.kind === 'structTypeNode' && t.type.fields?.length) {
+      md += '| Field | Type |\n'
+      md += '|-------|------|\n'
+      for (const field of t.type.fields) {
+        md += `| \`${field.name}\` | \`${resolveCodamaType(field.type)}\` |\n`
+      }
+      md += '\n'
+    } else if (t.type?.kind === 'enumTypeNode' && t.type.variants?.length) {
+      md += `**Kind:** enum\n\n`
+      md += '| Variant |\n'
+      md += '|---------|\n'
+      for (const v of t.type.variants) {
+        md += `| \`${v.name}\` |\n`
+      }
+      md += '\n'
+    }
+  }
+  return md
+}
+
+function generateCodamaPdaDocs(
+  idl: CodamaIDL,
+  apiBaseUrl: string,
+  projectSlug: string,
+): string {
+  const prog = idl.program
+  const base = `${apiBaseUrl}/${projectSlug}`
+
+  if (!prog.pdas?.length) {
+    return '## PDA-Derivable Accounts\n\nNo PDA-derivable accounts defined.'
+  }
+
+  let md = '## PDA-Derivable Accounts\n\n'
+  md += `**List endpoint:** \`GET ${base}/pda\`  \n`
+  md += `**Derive endpoint:** \`POST ${base}/pda/derive\`\n\n`
+
+  for (const pda of prog.pdas) {
+    md += `### \`${pda.name}\`\n\n`
+    if (pda.seeds?.length) {
+      md += '| # | Seed Kind | Name/Value |\n'
+      md += '|---|-----------|------------|\n'
+      pda.seeds.forEach((seed: { kind: string; name?: string; type?: any; bytes?: string }, i: number) => {
+        if (seed.kind === 'constantPdaSeedNode') {
+          md += `| ${i + 1} | constant | (fixed bytes) |\n`
+        } else if (seed.kind === 'variablePdaSeedNode') {
+          md += `| ${i + 1} | variable | \`${seed.name}\` (\`${resolveCodamaType(seed.type)}\`) |\n`
+        } else if (seed.kind === 'programIdPdaSeedNode') {
+          md += `| ${i + 1} | programId | (program ID) |\n`
+        }
+      })
+      md += '\n'
+    }
+  }
+
+  return md.trimEnd()
 }

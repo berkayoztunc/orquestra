@@ -125,14 +125,31 @@ export function validateIDLUpload(body: unknown): ValidationResult<ValidatedIDLU
     errors.push({ field: 'idl', message: 'IDL must be a valid JSON object' })
   } else {
     const idl = body.idl as Record<string, unknown>
-    if (!pickIDLStringField(idl, 'name')) {
-      errors.push({ field: 'idl.name', message: 'IDL must have a name field' })
-    }
-    if (!pickIDLStringField(idl, 'version')) {
-      errors.push({ field: 'idl.version', message: 'IDL must have a version field' })
-    }
-    if (!isArray(idl.instructions)) {
-      errors.push({ field: 'idl.instructions', message: 'IDL must have an instructions array' })
+    // Detect Codama IDL (rootNode) vs Anchor IDL
+    if (idl.kind === 'rootNode' && idl.standard === 'codama') {
+      // Codama: validate program.name and program.instructions[]
+      if (!isObject(idl.program)) {
+        errors.push({ field: 'idl.program', message: 'Codama IDL must have a program object' })
+      } else {
+        const prog = idl.program as Record<string, unknown>
+        if (!isNonEmptyString(prog.name)) {
+          errors.push({ field: 'idl.program.name', message: 'Codama IDL program must have a name field' })
+        }
+        if (!isArray(prog.instructions)) {
+          errors.push({ field: 'idl.program.instructions', message: 'Codama IDL program must have an instructions array' })
+        }
+      }
+    } else {
+      // Anchor IDL
+      if (!pickIDLStringField(idl, 'name')) {
+        errors.push({ field: 'idl.name', message: 'IDL must have a name field' })
+      }
+      if (!pickIDLStringField(idl, 'version')) {
+        errors.push({ field: 'idl.version', message: 'IDL must have a version field' })
+      }
+      if (!isArray(idl.instructions)) {
+        errors.push({ field: 'idl.instructions', message: 'IDL must have an instructions array' })
+      }
     }
   }
 

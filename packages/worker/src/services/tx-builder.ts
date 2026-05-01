@@ -8,8 +8,8 @@
  * `VersionedTransaction.deserialize` will not work on these bytes until a v0 builder exists.
  */
 
-import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType } from './idl-parser'
-import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField, getIDLProgramName } from './idl-parser'
+import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType, CodamaIDL, CodamaTypeNode, CodamaInstructionArgument, CodamaValueNode } from './idl-parser'
+import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField, getIDLProgramName, detectIDLFormat, getCodamaInstruction, getCodamaDiscriminatorBytes, getCodamaUserArgs } from './idl-parser'
 import type { ResolvedCluster } from '../utils/solana-rpc'
 
 export interface BuildTransactionRequest {
@@ -237,21 +237,229 @@ function listInstructionNames(idl: AnchorIDL): string {
   return (idl.instructions ?? []).map((ix) => ix.name).join(', ')
 }
 
-/**
- * Build a transaction from IDL instruction
- */
-export async function buildTransaction(
-  idl: AnchorIDL,
+// ─── Codama encoding helpers ──────────────────────────────────────────────────
+
+function encodeCodamaValue(value: any, type: CodamaTypeNode): number[] {
+  switch (type.kind) {
+    case 'numberTypeNode': {
+      switch (type.format) {
+        case 'u8': case 'i8': return [Number(value) & 0xff]
+        case 'u16': case 'i16': { const v = Number(value); return [v & 0xff, (v >> 8) & 0xff] }
+        case 'u32': case 'i32': { const v = Number(value); return [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >> 24) & 0xff] }
+        case 'u64': case 'i64': {
+          const v = BigInt(value)
+          const bytes: number[] = []
+          for (let i = 0; i < 8; i++) bytes.push(Number((v >> BigInt(i * 8)) & BigInt(0xff)))
+          return bytes
+        }
+        case 'u128': case 'i128': {
+          const v = BigInt(value)
+          const bytes: number[] = []
+          for (let i = 0; i < 16; i++) bytes.push(Number((v >> BigInt(i * 8)) & BigInt(0xff)))
+          return bytes
+        }
+        case 'f32': { const buf = new ArrayBuffer(4); new DataView(buf).setFloat32(0, Number(value), true); return [...new Uint8Array(buf)] }
+        case 'f64': { const buf = new ArrayBuffer(8); new DataView(buf).setFloat64(0, Number(value), true); return [...new Uint8Array(buf)] }
+        default: return []
+      }
+    }
+    case 'booleanTypeNode': return [value ? 1 : 0]
+    case 'publicKeyTypeNode': return [...base58Decode(String(value))]
+    case 'stringTypeNode': {
+      const enc = new TextEncoder()
+      const strBytes = enc.encode(String(value))
+      const len = strBytes.length
+      return [len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff, (len >> 24) & 0xff, ...strBytes]
+    }
+    case 'bytesTypeNode': {
+      const bytes = Array.isArray(value) ? value : []
+      const len = bytes.length
+      return [len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff, (len >> 24) & 0xff, ...bytes]
+    }
+    case 'optionTypeNode':
+    case 'zeroableOptionTypeNode': {
+      if (value === null || value === undefined) return [0]
+      return [1, ...encodeCodamaValue(value, type.item)]
+    }
+    case 'arrayTypeNode': {
+      const arr = Array.isArray(value) ? value : []
+      if (type.count.kind === 'fixedCountNode') {
+        const result: number[] = []
+        for (let i = 0; i < type.count.value; i++) result.push(...encodeCodamaValue(arr[i] ?? 0, type.item))
+        return result
+      }
+      // prefixed / remainder → length-prefixed vec
+      const len = arr.length
+      const result = [len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff, (len >> 24) & 0xff]
+      for (const item of arr) result.push(...encodeCodamaValue(item, type.item))
+      return result
+    }
+    case 'tupleTypeNode': {
+      const arr = Array.isArray(value) ? value : []
+      const result: number[] = []
+      type.items.forEach((t: CodamaTypeNode, i: number) => result.push(...encodeCodamaValue(arr[i], t)))
+      return result
+    }
+    case 'structTypeNode': {
+      const obj = (typeof value === 'object' && value !== null) ? value : {}
+      const result: number[] = []
+      for (const field of type.fields) result.push(...encodeCodamaValue(obj[field.name], field.type))
+      return result
+    }
+    default: return []
+  }
+}
+
+function encodeCodamaArgs(
+  args: Record<string, any>,
+  argDefs: CodamaInstructionArgument[],
+): Uint8Array {
+  const buffers: number[] = []
+  for (const argDef of argDefs) {
+    buffers.push(...encodeCodamaValue(args[argDef.name], argDef.type))
+  }
+  return new Uint8Array(buffers)
+}
+
+// ─── Codama native tx builder ─────────────────────────────────────────────────
+
+async function buildCodamaTx(
+  idl: CodamaIDL,
   instructionName: string,
   request: BuildTransactionRequest,
   programId: string,
   rpcUrl: string,
   meta: { cluster: ResolvedCluster; rpcUrlHost: string },
 ): Promise<BuildTransactionResponse> {
-  const instruction = getInstruction(idl, instructionName)
+  const instruction = getCodamaInstruction(idl, instructionName)
+  if (!instruction) {
+    const available = idl.program.instructions.map((ix: { name: string }) => ix.name).join(', ')
+    throw new Error(`Instruction "${instructionName}" not found in Codama IDL. Available: ${available}`)
+  }
+
+  // Discriminator — Codama uses a 1-byte field discriminator
+  const discriminatorBytes = getCodamaDiscriminatorBytes(instruction)
+  const discriminator = discriminatorBytes ?? new Uint8Array(0)
+
+  // User args — exclude discriminator-only/omitted args
+  const userArgs = getCodamaUserArgs(instruction)
+  const missingArgs = userArgs.filter((a) => request.args[a.name] === undefined)
+  if (missingArgs.length > 0) {
+    throw new Error(`Missing required arguments: ${missingArgs.map((a) => a.name).join(', ')}`)
+  }
+
+  // Accounts — auto-fill from Codama defaultValue where not provided
+  const accountInfos: AccountInfo[] = []
+  const missingRequired: string[] = []
+  for (const acc of instruction.accounts) {
+    let pubkey = request.accounts[acc.name]
+    if (!pubkey && acc.defaultValue?.kind === 'publicKeyValueNode') {
+      pubkey = acc.defaultValue.publicKey  // auto-fill (e.g. systemProgram, tokenProgram)
+    }
+    if (!pubkey && !acc.isOptional) {
+      missingRequired.push(acc.name)
+    }
+    if (pubkey) {
+      accountInfos.push({
+        name: acc.name,
+        pubkey,
+        isSigner: acc.isSigner === true || acc.isSigner === 'either',
+        isWritable: acc.isWritable,
+      })
+    }
+  }
+  if (missingRequired.length > 0) {
+    throw new Error(`Missing required accounts: ${missingRequired.join(', ')}`)
+  }
+
+  // Encode args
+  const encodedArgs = encodeCodamaArgs(request.args, userArgs)
+
+  // Combine discriminator + args
+  const instructionData = new Uint8Array(discriminator.length + encodedArgs.length)
+  instructionData.set(discriminator, 0)
+  instructionData.set(encodedArgs, discriminator.length)
+
+  // Blockhash
+  let blockhash = request.recentBlockhash
+  let lastValidBlockHeight: number | undefined
+  const blockhashSource: 'client' | 'rpc' = blockhash ? 'client' : 'rpc'
+  if (!blockhash) {
+    const latest = await fetchLatestBlockhash(rpcUrl)
+    blockhash = latest.blockhash
+    lastValidBlockHeight = latest.lastValidBlockHeight
+  }
+
+  // Build tx
+  const txData = {
+    feePayer: request.feePayer,
+    recentBlockhash: blockhash,
+    instructions: [{
+      programId,
+      keys: accountInfos.map((acc) => ({ pubkey: acc.pubkey, isSigner: acc.isSigner, isWritable: acc.isWritable })),
+      data: arrayToBase58(instructionData),
+    }],
+  }
+  const txRawBytes = new TextEncoder().encode(JSON.stringify(txData))
+  const encoding = request.encoding === 'base64' ? 'base64' : 'base58'
+
+  const msgBytes = buildSolanaMessage(request.feePayer, accountInfos, programId, instructionData, blockhash)
+  const sigCountBytes = encodeCompactU16(1)
+  const wireBytes = new Uint8Array(sigCountBytes.length + 64 + msgBytes.length)
+  wireBytes.set(sigCountBytes, 0)
+  wireBytes.set(msgBytes, sigCountBytes.length + 64)
+
+  const txBase58 = encoding === 'base64' ? uint8ArrayToBase64(txRawBytes) : base58Encode(txRawBytes)
+  const serializedTransaction = encoding === 'base64' ? uint8ArrayToBase64(wireBytes) : base58Encode(wireBytes)
+
+  let simulationError: unknown | null = null
+  let simulationLogs: string[] | null = null
+  if (request.simulate) {
+    const sim = await simulateTransactionRpc(rpcUrl, wireBytes)
+    simulationError = sim.err
+    simulationLogs = sim.logs
+  }
+
+  return {
+    transaction: txBase58,
+    serializedTransaction,
+    encoding,
+    message: `Transaction for ${idl.program.name}.${instructionName}`,
+    accounts: accountInfos,
+    instruction: { name: instructionName, programId, data: arrayToHex(instructionData), accounts: accountInfos },
+    estimatedFee: 5000,
+    network: meta.cluster,
+    rpcUrlHost: meta.rpcUrlHost,
+    recentBlockhash: blockhash,
+    lastValidBlockHeight,
+    blockhashSource,
+    wireFormat: 'legacy',
+    simulationError,
+    simulationLogs,
+  }
+}
+
+/**
+ * Build a transaction from IDL instruction.
+ * Dispatches to Anchor or Codama path based on the raw IDL format.
+ */
+export async function buildTransaction(
+  idl: AnchorIDL | CodamaIDL,
+  instructionName: string,
+  request: BuildTransactionRequest,
+  programId: string,
+  rpcUrl: string,
+  meta: { cluster: ResolvedCluster; rpcUrlHost: string },
+): Promise<BuildTransactionResponse> {
+  if (detectIDLFormat(idl) === 'codama') {
+    return buildCodamaTx(idl as CodamaIDL, instructionName, request, programId, rpcUrl, meta)
+  }
+
+  const anchorIdl = idl as AnchorIDL
+  const instruction = getInstruction(anchorIdl, instructionName)
   if (!instruction) {
     throw new Error(
-      `Instruction "${instructionName}" not found in IDL. Available: ${listInstructionNames(idl)}`,
+      `Instruction "${instructionName}" not found in IDL. Available: ${listInstructionNames(anchorIdl)}`,
     )
   }
 
@@ -282,7 +490,7 @@ export async function buildTransaction(
   const discriminator = await getInstructionDiscriminator(instruction)
 
   // Encode arguments (pass IDL types for defined type resolution)
-  const encodedArgs = encodeArgs(request.args, instruction.args, idl.types)
+  const encodedArgs = encodeArgs(request.args, instruction.args, anchorIdl.types)
 
   // Combine discriminator + args
   const instructionData = new Uint8Array(discriminator.length + encodedArgs.length)
@@ -351,7 +559,7 @@ export async function buildTransaction(
     transaction: txBase58,
     serializedTransaction,
     encoding,
-    message: `Transaction for ${(getIDLProgramName(idl) || 'program')}.${instructionName}`,
+    message: `Transaction for ${(getIDLProgramName(anchorIdl) || 'program')}.${instructionName}`,
     accounts: accountInfos,
     instruction: {
       name: instructionName,

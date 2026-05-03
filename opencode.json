@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "orquestra": {
+      "type": "remote",
+      "url": "https://api.orquestra.dev/mcp",
+      "enabled": true
+    },
+    "signer-mcp": {
+      "type": "local",
+      "command": ["npx", "@orquestradev/signer-mcp@latest"],
+      "environment": {
+        "KEYCHAIN_BACKEND": "privy",
+        "PRIVY_APP_ID": "xxx",
+        "PRIVY_APP_SECRET": "xxxx",
+        "PRIVY_WALLET_ID": "xxxxx",
+        "SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=xxxx"
+      },
+      "enabled": true
+    }
+  },
+  "permission": {
+    "skill": {
+      "*": "allow"
+    }
+  },
+  "instructions": [
+    "agents/SKILLS.md"
+  ]
+}

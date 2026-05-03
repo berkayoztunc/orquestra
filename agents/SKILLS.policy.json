@@ -1,0 +1,126 @@
+{
+  "name": "orquestra-agent-skill-contract",
+  "version": "2.0.0",
+  "scope": "Solana transaction execution via Orquestra MCP + signer-mcp",
+  "skills": {
+    "orquestra-researcher": {
+      "phase": 1,
+      "title": "Program Discovery and Documentation",
+      "mcp": "orquestra",
+      "allowed_tools": [
+        "search_programs",
+        "read_llms_txt",
+        "list_instructions",
+        "list_pda_accounts",
+        "get_ai_analysis"
+      ],
+      "must_never": [
+        "Derive PDAs",
+        "Build transactions",
+        "Sign or send transactions",
+        "Invent program IDs or instruction names"
+      ],
+      "outputs": ["program_id", "instruction_name", "account_schemas", "doc_summary"]
+    },
+    "orquestra-pda-explorer": {
+      "phase": 2,
+      "title": "PDA Derivation and Account Resolution",
+      "mcp": "orquestra",
+      "allowed_tools": [
+        "list_pda_accounts",
+        "derive_pda",
+        "fetch_pda_data"
+      ],
+      "must_never": [
+        "Search programs",
+        "Build transactions",
+        "Sign or send transactions",
+        "Guess seed values"
+      ],
+      "outputs": ["resolved_accounts_map"]
+    },
+    "orquestra-tx-builder": {
+      "phase": 3,
+      "title": "Unsigned Transaction Construction",
+      "mcp": "orquestra",
+      "allowed_tools": [
+        "build_instruction"
+      ],
+      "must_never": [
+        "Call build_instruction with missing or placeholder fields",
+        "Search programs or derive PDAs",
+        "Sign or send transactions"
+      ],
+      "outputs": ["base64_unsigned_tx"]
+    },
+    "orquestra-signer": {
+      "phase": 4,
+      "title": "Transaction Signing and Submission",
+      "mcp": "signer-mcp",
+      "allowed_tools": [
+        "get_signer_address",
+        "sign_transaction",
+        "sign_and_send_transaction"
+      ],
+      "must_never": [
+        "Sign without showing the approval summary",
+        "Sign without explicit user YES",
+        "Modify transaction content",
+        "Build or research programs"
+      ],
+      "outputs": ["tx_signature", "explorer_link"]
+    }
+  },
+  "pipeline": [
+    {
+      "step": 1,
+      "skill": "orquestra-researcher",
+      "trigger": ["find program", "what is", "list instructions", "AI analysis", "docs for"]
+    },
+    {
+      "step": 2,
+      "skill": "orquestra-pda-explorer",
+      "trigger": ["derive PDA", "resolve account", "fetch PDA data", "what's in account"]
+    },
+    {
+      "step": 3,
+      "skill": "orquestra-tx-builder",
+      "trigger": ["build transaction", "build instruction", "create tx", "unsigned tx"]
+    },
+    {
+      "step": 4,
+      "skill": "orquestra-signer",
+      "trigger": ["sign transaction", "send tx", "submit", "sign this"]
+    }
+  ],
+  "security_policy": {
+    "least_privilege": true,
+    "explicit_approval_required_for_sign_send": true,
+    "no_invented_values": true,
+    "use_fresh_blockhash": true,
+    "approval_summary_fields": [
+      "network",
+      "signer_wallet",
+      "program",
+      "instruction",
+      "fee_payer",
+      "estimated_fee",
+      "action",
+      "risk_level"
+    ]
+  },
+  "mcp_config": {
+    "orquestra": {
+      "type": "remote",
+      "url": "https://api.orquestra.dev/mcp"
+    },
+    "signer-mcp": {
+      "type": "local",
+      "command": ["npx", "@orquestradev/signer-mcp@latest"],
+      "env": {
+        "SIGNER_KEYPAIR": "<base58-or-json-array-keypair>",
+        "SOLANA_RPC_URL": "<rpc-endpoint>"
+      }
+    }
+  }
+}

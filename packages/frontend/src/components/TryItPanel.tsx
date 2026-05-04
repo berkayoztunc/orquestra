@@ -20,16 +20,23 @@ const FALLBACK_FEE_PAYER = '11111111111111111111111111111112'
 
 const PRESET_DEMOS: Demo[] = [
   {
-    projectId: 'marinade',
-    programId: 'MarBmsSgKXdrN1egZf5sqe1TMThczhMLJhJL5N1FtDC',
-    programName: 'Marinade Finance',
-    instruction: 'deposit',
+    projectId: 'p7o7nf4pucllzadrmiqhf',
+    programId: 'BUYuxRfhCMWavaUWxhGtPP3ksKEDZxCD5gzknk3JfAya',
+    programName: 'Let Me Buy',
+    instruction: 'make_purchase',
     accounts: {
-      state: '8szGkuLTAux9XMgZ2vtY39jVSowEoQBLB2Dc4DJEfKHQ',
-      msolMint: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',
+      receipts: 'H7BjEBtan8h1HXeM38fHNPN7WxQswDhF8PFwnTuQDt5V',
+      signer: '8drh4w7p1Mfw4YAkDAswoRwuD1V9sPY1UM2o2xr8kAqu',
+      authority: '8D8qFHBnvS6oMsJy7EmGTrpoZcGd3aCC3pnPLi93Ag2V',
+      mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      sender_token_account: 'AR6ENLPSohwVxUdgkd2uAshWBvsVEwtrgMx2iAnQwQUs',
+      recipient_token_account: 'FaK5981JTnAbraeKQTjptKAHiF74Zy4upg2hoBdLnGyY',
+      token_program: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      system_program: '11111111111111111111111111111111',
+      associated_token_program: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
     },
-    args: { lamports: 1_000_000_000 },
-    feePayer: FALLBACK_FEE_PAYER,
+    args: { store_name: 'jonasbar', product_name: 'Water', table_number: 11 },
+    feePayer: '8drh4w7p1Mfw4YAkDAswoRwuD1V9sPY1UM2o2xr8kAqu',
   },
 ]
 
@@ -72,7 +79,7 @@ export default function TryItPanel(): JSX.Element {
     async function pickDemo() {
       setStage('fetching')
       try {
-        const list = await listProjects({ limit: 5, search: 'marinade' })
+        const list = await listProjects({ limit: 5, search: 'let me buy' })
         const projects = list?.projects || []
         const candidate = projects[0]
         if (!candidate || cancelled) {
@@ -80,6 +87,15 @@ export default function TryItPanel(): JSX.Element {
           return
         }
         const projectId = candidate.id as string
+        if (cancelled) return
+        // If the discovered project matches our preset, use the preset's
+        // already-resolved accounts/args (PDAs and ATAs) instead of placeholders.
+        const preset = PRESET_DEMOS.find((d) => d.projectId === projectId)
+        if (preset) {
+          setDemo(preset)
+          setStage('idle')
+          return
+        }
         const ixResp = await listInstructions(projectId)
         const instructions: Array<{ name: string; accounts: any[]; args: any[] }> = ixResp?.instructions || []
         const deposit = instructions.find((i) => /deposit|stake/i.test(i.name)) || instructions[0]

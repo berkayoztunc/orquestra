@@ -84,6 +84,51 @@ export default function ProjectDetail(): JSX.Element {
   // Internal project ID from the loaded project (used for all API calls)
   const projectId = selectedProject?.id
 
+  // Document title + OG meta tags. Restores prior values on unmount so the
+  // tags don't leak across routes.
+  useEffect(() => {
+    if (!selectedProject) return
+    const name: string = selectedProject.name
+    const description: string =
+      selectedProject.description ||
+      `REST API, MCP tools, and AI-ready docs for ${name} on Solana — auto-generated from the on-chain Anchor IDL.`
+    const url = `${window.location.origin}/project/${selectedProject.program_id}`
+    const prevTitle = document.title
+    document.title = `${name} — Orquestra`
+    const setMeta = (key: string, attr: 'name' | 'property', value: string) => {
+      let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`)
+      const created = !el
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attr, key)
+        document.head.appendChild(el)
+      }
+      const prev = el.content
+      el.content = value
+      return () => {
+        if (created) {
+          el?.remove()
+        } else if (el) {
+          el.content = prev
+        }
+      }
+    }
+    const cleanups = [
+      setMeta('description', 'name', description),
+      setMeta('og:title', 'property', `${name} — Orquestra`),
+      setMeta('og:description', 'property', description),
+      setMeta('og:url', 'property', url),
+      setMeta('og:type', 'property', 'website'),
+      setMeta('twitter:card', 'name', 'summary_large_image'),
+      setMeta('twitter:title', 'name', `${name} — Orquestra`),
+      setMeta('twitter:description', 'name', description),
+    ]
+    return () => {
+      document.title = prevTitle
+      cleanups.forEach((fn) => fn())
+    }
+  }, [selectedProject])
+
   useEffect(() => {
     if (!projectId) return
     setTabLoading(true)
@@ -567,13 +612,41 @@ export default function ProjectDetail(): JSX.Element {
               </div>
             )}
           </div>
-          {selectedProject.avatar_url && (
-            <img
-              src={selectedProject.avatar_url}
-              alt={selectedProject.username || ''}
-              className="w-10 h-10 rounded-lg border border-white/10"
-            />
-          )}
+          <div className="flex items-start gap-3">
+            <button
+              onClick={async () => {
+                const url = `${window.location.origin}/project/${selectedProject.program_id}`
+                try {
+                  if (navigator.share) {
+                    await navigator.share({
+                      title: `${selectedProject.name} — Orquestra`,
+                      text: selectedProject.description || `${selectedProject.name} on Orquestra`,
+                      url,
+                    })
+                  } else {
+                    await navigator.clipboard.writeText(url)
+                    showToast('Share link copied', 'success')
+                  }
+                } catch {
+                  /* user dismissed share sheet */
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200"
+              title="Share this program"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+              </svg>
+              Share
+            </button>
+            {selectedProject.avatar_url && (
+              <img
+                src={selectedProject.avatar_url}
+                alt={selectedProject.username || ''}
+                className="w-10 h-10 rounded-lg border border-white/10"
+              />
+            )}
+          </div>
         </div>
       </div>
 

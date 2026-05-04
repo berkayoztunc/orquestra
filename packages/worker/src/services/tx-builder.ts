@@ -8,9 +8,29 @@
  * `VersionedTransaction.deserialize` will not work on these bytes until a v0 builder exists.
  */
 
-import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType, CodamaIDL, CodamaTypeNode, CodamaInstructionArgument, CodamaValueNode } from './idl-parser'
+import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType, AnchorError, CodamaIDL, CodamaTypeNode, CodamaInstructionArgument, CodamaValueNode } from './idl-parser'
 import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField, getIDLProgramName, detectIDLFormat, getCodamaInstruction, getCodamaDiscriminatorBytes, getCodamaUserArgs } from './idl-parser'
 import type { ResolvedCluster } from '../utils/solana-rpc'
+
+export type RiskLevel = 'low' | 'medium' | 'high'
+
+export interface DecodedAnchorError {
+  code: number
+  name: string
+  msg: string
+}
+
+export interface SimulationResult {
+  success: boolean
+  /** Compute units consumed during simulation, if returned by the RPC. */
+  computeUnits: number | null
+  logs: string[]
+  err: unknown | null
+  /** Set when err matched an Anchor error code via the IDL `errors[]` table. */
+  decodedError: DecodedAnchorError | null
+  /** Echoed for traceability — same shape as build_instruction. */
+  build: BuildTransactionResponse
+}
 
 export interface BuildTransactionRequest {
   accounts: Record<string, string>  // account name -> public key (base58)
@@ -50,6 +70,16 @@ export interface BuildTransactionResponse {
   /** Set when `simulate: true` was requested. Null err means simulation succeeded at RPC preflight. */
   simulationError: unknown | null
   simulationLogs: string[] | null
+  /**
+   * Heuristic risk assessment for the instruction. `high` when a writable signer is mutated
+   * or when the instruction touches transfer-shaped fields. Used by signer flows for the
+   * approval summary required by SKILLS.md.
+   */
+  riskLevel: RiskLevel
+  /** Reasons the heuristic produced its riskLevel. Useful for showing the user "why". */
+  riskReasons: string[]
+  /** Anchor `errors[]` decoded from preflight simulation logs, when applicable. */
+  decodedError: DecodedAnchorError | null
 }
 
 export interface AccountInfo {
@@ -321,6 +351,128 @@ function encodeCodamaArgs(
   return new Uint8Array(buffers)
 }
 
+// ─── Risk + Anchor error helpers ──────────────────────────────────────────────
+
+/**
+ * Heuristic risk score for an instruction call, based on IDL metadata + the
+ * caller-supplied accounts/args. Pure function — same input → same output.
+ *
+ * - `high`: a writable signer is being mutated, or transfer-shaped args present.
+ * - `medium`: any writable account besides the fee payer.
+ * - `low`: read-only or no writable accounts.
+ */
+function assessRiskLevelAnchor(
+  instruction: AnchorInstruction,
+  accounts: Record<string, string>,
+  args: Record<string, any>,
+): { level: RiskLevel; reasons: string[] } {
+  const reasons: string[] = []
+  let level: RiskLevel = 'low'
+
+  const writableSigners = instruction.accounts.filter((a) => {
+    const n = normalizeAccountMeta(a)
+    return n.isMut && n.isSigner
+  })
+  if (writableSigners.length > 0) {
+    level = 'high'
+    reasons.push(
+      `${writableSigners.length} writable signer(s): ${writableSigners.map((a) => a.name).join(', ')}`,
+    )
+  }
+
+  const writables = instruction.accounts.filter((a) => normalizeAccountMeta(a).isMut)
+  if (level !== 'high' && writables.length > 0) {
+    level = 'medium'
+    reasons.push(`${writables.length} writable account(s)`)
+  }
+
+  const transferKeywords = /(transfer|withdraw|deposit|mint|burn|stake|unstake|swap|close|fund)/i
+  if (transferKeywords.test(instruction.name)) {
+    level = 'high'
+    reasons.push(`instruction name "${instruction.name}" matches value-transfer keyword`)
+  }
+  for (const k of Object.keys(args || {})) {
+    if (/(amount|lamports|sol|usd|value)/i.test(k)) {
+      reasons.push(`arg "${k}" looks like a value/amount`)
+      if (level === 'low') level = 'medium'
+    }
+  }
+
+  // No writables at all → low confidence read-only.
+  if (reasons.length === 0) reasons.push('no writable accounts and no value-transfer keywords')
+
+  return { level, reasons }
+}
+
+function assessRiskLevelCodama(
+  instructionName: string,
+  accounts: Array<{ name: string; isWritable: boolean; isSigner: boolean | 'either' | undefined }>,
+  args: Record<string, any>,
+): { level: RiskLevel; reasons: string[] } {
+  const reasons: string[] = []
+  let level: RiskLevel = 'low'
+  const writableSigners = accounts.filter((a) => a.isWritable && (a.isSigner === true || a.isSigner === 'either'))
+  if (writableSigners.length > 0) {
+    level = 'high'
+    reasons.push(`${writableSigners.length} writable signer(s): ${writableSigners.map((a) => a.name).join(', ')}`)
+  }
+  const writables = accounts.filter((a) => a.isWritable)
+  if (level !== 'high' && writables.length > 0) {
+    level = 'medium'
+    reasons.push(`${writables.length} writable account(s)`)
+  }
+  if (/(transfer|withdraw|deposit|mint|burn|stake|unstake|swap|close|fund)/i.test(instructionName)) {
+    level = 'high'
+    reasons.push(`instruction name "${instructionName}" matches value-transfer keyword`)
+  }
+  for (const k of Object.keys(args || {})) {
+    if (/(amount|lamports|sol|usd|value)/i.test(k)) {
+      reasons.push(`arg "${k}" looks like a value/amount`)
+      if (level === 'low') level = 'medium'
+    }
+  }
+  if (reasons.length === 0) reasons.push('no writable accounts and no value-transfer keywords')
+  return { level, reasons }
+}
+
+/**
+ * Match `Custom program error: 0x<hex>` (and Anchor's `Error Number: <decimal>`)
+ * patterns in simulation logs against the IDL `errors[]` table.
+ */
+export function decodeAnchorErrorFromLogs(
+  logs: string[] | null | undefined,
+  errors: AnchorError[] | undefined,
+): DecodedAnchorError | null {
+  if (!logs || !errors || errors.length === 0) return null
+  const codes: number[] = []
+  for (const line of logs) {
+    const hex = line.match(/custom program error:\s*0x([0-9a-fA-F]+)/i)
+    if (hex && hex[1]) codes.push(parseInt(hex[1], 16))
+    const dec = line.match(/Error\s+Number:\s*(\d+)/i)
+    if (dec && dec[1]) codes.push(parseInt(dec[1], 10))
+    const anchorMsg = line.match(/AnchorError\b.*?Error Code:\s*([A-Za-z0-9_]+)/)
+    if (anchorMsg && anchorMsg[1]) {
+      const named = errors.find((e) => e.name === anchorMsg[1])
+      if (named) return { code: named.code, name: named.name, msg: named.msg }
+    }
+  }
+  for (const c of codes) {
+    const found = errors.find((e) => e.code === c)
+    if (found) return { code: found.code, name: found.name, msg: found.msg }
+  }
+  return null
+}
+
+/** Extract `Program X consumed N of M compute units` from logs. */
+export function extractComputeUnits(logs: string[] | null | undefined): number | null {
+  if (!logs) return null
+  for (const line of logs) {
+    const m = line.match(/consumed\s+(\d+)\s+of\s+\d+\s+compute units/)
+    if (m && m[1]) return parseInt(m[1], 10)
+  }
+  return null
+}
+
 // ─── Codama native tx builder ─────────────────────────────────────────────────
 
 async function buildCodamaTx(
@@ -420,6 +572,12 @@ async function buildCodamaTx(
     simulationLogs = sim.logs
   }
 
+  const codamaRisk = assessRiskLevelCodama(
+    instructionName,
+    instruction.accounts.map((a: any) => ({ name: a.name, isWritable: a.isWritable, isSigner: a.isSigner })),
+    request.args || {},
+  )
+
   return {
     transaction: txBase58,
     serializedTransaction,
@@ -436,6 +594,9 @@ async function buildCodamaTx(
     wireFormat: 'legacy',
     simulationError,
     simulationLogs,
+    riskLevel: codamaRisk.level,
+    riskReasons: codamaRisk.reasons,
+    decodedError: null, // Codama IDLs don't surface Anchor-style errors[]
   }
 }
 
@@ -555,6 +716,11 @@ export async function buildTransaction(
     simulationLogs = sim.logs
   }
 
+  const anchorRisk = assessRiskLevelAnchor(instruction, request.accounts || {}, request.args || {})
+  const decodedError = simulationError
+    ? decodeAnchorErrorFromLogs(simulationLogs, anchorIdl.errors)
+    : null
+
   return {
     transaction: txBase58,
     serializedTransaction,
@@ -576,6 +742,46 @@ export async function buildTransaction(
     wireFormat: 'legacy',
     simulationError,
     simulationLogs,
+    riskLevel: anchorRisk.level,
+    riskReasons: anchorRisk.reasons,
+    decodedError,
+  }
+}
+
+// ─── Standalone simulator (used by MCP simulate_instruction) ──────────────────
+
+/**
+ * Build + simulate an instruction. Reuses the same wire bytes as buildTransaction
+ * but always sets `simulate: true`, decodes Anchor errors, and extracts compute units.
+ *
+ * No-signer pre-flight: the wire bytes are unsigned and the RPC request uses
+ * `sigVerify: false` (see simulateTransactionRpc).
+ */
+export async function simulateInstruction(
+  idl: AnchorIDL | CodamaIDL,
+  instructionName: string,
+  request: BuildTransactionRequest,
+  programId: string,
+  rpcUrl: string,
+  meta: { cluster: ResolvedCluster; rpcUrlHost: string },
+): Promise<SimulationResult> {
+  const build = await buildTransaction(
+    idl,
+    instructionName,
+    { ...request, simulate: true },
+    programId,
+    rpcUrl,
+    meta,
+  )
+  const logs = build.simulationLogs ?? []
+  const computeUnits = extractComputeUnits(logs)
+  return {
+    success: build.simulationError == null,
+    computeUnits,
+    logs,
+    err: build.simulationError,
+    decodedError: build.decodedError,
+    build,
   }
 }
 

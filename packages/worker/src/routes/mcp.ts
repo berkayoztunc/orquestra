@@ -8,11 +8,12 @@
  * Tools:
  *   1. search_programs        — search the registry by text or Solana programId
  *   2. list_instructions      — list all instructions (args + accounts) for a project
- *   3. build_instruction      — build a serialized Solana transaction
+ *   3. build_instruction      — build a serialized Solana transaction (includes riskLevel + decodedError)
  *   4. list_pda_accounts      — list PDA-derivable accounts with seed schemas
  *   5. derive_pda             — derive a PDA address
  *   6. read_llms_txt          — fetch the full AI-ready markdown docs for a project
  *   7. get_ai_analysis        — get AI analysis summary (tags, description, stats)
+ *   8. simulate_instruction   — preflight an instruction against the RPC, no signing required
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -28,7 +29,7 @@ import {
   resolveCodamaType,
 } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
-import { buildTransaction } from '../services/tx-builder'
+import { buildTransaction, simulateInstruction } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData } from '../services/account-parser'
@@ -387,6 +388,7 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
           '',
           `Message: ${result.message}`,
           `Estimated fee: ${result.estimatedFee} lamports`,
+          `**Risk level:** \`${result.riskLevel}\` — ${result.riskReasons.join('; ')}`,
           ...(simulate
             ? [
                 '',
@@ -394,6 +396,11 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
                 result.simulationError != null
                   ? `\`err:\` ${JSON.stringify(result.simulationError)}`
                   : '`err:` null (success)',
+                ...(result.decodedError
+                  ? [
+                      `**Decoded Anchor error:** \`${result.decodedError.name}\` (code ${result.decodedError.code}) — ${result.decodedError.msg}`,
+                    ]
+                  : []),
                 ...(result.simulationLogs?.length
                   ? ['Logs:', ...result.simulationLogs.map((l) => `  ${l}`)]
                   : ['Logs: (none)']),
@@ -408,6 +415,89 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
         ]
 
         return { content: [{ type: 'text', text: output.join('\n') }] }
+      } catch (err: any) {
+        return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
+      }
+    },
+  )
+
+  // ── Tool 8: simulate_instruction ─────────────────────────────────────────────
+
+  server.tool(
+    'simulate_instruction',
+    'Preflight an instruction against the Solana RPC without signing. Builds the transaction internally (same as build_instruction), runs simulateTransaction with sigVerify=false, and returns success/failure, compute units, raw logs, and a decoded Anchor error (when the on-chain log matches the IDL `errors[]` table). Use this BEFORE asking the user to sign — it catches missing seeds, bad account states, and program-side guards without any wallet involvement.',
+    {
+      projectId: z.string().describe('The orquestra project ID'),
+      instruction: z.string().describe('Instruction name'),
+      accounts: z.record(z.string()).describe('Map of account name → base58 public key'),
+      args: z.record(z.unknown()).default({}).describe('Map of argument name → value'),
+      feePayer: z.string().describe('Base58 public key of the fee payer (still required for the message header even though no signature is produced)'),
+      network: z
+        .enum(['mainnet-beta', 'devnet', 'testnet'])
+        .optional()
+        .describe('Solana cluster for the simulation RPC. Defaults to mainnet-beta.'),
+      rpcUrl: z
+        .string()
+        .optional()
+        .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over `network`.'),
+    },
+    async ({ projectId, instruction, accounts, args, feePayer, network, rpcUrl }) => {
+      try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_instruction, projectId })
+        const data = await fetchIDL(projectId, env)
+        if (!data) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: `Project "${projectId}" not found or is private.` }],
+          }
+        }
+
+        const { rpcUrl: resolvedRpc, cluster } = resolveSolanaRpcUrl({
+          network: network ?? 'mainnet-beta',
+          rpcUrlOverride: rpcUrl,
+          env,
+        })
+
+        const sim = await simulateInstruction(
+          data.idl,
+          instruction,
+          {
+            accounts,
+            args: args as Record<string, any>,
+            feePayer,
+          },
+          data.programId,
+          resolvedRpc,
+          { cluster, rpcUrlHost: rpcUrlHost(resolvedRpc) },
+        )
+
+        const lines = [
+          `**Simulation: \`${instruction}\` on ${data.projectName}**`,
+          '',
+          `Result: ${sim.success ? '✅ success' : '❌ failure'}`,
+          ...(sim.computeUnits != null ? [`Compute units consumed: \`${sim.computeUnits}\``] : []),
+          `Cluster: \`${sim.build.network}\` — \`${sim.build.rpcUrlHost}\``,
+          `Risk level: \`${sim.build.riskLevel}\` — ${sim.build.riskReasons.join('; ')}`,
+          '',
+        ]
+        if (!sim.success) {
+          lines.push('**Error:**')
+          if (sim.decodedError) {
+            lines.push(
+              `Anchor: \`${sim.decodedError.name}\` (code ${sim.decodedError.code}) — ${sim.decodedError.msg}`,
+            )
+          } else {
+            lines.push(`Raw: ${JSON.stringify(sim.err)}`)
+          }
+        }
+        if (sim.logs.length > 0) {
+          lines.push('', '**RPC logs:**', ...sim.logs.map((l) => `  ${l}`))
+        }
+        if (sim.success) {
+          lines.push('', 'Next: call `build_instruction` with the same args, then sign and send.')
+        }
+
+        return { content: [{ type: 'text', text: lines.join('\n') }] }
       } catch (err: any) {
         return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
       }

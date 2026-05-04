@@ -12,10 +12,11 @@ import {
   KeyIcon,
   FileTextIcon,
   SparklesIcon,
+  ShieldCheckIcon,
 } from 'lucide-react'
 import CodeBlock from '../components/CodeBlock'
 
-type Client = 'claude' | 'cursor' | 'vscode'
+type Client = 'claude' | 'claude-code' | 'cursor' | 'vscode'
 
 const MCP_ENDPOINT = 'https://api.orquestra.dev/mcp'
 
@@ -31,6 +32,24 @@ const CLIENT_CONFIGS: Record<Client, { label: string; badge: string; filename: s
           orquestra: {
             command: 'npx',
             args: ['-y', '@modelcontextprotocol/client-streamable-http', MCP_ENDPOINT],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  },
+  'claude-code': {
+    label: 'Claude Code',
+    badge: 'CC',
+    filename: '.claude/settings.json (project) or ~/.claude/settings.json (global)',
+    hint: 'Run `/mcp` in Claude Code to confirm the orquestra server is connected. The streamable HTTP transport works with no local install.',
+    config: JSON.stringify(
+      {
+        mcpServers: {
+          orquestra: {
+            type: 'http',
+            url: MCP_ENDPOINT,
           },
         },
       },
@@ -133,6 +152,11 @@ const TOOLS = [
     icon: DatabaseIcon,
     name: 'fetch_pda_data',
     desc: 'Fetch a Solana account by address and decode its fields using the project IDL. Accepts an optional cluster param (mainnet-beta · devnet · testnet).',
+  },
+  {
+    icon: ShieldCheckIcon,
+    name: 'simulate_instruction',
+    desc: 'Preflight an instruction against the RPC without signing. Returns success/failure, compute units, and a decoded Anchor error name when a custom program error is hit. Use before signing to catch mistakes early.',
   },
 ]
 
@@ -272,6 +296,31 @@ export default function MCP(): JSX.Element {
               <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="card p-5 sm:p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <SparklesIcon className="w-4 h-4 text-secondary" />
+          <h2 className="text-lg sm:text-xl font-bold text-white">Try this prompt</h2>
+        </div>
+        <p className="text-sm text-gray-400">
+          Once the server is connected, paste either of these into your assistant.
+          The full pipeline (research → resolve → build → simulate → sign) runs inside one prompt.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4">
+            <p className="text-[11px] uppercase tracking-wider text-gray-500 font-mono mb-2">single tool call</p>
+            <p className="text-sm text-gray-200 leading-relaxed">
+              "Use orquestra to list every instruction on the Marinade program."
+            </p>
+          </div>
+          <div className="bg-surface-elevated border border-secondary/20 rounded-xl p-4">
+            <p className="text-[11px] uppercase tracking-wider text-secondary font-mono mb-2">full conductor pipeline</p>
+            <p className="text-sm text-gray-200 leading-relaxed">
+              "Stake 1 SOL with Marinade. Simulate first, then ask me before signing."
+            </p>
+          </div>
         </div>
       </div>
 

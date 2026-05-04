@@ -9,6 +9,7 @@ description: |
   - orquestra-researcher     — program discovery, docs, instruction listing
   - orquestra-pda-explorer   — PDA derivation, account resolution
   - orquestra-tx-builder     — unsigned transaction construction
+  - orquestra-simulator      — preflight against RPC, decode Anchor errors, no signing
   - orquestra-signer         — sign + send via @orquestradev/signer-mcp
 
   Examples:
@@ -51,6 +52,7 @@ run them in the correct order using the Task tool, and present a unified result.
 | `orquestra-researcher` | Find program, read docs, list instructions/PDAs | When program or instruction is unknown |
 | `orquestra-pda-explorer` | Derive PDAs, resolve all required accounts | When required account addresses are missing |
 | `orquestra-tx-builder` | Build unsigned base58 transaction | When all accounts + args are resolved |
+| `orquestra-simulator` | Preflight via simulateTransaction, decode Anchor errors | Right after tx-builder, before asking user to sign |
 | `orquestra-signer` | Sign + send, requires explicit user YES | When unsigned tx is ready and user wants to submit |
 
 ## Decision Logic
@@ -67,6 +69,12 @@ Are all required account addresses resolved?
 Does the user want to build a transaction?
   YES → invoke orquestra-tx-builder
   NO  → stop (research-only request)
+
+Did tx-builder return a wire tx?
+  YES → invoke orquestra-simulator (preflight, no signing)
+        ├── simulator success → continue to signer step
+        └── simulator failure → stop, surface decoded Anchor error to user
+                                so they can fix args/accounts before signing
 
 Does the user want to sign and send?
   YES → invoke orquestra-signer
@@ -98,6 +106,17 @@ Task: orquestra-tx-builder
 Prompt: "Program ID: <id>. Instruction: <name>. Fee payer: <pubkey>.
          Accounts: <resolved list from stage 2>.
          Arguments: <args and values>."
+```
+
+### Stage 3.5 — Preflight Simulation
+```
+Task: orquestra-simulator
+Prompt: "Project ID: <id>. Instruction: <name>. Network: <mainnet-beta/devnet>.
+         Accounts: <same map from stage 2>.
+         Args: <same args from stage 3>.
+         Fee payer: <pubkey>.
+         Run simulate_instruction and report success/failure + compute units +
+         any decoded Anchor error. STOP the pipeline if it fails."
 ```
 
 ### Stage 4 — Sign and Send

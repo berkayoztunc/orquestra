@@ -53,6 +53,20 @@
       ],
       "outputs": ["base64_unsigned_tx"]
     },
+    "orquestra-simulator": {
+      "phase": 3.5,
+      "title": "Preflight Simulation and Anchor Error Decoding",
+      "mcp": "orquestra",
+      "allowed_tools": [
+        "simulate_instruction"
+      ],
+      "must_never": [
+        "Sign or send transactions",
+        "Invent accounts, args, or fee payers",
+        "Skip the decoded Anchor error when present"
+      ],
+      "outputs": ["success", "compute_units", "decoded_anchor_error", "logs"]
+    },
     "orquestra-signer": {
       "phase": 4,
       "title": "Transaction Signing and Submission",
@@ -86,6 +100,11 @@
       "step": 3,
       "skill": "orquestra-tx-builder",
       "trigger": ["build transaction", "build instruction", "create tx", "unsigned tx"]
+    },
+    {
+      "step": 3.5,
+      "skill": "orquestra-simulator",
+      "trigger": ["simulate", "dry run", "preflight", "will this work", "decode this error"]
     },
     {
       "step": 4,

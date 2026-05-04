@@ -15,6 +15,7 @@ Machine-readable companion: see [agents/SKILLS.policy.json](./SKILLS.policy.json
 | `orquestra-researcher` | Orquestra MCP | 1 — Discovery | "find program", "what is", "list instructions", "AI analysis", "docs for" |
 | `orquestra-pda-explorer` | Orquestra MCP | 2 — Account Resolution | "derive PDA", "resolve account", "fetch PDA data", "what's in account" |
 | `orquestra-tx-builder` | Orquestra MCP | 3 — Construction | "build transaction", "build instruction", "create tx", "unsigned tx" |
+| `orquestra-simulator` | Orquestra MCP | 3.5 — Preflight | "simulate", "dry run", "preflight", "will this work", "decode this error" |
 | `orquestra-signer` | signer-mcp | 4 — Sign & Send | "sign transaction", "send tx", "submit", "sign this" |
 
 ---
@@ -103,6 +104,28 @@ Hands off to: `orquestra-signer` for signing.
 
 ---
 
+## Skill 3.5 — orquestra-simulator
+
+**MCP**: Orquestra only
+**Allowed tools**: `simulate_instruction`
+
+### Responsibilities
+- Run preflight `simulateTransaction` against the same RPC used for the build
+- Report `success`, compute units, raw RPC logs, and the decoded Anchor error when applicable
+- Echo `riskLevel` + `riskReasons` from the build response so the signer can use them in the approval summary
+
+### Must Never
+- Sign or send anything
+- Invent accounts, args, or fee payers — propagate them as-is from `orquestra-tx-builder`
+- Skip the decoded Anchor error when it is present in the response
+
+### Output Contract
+Returns: `{ success, computeUnits, logs, err, decodedError, build }`.
+Hands off to: `orquestra-signer` on success, or stops the pipeline and surfaces the decoded
+error to the user on failure.
+
+---
+
 ## Skill 4 — orquestra-signer
 
 **MCP**: signer-mcp (`@orquestradev/signer-mcp`)
@@ -143,6 +166,9 @@ User intent
     │
     ▼
 [3] orquestra-tx-builder  →  base58 unsigned transaction
+    │
+    ▼
+[3.5] orquestra-simulator →  preflight result (success | decoded Anchor error)
     │
     ▼
 [4] orquestra-signer  →  signed tx signature + explorer link

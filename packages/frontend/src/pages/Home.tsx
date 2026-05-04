@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/auth'
 import { getGitHubLoginUrl } from '../api/client'
 import CodeBlock from '../components/CodeBlock'
 import TwitterWall from '../components/TwitterWall'
+import TryItPanel from '../components/TryItPanel'
 
 const sidebarFeatures = [
   {
@@ -131,7 +132,8 @@ export default function Home(): JSX.Element {
         </div>
       </section>
 
-      
+      {/* ── Live Try-It ── */}
+      <TryItPanel />
 
       {/* ── How It Works ── */}
       <section className="max-w-6xl mx-auto px-6">

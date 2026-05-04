@@ -1,5 +1,10 @@
 import { describe, test, expect } from 'bun:test'
-import { buildTransaction, validateBuildRequest } from '../src/services/tx-builder'
+import {
+  buildTransaction,
+  validateBuildRequest,
+  decodeAnchorErrorFromLogs,
+  extractComputeUnits,
+} from '../src/services/tx-builder'
 
 async function getLegacyAnchorDiscriminatorHex(instructionName: string): Promise<string> {
   const data = new TextEncoder().encode(`global:${instructionName}`)
@@ -224,6 +229,115 @@ describe('Transaction Builder', () => {
       const expectedHex = await getLegacyAnchorDiscriminatorHex('initialize')
       expect(result.instruction.data.startsWith(expectedHex)).toBe(true)
       expect(result.instruction.data.startsWith('0102030405060708')).toBe(false)
+    })
+  })
+
+  describe('riskLevel + decodedError + compute units', () => {
+    test('writable signer + transfer keyword in instruction name → high risk', async () => {
+      const idl = {
+        name: 'risky_program',
+        version: '0.1.0',
+        instructions: [
+          {
+            name: 'transfer',
+            discriminator: [1, 2, 3, 4, 5, 6, 7, 8],
+            accounts: [
+              { name: 'from', isMut: true, isSigner: true },
+              { name: 'to', isMut: true, isSigner: false },
+            ],
+            args: [{ name: 'amount', type: 'u64' }],
+          },
+        ],
+      }
+
+      const result = await buildTransaction(
+        idl as any,
+        'transfer',
+        {
+          accounts: {
+            from: '11111111111111111111111111111111',
+            to: '22222222222222222222222222222222',
+          },
+          args: { amount: 1000 },
+          feePayer: '11111111111111111111111111111111',
+          recentBlockhash: '11111111111111111111111111111111',
+        },
+        '11111111111111111111111111111111',
+        'https://example-rpc.invalid',
+        { cluster: 'devnet', rpcUrlHost: 'example-rpc.invalid' },
+      )
+
+      expect(result.riskLevel).toBe('high')
+      expect(result.riskReasons.length).toBeGreaterThan(0)
+      expect(result.decodedError).toBeNull()
+    })
+
+    test('read-only instruction with no writable accounts → low risk', async () => {
+      const idl = {
+        name: 'view_program',
+        version: '0.1.0',
+        instructions: [
+          {
+            name: 'view',
+            discriminator: [1, 2, 3, 4, 5, 6, 7, 8],
+            accounts: [{ name: 'state', isMut: false, isSigner: false }],
+            args: [],
+          },
+        ],
+      }
+
+      const result = await buildTransaction(
+        idl as any,
+        'view',
+        {
+          accounts: { state: '11111111111111111111111111111111' },
+          args: {},
+          feePayer: '11111111111111111111111111111111',
+          recentBlockhash: '11111111111111111111111111111111',
+        },
+        '11111111111111111111111111111111',
+        'https://example-rpc.invalid',
+        { cluster: 'devnet', rpcUrlHost: 'example-rpc.invalid' },
+      )
+
+      expect(result.riskLevel).toBe('low')
+    })
+
+    test('decodeAnchorErrorFromLogs matches Custom program error: 0x<hex>', () => {
+      const logs = [
+        'Program X invoke [1]',
+        'Program log: AnchorError occurred',
+        'Program X failed: custom program error: 0x1771',
+      ]
+      const errors = [
+        { code: 6001, name: 'NotEnoughFunds', msg: 'Not enough funds in vault' },
+        { code: 6000, name: 'WrongAuthority', msg: 'Authority mismatch' },
+      ]
+      const decoded = decodeAnchorErrorFromLogs(logs, errors as any)
+      expect(decoded?.code).toBe(0x1771)
+      expect(decoded?.name).toBe('NotEnoughFunds')
+    })
+
+    test('decodeAnchorErrorFromLogs returns null for unknown codes', () => {
+      const decoded = decodeAnchorErrorFromLogs(
+        ['Program X failed: custom program error: 0xdead'],
+        [{ code: 1, name: 'A', msg: 'a' }] as any,
+      )
+      expect(decoded).toBeNull()
+    })
+
+    test('extractComputeUnits parses standard log line', () => {
+      const cu = extractComputeUnits([
+        'Program X invoke [1]',
+        'Program X consumed 12345 of 200000 compute units',
+        'Program X success',
+      ])
+      expect(cu).toBe(12345)
+    })
+
+    test('extractComputeUnits returns null when absent', () => {
+      expect(extractComputeUnits(['Program X invoke [1]', 'Program X success'])).toBeNull()
+      expect(extractComputeUnits(null)).toBeNull()
     })
   })
 })

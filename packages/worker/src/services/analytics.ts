@@ -28,6 +28,7 @@ export const MCP_TOOL = {
   read_llms_txt: 5,
   get_ai_analysis: 6,
   fetch_pda_data: 7,
+  simulate_instruction: 8,
 } as const
 
 /** Convert current UTC date to YYYYMMDD integer (e.g. 20260427) */

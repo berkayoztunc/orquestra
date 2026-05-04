@@ -17,7 +17,8 @@ each owning a distinct phase. Uses Orquestra MCP for research/building and
 | `orquestra-researcher` | 1 — Discovery | Orquestra | program name/keyword |
 | `orquestra-pda-explorer` | 2 — Account Resolution | Orquestra | missing accounts/PDAs |
 | `orquestra-tx-builder` | 3 — Construction | Orquestra | all accounts resolved |
-| `orquestra-signer` | 4 — Sign & Send | signer-mcp | base64 tx ready |
+| `orquestra-simulator` | 3.5 — Preflight | Orquestra | wire tx ready, before signing |
+| `orquestra-signer` | 4 — Sign & Send | signer-mcp | simulator passed |
 
 ## Pipeline
 
@@ -34,6 +35,9 @@ User intent
 [3] orquestra-tx-builder   →  base64 unsigned transaction
     │
     ▼
+[3.5] orquestra-simulator  →  preflight (success | decoded Anchor error)
+    │
+    ▼
 [4] orquestra-signer       →  tx signature + explorer link
 ```
 
@@ -43,8 +47,9 @@ Skip stages that are already satisfied by the user's input.
 
 ## Conductor Constraints
 
-- ONLY use Orquestra MCP tools in stages 1–3
+- ONLY use Orquestra MCP tools in stages 1–3.5
 - ONLY use signer-mcp tools in stage 4
+- DO NOT skip stage 3.5 (simulator) before signing — preflight always runs first
 - DO NOT invent account addresses, signer authorities, PDA seed values, or argument values
 - DO NOT assume PDA seeds — if a required seed is missing, ask for that exact seed
 - DO NOT proceed to the next stage if current stage has unresolved required inputs
@@ -69,6 +74,7 @@ See the individual skill files for full procedures, output formats, and constrai
 - [agents/skills/orquestra-researcher/SKILL.md](agents/skills/orquestra-researcher/SKILL.md)
 - [agents/skills/orquestra-pda-explorer/SKILL.md](agents/skills/orquestra-pda-explorer/SKILL.md)
 - [agents/skills/orquestra-tx-builder/SKILL.md](agents/skills/orquestra-tx-builder/SKILL.md)
+- [agents/skills/orquestra-simulator/SKILL.md](agents/skills/orquestra-simulator/SKILL.md)
 - [agents/skills/orquestra-signer/SKILL.md](agents/skills/orquestra-signer/SKILL.md)
 
 ## MCP Configuration

@@ -7,7 +7,7 @@ import TryItPanel from '../components/TryItPanel'
 
 const proofStats = [
   { value: '30s', label: 'IDL to hosted API' },
-  { value: '7', label: 'MCP tools for agents' },
+  { value: '9', label: 'MCP tools for agents' },
   { value: '0', label: 'client SDKs required' },
 ]
 

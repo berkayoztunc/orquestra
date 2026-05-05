@@ -35,7 +35,7 @@ export default function Explorer(): JSX.Element {
           </div>
           <div className="w-px h-10 bg-white/10" />
           <div className="text-right">
-            <p className="text-2xl font-bold text-white">7</p>
+            <p className="text-2xl font-bold text-white">9</p>
             <p className="text-xs text-gray-500">MCP Tools</p>
           </div>
           <div className="w-px h-10 bg-white/10" />

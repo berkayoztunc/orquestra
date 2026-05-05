@@ -41,22 +41,25 @@ bun run type-check      # TypeScript check
 bun run lint:fix        # lint & fix
 ```
 
-## Claude Skills
+## Claude Agents
 
-Install Orquestra-specific Claude Code skills for a better AI-assisted dev experience:
+Install Orquestra sub-agents into Claude Code for AI-driven Solana task pipelines:
 
 ```bash
-# Project-level (this repo only)
+# Current project
 bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh)
 
-# Or globally
+# Globally (all projects)
 bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh) --global
 ```
 
-Installs 3 skills:
-- `orquestra-api` — API endpoints, request/response patterns
-- `orquestra-dev` — monorepo structure, dev commands, conventions
-- `orquestra-mcp` — MCP tool reference, adding new tools, debugging
+Installs 6 agents into `.claude/agents/`:
+- `orquestra` — main orchestrator, delegates to sub-agents end-to-end
+- `orquestra-researcher` — program discovery, IDL docs, instruction listing
+- `orquestra-pda-explorer` — PDA derivation and on-chain account resolution
+- `orquestra-tx-builder` — unsigned transaction construction
+- `orquestra-simulator` — preflight + Anchor error decoding, no signing
+- `orquestra-signer` — sign + send via signer-mcp, explicit approval required
 
 ## API Overview
 

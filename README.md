@@ -41,6 +41,23 @@ bun run type-check      # TypeScript check
 bun run lint:fix        # lint & fix
 ```
 
+## Claude Skills
+
+Install Orquestra-specific Claude Code skills for a better AI-assisted dev experience:
+
+```bash
+# Project-level (this repo only)
+bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh)
+
+# Or globally
+bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh) --global
+```
+
+Installs 3 skills:
+- `orquestra-api` — API endpoints, request/response patterns
+- `orquestra-dev` — monorepo structure, dev commands, conventions
+- `orquestra-mcp` — MCP tool reference, adding new tools, debugging
+
 ## API Overview
 
 Public API base:

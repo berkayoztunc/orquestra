@@ -103,92 +103,91 @@ export default function Home(): JSX.Element {
   const [activeFeature, setActiveFeature] = useState(sidebarFeatures[0])
 
   return (
-    <div className="space-y-36">
+    <div className="space-y-24 md:space-y-36">
 
       {/* ── Hero ── */}
-      <section className="relative pt-24 pb-12 overflow-hidden">
+      <section className="relative pt-16 md:pt-24 pb-8 md:pb-12 overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/3 left-1/4 w-[700px] h-[700px] bg-primary/4 rounded-full blur-[140px]" />
-          <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-secondary/4 rounded-full blur-[120px]" />
+          <div className="absolute top-1/3 left-1/4 w-[400px] md:w-[700px] h-[400px] md:h-[700px] bg-primary/4 rounded-full blur-[100px] md:blur-[140px]" />
+          <div className="absolute bottom-0 right-1/4 w-[300px] md:w-[500px] h-[300px] md:h-[500px] bg-secondary/4 rounded-full blur-[80px] md:blur-[120px]" />
         </div>
-        <div className="relative max-w-4xl mx-auto text-center px-6">
-          <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-[1.06] tracking-tight">
-            <span className="text-white">The REST API for</span>
+        <div className="relative max-w-3xl mx-auto text-center px-5">
+          
+          <h1 className="text-4xl sm:text-5xl md:text-7xl font-bold mb-5 leading-[1.06] tracking-tight">
+            <span className="text-white">REST API for</span>
             <br />
             <span className="gradient-text">Solana programs.</span>
           </h1>
-          <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Upload your Anchor IDL. Get a production REST API, AI-ready docs, and an MCP server
-            — in 30 seconds. No backend code, no SDK, no infrastructure.
+          <p className="text-base md:text-lg text-gray-400 mb-8 max-w-xl mx-auto leading-relaxed">
+            Upload your IDL. Get a production API, AI docs, and MCP server in 30 seconds.
           </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
+          <div className="flex flex-col sm:flex-row justify-center gap-3">
             {isAuthenticated ? (
-              <Link to="/dashboard" className="btn-primary text-base px-8 py-4">Go to Dashboard</Link>
+              <Link to="/dashboard" className="btn-primary text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4">Go to Dashboard</Link>
             ) : (
-              <a href={getGitHubLoginUrl()} className="btn-primary text-base px-8 py-4">Get Started — It's Free</a>
+              <a href={getGitHubLoginUrl()} className="btn-primary text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4">Get Started — It's Free</a>
             )}
-            <Link to="/explorer" className="btn-secondary text-base px-8 py-4">Browse 1,000+ Programs</Link>
+            <Link to="/explorer" className="btn-secondary text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4">Browse Programs</Link>
           </div>
         </div>
       </section>
 
-      {/* ── Live Try-It ── */}
-      <TryItPanel />
+      
 
       {/* ── How It Works ── */}
-      <section className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+      <section className="max-w-6xl mx-auto px-5">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl md:text-4xl font-bold mb-3">
             <span className="text-white">How </span>
             <span className="gradient-text">It Works</span>
           </h2>
-          <p className="text-gray-400 max-w-2xl mx-auto">
-            From zero to a production Solana API in four steps. No backend code, no devops, no Anchor SDK on the client.
+          <p className="text-gray-400 text-sm md:text-base max-w-xl mx-auto">
+            Zero to production Solana API in four steps.
           </p>
         </div>
         <div className="relative">
           <div className="hidden md:block absolute top-8 left-[calc(12.5%+2rem)] right-[calc(12.5%+2rem)] h-px bg-gradient-to-r from-primary/10 via-primary/40 to-primary/10 pointer-events-none" />
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
             {[
               {
                 num: '1',
-                title: 'Sign In with GitHub',
-                desc: 'OAuth in one click. No passwords, no forms. Your projects are ready immediately.',
+                title: 'Sign In',
+                desc: 'GitHub OAuth in one click. No forms.',
                 accent: 'primary',
                 path: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
               },
               {
                 num: '2',
-                title: 'Upload Your IDL',
-                desc: 'Drag and drop your Anchor IDL JSON. We validate, parse, and index every instruction and type.',
+                title: 'Upload IDL',
+                desc: 'Drop your Anchor IDL. We index everything.',
                 accent: 'primary',
                 path: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12',
               },
               {
                 num: '3',
-                title: 'Build & Send Transactions',
-                desc: 'POST accounts and args, get a base58 tx back. Sign with any wallet and broadcast to Solana.',
+                title: 'Build Transactions',
+                desc: 'POST accounts + args, get base58 tx back.',
                 accent: 'primary',
                 path: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8',
               },
               {
                 num: '4',
-                title: 'Connect Your AI Agent',
-                desc: 'Add the MCP endpoint to Claude, Cursor, or Copilot. Your agent can now build Solana transactions from prompts.',
+                title: 'Connect AI Agent',
+                desc: 'One MCP config gives Claude full access.',
                 accent: 'secondary',
                 path: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
               },
             ].map(({ num, title, desc, accent, path }) => (
-              <div key={num} className="flex flex-col items-center text-center group">
-                <div className={`relative w-16 h-16 rounded-2xl bg-surface-elevated border border-${accent}/25 flex items-center justify-center mb-5 z-10 group-hover:border-${accent}/60 group-hover:bg-${accent}/10 transition-all duration-300`}>
-                  <svg className={`w-7 h-7 text-${accent}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div key={num} className="flex flex-col items-center text-center group p-4">
+                <div className={`relative w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-surface-elevated border border-${accent}/25 flex items-center justify-center mb-4 z-10 group-hover:border-${accent}/60 group-hover:bg-${accent}/10 transition-all duration-300`}>
+                  <svg className={`w-5 h-5 md:w-7 md:h-7 text-${accent}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={path} />
                   </svg>
                   <span className={`absolute -top-2 -right-2 w-5 h-5 rounded-full bg-${accent} text-dark-900 text-xs font-bold flex items-center justify-center`}>
                     {num}
                   </span>
                 </div>
-                <h4 className="font-bold text-white mb-2 text-sm">{title}</h4>
+                <h4 className="font-bold text-white mb-1.5 text-xs md:text-sm">{title}</h4>
                 <p className="text-xs text-gray-400 leading-relaxed">{desc}</p>
               </div>
             ))}
@@ -196,22 +195,40 @@ export default function Home(): JSX.Element {
         </div>
       </section>
 
+      {/* ── Live Try-It ── */}
+      <TryItPanel />
       {/* ── Sidebar feature section ── */}
-      <section className="max-w-6xl mx-auto px-6">
-        <div className="mb-16 max-w-2xl">
-          <h2 className="text-3xl md:text-4xl font-bold mb-5 leading-tight">
-            <span className="text-white">An API platform built for </span>
+      <section className="max-w-6xl mx-auto px-5">
+        <div className="mb-10 md:mb-14 max-w-2xl">
+          <h2 className="text-2xl md:text-4xl font-bold mb-4 leading-tight">
+            <span className="text-white">Built for </span>
             <span className="gradient-text">Solana developers.</span>
           </h2>
-          <p className="text-gray-400 leading-relaxed text-lg">
-            Orquestra has opinions on everything — serialization, discriminators, PDA derivation, and
-            documentation. Fewer decisions for you. Less code to ship.
+          <p className="text-gray-400 leading-relaxed text-sm md:text-base">
+            Opinions on serialization, discriminators, PDA derivation, and docs. Fewer decisions. Less code.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-[220px_1fr] gap-12 items-start">
-          {/* Left — vertical nav */}
-          <nav className="flex flex-col md:sticky md:top-24">
+        {/* Mobile: tab pills. Desktop: sidebar nav */}
+        <div className="flex gap-2 overflow-x-auto pb-2 md:hidden no-scrollbar mb-6">
+          {sidebarFeatures.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setActiveFeature(f)}
+              className={`flex-shrink-0 text-xs font-medium px-3.5 py-2 rounded-full transition-all duration-200 ${
+                activeFeature.id === f.id
+                  ? 'text-white bg-surface-card border border-white/10'
+                  : 'text-gray-500 bg-surface-elevated border border-white/5'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid md:grid-cols-[200px_minmax(0,1fr)] gap-8 md:gap-12 items-start">
+          {/* Left — vertical nav (desktop only) */}
+          <nav className="hidden md:flex flex-col md:sticky md:top-24">
             {sidebarFeatures.map((f) => (
               <button
                 key={f.id}
@@ -238,20 +255,20 @@ export default function Home(): JSX.Element {
           </nav>
 
           {/* Right — content */}
-          <div className="space-y-7">
+          <div className="space-y-5 md:space-y-7 min-w-0">
             <div>
-              <h3 className="text-2xl font-bold text-white mb-3 leading-snug">{activeFeature.heading}</h3>
-              <p className="text-gray-400 leading-relaxed">{activeFeature.desc}</p>
+              <h3 className="text-xl md:text-2xl font-bold text-white mb-2.5 leading-snug">{activeFeature.heading}</h3>
+              <p className="text-gray-400 leading-relaxed text-sm md:text-base">{activeFeature.desc}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {activeFeature.bullets.map((b) => (
-                <span key={b} className="flex items-center gap-1.5 text-sm text-gray-300 bg-surface-elevated border border-white/5 rounded-lg px-3 py-1.5">
+                <span key={b} className="flex items-center gap-1.5 text-xs md:text-sm text-gray-300 bg-surface-elevated border border-white/5 rounded-lg px-3 py-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
                   {b}
                 </span>
               ))}
             </div>
-            <div className="rounded-2xl overflow-hidden border border-white/5">
+            <div className="min-w-0">
               <CodeBlock language={activeFeature.language} code={activeFeature.code} copyable={false} />
             </div>
           </div>
@@ -259,36 +276,25 @@ export default function Home(): JSX.Element {
       </section>
 
       {/* ── Editorial section A: Transaction Builder ── */}
-      <section className="max-w-6xl mx-auto px-6">
-        <div className="grid md:grid-cols-2 gap-16 md:gap-20 items-center">
+      <section className="max-w-6xl mx-auto px-5">
+        <div className="grid md:grid-cols-2 gap-10 md:gap-20 items-center">
           {/* Copy */}
-          <div className="space-y-8">
+          <div className="space-y-6 md:space-y-8 min-w-0">
             <p className="text-xs text-primary font-bold uppercase tracking-[0.15em]">Transaction Builder</p>
-            <h2 className="text-3xl md:text-4xl font-bold leading-tight">
-              <span className="text-white">Build transactions<br />from </span>
+            <h2 className="text-2xl md:text-4xl font-bold leading-tight">
+              <span className="text-white">Build transactions from </span>
               <span className="gradient-text">any language.</span>
             </h2>
-            <p className="text-gray-400 leading-relaxed text-[15px]">
-              No Solana SDK. No Borsh library. No bundler pain. POST accounts and arguments
-              — Orquestra handles serialization, computes the Anchor discriminator, and returns
-              a base58-encoded transaction ready for any wallet to sign and broadcast.
+            <p className="text-gray-400 leading-relaxed text-sm md:text-[15px]">
+              No SDK. No Borsh. POST accounts and args — Orquestra serializes, computes discriminators, returns a base58 tx.
             </p>
-            <ul className="space-y-5">
+            <ul className="space-y-4">
               {[
-                {
-                  title: 'Language agnostic',
-                  desc: 'Works with curl, Python, Go, Rust, Swift — anything that can POST JSON.',
-                },
-                {
-                  title: 'No SDK on the client',
-                  desc: 'The full transaction is built server-side. Zero Solana tooling needed in your app.',
-                },
-                {
-                  title: 'Mobile & IoT ready',
-                  desc: 'Perfect for React Native, MicroPython, or any embedded device on the network.',
-                },
+                { title: 'Language agnostic', desc: 'curl, Python, Go, Swift — anything that POSTs JSON.' },
+                { title: 'No SDK on the client', desc: 'Full transaction built server-side. Zero Solana tooling.' },
+                { title: 'Mobile & IoT ready', desc: 'React Native, MicroPython, any embedded device.' },
               ].map(({ title, desc }) => (
-                <li key={title} className="flex items-start gap-4">
+                <li key={title} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full border border-primary/40 bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -296,7 +302,7 @@ export default function Home(): JSX.Element {
                   </div>
                   <div>
                     <p className="text-white text-sm font-semibold mb-0.5">{title}</p>
-                    <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+                    <p className="text-gray-500 text-xs md:text-sm leading-relaxed">{desc}</p>
                   </div>
                 </li>
               ))}
@@ -308,19 +314,20 @@ export default function Home(): JSX.Element {
           </div>
 
           {/* Visual */}
-          <div className="rounded-2xl overflow-hidden border border-white/5 bg-surface-elevated">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
+          <div className="rounded-xl md:rounded-2xl overflow-hidden border border-white/5 bg-surface-elevated min-w-0">
+            <div className="flex items-center gap-2 px-4 md:px-5 py-3 md:py-4 border-b border-white/5">
               <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/40" />
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
+                <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-red-500/40" />
+                <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-yellow-500/40" />
+                <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-green-500/40" />
               </div>
               <span className="text-xs text-gray-600 font-mono ml-2">build.sh</span>
             </div>
-            <CodeBlock
-              language="bash"
-              copyable={false}
-              code={`curl -X POST https://api.orquestra.dev/v1/projects/marinade/instructions/deposit \\
+            <div className="text-xs md:text-sm overflow-x-auto">
+              <CodeBlock
+                language="bash"
+                copyable={false}
+                code={`curl -X POST https://api.orquestra.dev/v1/projects/marinade/instructions/deposit \\
   -H "X-API-Key: orq_live_xxxx" \\
   -d '{
     "accounts": {
@@ -334,31 +341,33 @@ export default function Home(): JSX.Element {
 {
   "transaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA..."
 }`}
-            />
+              />
+            </div>
           </div>
         </div>
       </section>
 
       {/* ── Editorial section B: AI Agents (reversed) ── */}
-      <section className="max-w-6xl mx-auto px-6">
-        <div className="grid md:grid-cols-2 gap-16 md:gap-20 items-center">
-          {/* Visual — left */}
-          <div className="order-2 md:order-1 rounded-2xl overflow-hidden border border-white/5 bg-surface-elevated">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+      <section className="max-w-6xl mx-auto px-5">
+        <div className="grid md:grid-cols-2 gap-10 md:gap-20 items-center">
+          {/* Visual — first on mobile, left on desktop */}
+          <div className="rounded-xl md:rounded-2xl overflow-hidden border border-white/5 bg-surface-elevated md:order-1 min-w-0">
+            <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-white/5">
               <div className="flex items-center gap-2">
                 <div className="flex gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/40" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
+                  <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-red-500/40" />
+                  <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-yellow-500/40" />
+                  <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-green-500/40" />
                 </div>
-                <span className="text-xs text-gray-600 font-mono ml-2">claude_desktop_config.json</span>
+                <span className="text-xs text-gray-600 font-mono ml-1">claude_desktop_config.json</span>
               </div>
               <span className="text-[10px] bg-secondary/10 text-secondary border border-secondary/20 rounded px-2 py-0.5 font-medium">MCP</span>
             </div>
-            <CodeBlock
-              language="json"
-              copyable={false}
-              code={`{
+            <div className="text-xs md:text-sm">
+              <CodeBlock
+                language="json"
+                copyable={false}
+                code={`{
   "mcpServers": {
     "orquestra": {
       "command": "npx",
@@ -370,8 +379,9 @@ export default function Home(): JSX.Element {
     }
   }
 }`}
-            />
-            <div className="border-t border-white/5 px-5 py-4 bg-surface/50 space-y-2">
+              />
+            </div>
+            <div className="border-t border-white/5 px-4 md:px-5 py-3 md:py-4 bg-surface/50 space-y-2">
               <p className="text-xs text-gray-500 italic">
                 "Build a deposit instruction for Marinade with 1 SOL for wallet 9xTy…"
               </p>
@@ -384,30 +394,28 @@ export default function Home(): JSX.Element {
             </div>
           </div>
 
-          {/* Copy — right */}
-          <div className="space-y-8 order-1 md:order-2">
+          {/* Copy — second on mobile, right on desktop */}
+          <div className="space-y-6 md:space-y-8 md:order-2 min-w-0">
             <p className="text-xs text-secondary font-bold uppercase tracking-[0.15em]">Model Context Protocol</p>
-            <h2 className="text-3xl md:text-4xl font-bold leading-tight">
-              <span className="text-white">AI agents can talk to </span>
+            <h2 className="text-2xl md:text-4xl font-bold leading-tight">
+              <span className="text-white">AI agents talk to </span>
               <span className="gradient-text">Solana programs.</span>
             </h2>
-            <p className="text-gray-400 leading-relaxed text-[15px]">
-              Add one JSON block to your Claude or Cursor config. Your AI agent instantly gets
-              access to 1,000+ Solana programs — it can search by name, build signed-ready
-              transactions, and derive PDAs from plain English prompts.
+            <p className="text-gray-400 leading-relaxed text-sm md:text-[15px]">
+              One JSON config block. 1,000+ Solana programs accessible to Claude, Cursor, or Copilot — search, build transactions, derive PDAs from plain English.
             </p>
-            <ul className="space-y-4">
+            <ul className="space-y-3 md:space-y-4">
               {[
-                { fn: 'search_programs', desc: 'Find any Solana program by name, address, or category.' },
-                { fn: 'build_instruction', desc: 'Build a base58 transaction from a natural language prompt.' },
-                { fn: 'derive_pda', desc: 'Compute program-derived addresses from seed values.' },
-                { fn: 'fetch_pda_data', desc: 'Read on-chain account data, deserialized against the IDL.' },
+                { fn: 'search_programs', desc: 'Find any program by name, address, or category.' },
+                { fn: 'build_instruction', desc: 'Build a base58 tx from a natural language prompt.' },
+                { fn: 'derive_pda', desc: 'Compute PDAs from seed values.' },
+                { fn: 'fetch_pda_data', desc: 'Read on-chain account data via IDL.' },
               ].map(({ fn, desc }) => (
                 <li key={fn} className="flex items-start gap-3">
-                  <code className="text-xs bg-surface-elevated border border-secondary/20 text-secondary px-2.5 py-1 rounded-lg font-mono flex-shrink-0 mt-0.5">
+                  <code className="text-[10px] md:text-xs bg-surface-elevated border border-secondary/20 text-secondary px-2 md:px-2.5 py-1 rounded-lg font-mono flex-shrink-0 mt-0.5">
                     {fn}
                   </code>
-                  <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+                  <p className="text-gray-500 text-xs md:text-sm leading-relaxed">{desc}</p>
                 </li>
               ))}
             </ul>
@@ -420,36 +428,25 @@ export default function Home(): JSX.Element {
       </section>
 
       {/* ── Editorial section C: Auto Docs ── */}
-      <section className="max-w-6xl mx-auto px-6">
-        <div className="grid md:grid-cols-2 gap-16 md:gap-20 items-center">
+      <section className="max-w-6xl mx-auto px-5">
+        <div className="grid md:grid-cols-2 gap-10 md:gap-20 items-center">
           {/* Copy */}
-          <div className="space-y-8">
+          <div className="space-y-6 md:space-y-8 min-w-0">
             <p className="text-xs text-primary font-bold uppercase tracking-[0.15em]">Documentation</p>
-            <h2 className="text-3xl md:text-4xl font-bold leading-tight">
-              <span className="text-white">Documentation that </span>
-              <span className="gradient-text">writes itself.</span>
+            <h2 className="text-2xl md:text-4xl font-bold leading-tight">
+              <span className="text-white">Docs that </span>
+              <span className="gradient-text">write themselves.</span>
             </h2>
-            <p className="text-gray-400 leading-relaxed text-[15px]">
-              Every IDL you upload gets full Markdown documentation, automatically generated and
-              kept in sync. Structured for LLM context windows — paste it straight into Claude,
-              Cursor, or any AI tool. No manual writing, no reformatting.
+            <p className="text-gray-400 leading-relaxed text-sm md:text-[15px]">
+              Every IDL gets full Markdown docs, auto-generated and kept in sync. Structured for LLM context windows — paste straight into Claude or Cursor.
             </p>
-            <ul className="space-y-5">
+            <ul className="space-y-4">
               {[
-                {
-                  title: 'Always in sync',
-                  desc: 'Regenerated every time your IDL changes. Zero manual effort required.',
-                },
-                {
-                  title: 'LLM-optimized format',
-                  desc: 'Structured tables, clear type descriptions, usage examples — tuned for AI context.',
-                },
-                {
-                  title: 'REST + MCP accessible',
-                  desc: 'Fetch docs via the REST API or let your agent read them directly via MCP.',
-                },
+                { title: 'Always in sync', desc: 'Regenerated on every IDL change. Zero manual effort.' },
+                { title: 'LLM-optimized', desc: 'Tables, type descriptions, examples — tuned for AI context.' },
+                { title: 'REST + MCP accessible', desc: 'Fetch via REST or let your agent read via MCP.' },
               ].map(({ title, desc }) => (
-                <li key={title} className="flex items-start gap-4">
+                <li key={title} className="flex items-start gap-3">
                   <div className="w-5 h-5 rounded-full border border-primary/40 bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -457,43 +454,43 @@ export default function Home(): JSX.Element {
                   </div>
                   <div>
                     <p className="text-white text-sm font-semibold mb-0.5">{title}</p>
-                    <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+                    <p className="text-gray-500 text-xs md:text-sm leading-relaxed">{desc}</p>
                   </div>
                 </li>
               ))}
             </ul>
             <Link to="/explorer" className="inline-flex items-center gap-2 text-sm text-primary font-medium group">
-              <span>See documentation examples</span>
+              <span>See examples</span>
               <span className="transition-transform group-hover:translate-x-1">→</span>
             </Link>
           </div>
 
           {/* Visual — docs preview */}
-          <div className="rounded-2xl overflow-hidden border border-white/5 bg-surface-elevated">
-            <div className="flex items-center gap-2 px-5 py-4 border-b border-white/5">
+          <div className="rounded-xl md:rounded-2xl overflow-hidden border border-white/5 bg-surface-elevated min-w-0">
+            <div className="flex items-center gap-2 px-4 md:px-5 py-3 md:py-4 border-b border-white/5">
               <div className="flex gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500/40" />
-                <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/40" />
-                <div className="w-2.5 h-2.5 rounded-full bg-green-500/40" />
+                <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-red-500/40" />
+                <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-yellow-500/40" />
+                <div className="w-2 h-2 md:w-2.5 md:h-2.5 rounded-full bg-green-500/40" />
               </div>
               <span className="text-xs text-gray-600 font-mono ml-2">marinade_finance.md</span>
             </div>
-            <div className="p-6 space-y-5 font-mono text-xs">
+            <div className="p-4 md:p-6 space-y-4 md:space-y-5 font-mono text-xs">
               <div>
-                <p className="text-primary font-bold text-sm"># deposit</p>
-                <p className="text-gray-500 mt-1.5 font-sans text-sm">
+                <p className="text-primary font-bold"># deposit</p>
+                <p className="text-gray-500 mt-1 font-sans text-xs">
                   Deposit SOL and receive mSOL (liquid staking token).
                 </p>
               </div>
               <div>
-                <p className="text-gray-300 font-bold mb-2">## Accounts</p>
+                <p className="text-gray-300 font-bold mb-2 text-xs">## Accounts</p>
                 <div className="rounded-lg overflow-hidden border border-white/5">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-[10px] md:text-xs">
                     <thead className="bg-surface">
                       <tr>
-                        <th className="text-left px-3 py-2 text-gray-500 font-medium">Name</th>
-                        <th className="text-left px-3 py-2 text-gray-500 font-medium">Type</th>
-                        <th className="text-left px-3 py-2 text-gray-500 font-medium">Description</th>
+                        <th className="text-left px-2 md:px-3 py-1.5 md:py-2 text-gray-500 font-medium">Name</th>
+                        <th className="text-left px-2 md:px-3 py-1.5 md:py-2 text-gray-500 font-medium">Type</th>
+                        <th className="text-left px-2 md:px-3 py-1.5 md:py-2 text-gray-500 font-medium hidden sm:table-cell">Description</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -504,9 +501,9 @@ export default function Home(): JSX.Element {
                         { name: 'transferFrom', type: 'signer', desc: 'User wallet' },
                       ].map((row) => (
                         <tr key={row.name} className="border-t border-white/5">
-                          <td className="px-3 py-2 text-secondary">{row.name}</td>
-                          <td className="px-3 py-2 text-primary/70">{row.type}</td>
-                          <td className="px-3 py-2 text-gray-500">{row.desc}</td>
+                          <td className="px-2 md:px-3 py-1.5 md:py-2 text-secondary">{row.name}</td>
+                          <td className="px-2 md:px-3 py-1.5 md:py-2 text-primary/70">{row.type}</td>
+                          <td className="px-2 md:px-3 py-1.5 md:py-2 text-gray-500 hidden sm:table-cell">{row.desc}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -514,8 +511,8 @@ export default function Home(): JSX.Element {
                 </div>
               </div>
               <div>
-                <p className="text-gray-300 font-bold mb-2">## Args</p>
-                <div className="bg-surface rounded-lg px-4 py-3 border border-white/5 flex items-center gap-2">
+                <p className="text-gray-300 font-bold mb-1.5 text-xs">## Args</p>
+                <div className="bg-surface rounded-lg px-3 py-2 border border-white/5 flex items-center gap-2 flex-wrap">
                   <span className="text-secondary">lamports</span>
                   <span className="text-gray-700">·</span>
                   <span className="text-primary/70">u64</span>
@@ -528,36 +525,36 @@ export default function Home(): JSX.Element {
       </section>
 
       {/* ── Social Proof ── */}
-      <div className="space-y-12">
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
+      <div className="space-y-8 md:space-y-12">
+        <div className="max-w-6xl mx-auto px-5 text-center">
+          <h2 className="text-2xl md:text-4xl font-bold mb-3">
             <span className="text-white">Trusted by </span>
             <span className="gradient-text">Solana builders</span>
           </h2>
-          <p className="text-gray-500 max-w-xl mx-auto">
-            Developers and teams building on Solana trust Orquestra to handle the hard parts.
+          <p className="text-gray-500 text-sm md:text-base max-w-xl mx-auto">
+            Developers and teams trust Orquestra to handle the hard parts.
           </p>
         </div>
         <TwitterWall />
       </div>
 
       {/* ── Final CTA ── */}
-      <section className="max-w-4xl mx-auto px-6 pb-8 text-center">
-        <h2 className="text-4xl md:text-5xl font-bold leading-tight mb-6">
+      <section className="max-w-3xl mx-auto px-5 pb-8 text-center">
+        <h2 className="text-3xl md:text-5xl font-bold leading-tight mb-5">
           <span className="text-white">Build without limits.</span>
           <br />
           <span className="gradient-text">What will you ship?</span>
         </h2>
-        <p className="text-gray-400 max-w-lg mx-auto leading-relaxed mb-10">
+        <p className="text-gray-400 max-w-sm md:max-w-lg mx-auto leading-relaxed mb-8 text-sm md:text-base">
           Upload your first IDL and have a production REST API in under 30 seconds — free, forever.
         </p>
-        <div className="flex flex-col sm:flex-row justify-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-center gap-3">
           {isAuthenticated ? (
-            <Link to="/dashboard" className="btn-primary text-base px-8 py-4">Go to Dashboard</Link>
+            <Link to="/dashboard" className="btn-primary text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4">Go to Dashboard</Link>
           ) : (
-            <a href={getGitHubLoginUrl()} className="btn-primary text-base px-8 py-4">Get Started Free</a>
+            <a href={getGitHubLoginUrl()} className="btn-primary text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4">Get Started Free</a>
           )}
-          <Link to="/explorer" className="btn-secondary text-base px-8 py-4">Explore Programs</Link>
+          <Link to="/explorer" className="btn-secondary text-sm sm:text-base px-6 sm:px-8 py-3 sm:py-4">Explore Programs</Link>
         </div>
       </section>
 

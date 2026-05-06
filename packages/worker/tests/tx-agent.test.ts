@@ -143,7 +143,8 @@ describe('tx-agent state machine', () => {
     })
 
     expect(response.state.projectId).toBe('ns6v9lmws7pakpl1itfma')
-    expect(response.message).toContain('Which instruction')
+    expect(response.state.instruction).toBe('increment')
+    expect(response.message).toContain('please provide')
   })
 
   test('autofills signer accounts from fee payer and derives PDA accounts', async () => {

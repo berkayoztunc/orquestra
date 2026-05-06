@@ -228,6 +228,9 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
   if (!state.instruction) {
     state.instruction = inferInstructionName(project.idl, [request.message, state.query].filter(Boolean).join(' '))
   }
+  if (!state.instruction) {
+    state.instruction = chooseDefaultInstruction(project.idl)
+  }
   const instruction = state.instruction ? getInstruction(project.idl, state.instruction) : undefined
   if (!instruction) {
     return {
@@ -243,6 +246,7 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
 
   state.instruction = instruction.name
   const schema = buildInstructionSchema(project.idl, instruction)
+  autofillStaticAccounts(instruction, state)
   autofillSignerAccounts(instruction, state)
   await deriveAvailablePdas(project, instruction, state)
   const missingFields = findMissingFields(project.idl, instruction, state)
@@ -436,16 +440,9 @@ async function resolveProject(
       if (candidates.length >= 5) break
     }
 
-    if (candidates.length === 1) {
+    if (candidates.length > 0) {
       const project = await fetchProjectIDL(db, kv, candidates[0].projectId)
       if (project) return { type: 'resolved', project }
-    }
-    if (candidates.length > 0) {
-      return {
-        type: 'needs_input',
-        message: `I found ${candidates.length} matching programs. Say "use ${candidates[0].projectId}" or paste the program ID to continue.`,
-        candidates,
-      }
     }
 
     return {
@@ -628,6 +625,34 @@ function inferInstructionName(idl: AnchorIDL, text: string): string | undefined 
   })?.name
 }
 
+function chooseDefaultInstruction(idl: AnchorIDL): string | undefined {
+  if (idl.instructions.length === 0) return undefined
+  if (idl.instructions.length === 1) return idl.instructions[0].name
+
+  const nonSetup = idl.instructions.find((instruction) => {
+    const name = instruction.name.toLowerCase()
+    return !['initialize', 'init', 'create', 'setup'].includes(name)
+  })
+  return nonSetup?.name ?? idl.instructions[0].name
+}
+
+function autofillStaticAccounts(instruction: AnchorInstruction, state: TxAgentState): void {
+  for (const account of instruction.accounts as any[]) {
+    const normalized = normalizeAccountMeta(account)
+    if (state.accounts?.[normalized.name]) continue
+
+    const staticAddress = typeof account.address === 'string'
+      ? account.address
+      : COMMON_ACCOUNT_ADDRESSES[normalized.name.toLowerCase()]
+
+    if (!staticAddress) continue
+    state.accounts = {
+      ...(state.accounts ?? {}),
+      [normalized.name]: staticAddress,
+    }
+  }
+}
+
 function autofillSignerAccounts(instruction: AnchorInstruction, state: TxAgentState): void {
   if (!state.feePayer) return
   for (const account of instruction.accounts) {
@@ -639,6 +664,22 @@ function autofillSignerAccounts(instruction: AnchorInstruction, state: TxAgentSt
     }
   }
 }
+
+const COMMON_ACCOUNT_ADDRESSES: Record<string, string> = {
+  systemprogram: '11111111111111111111111111111111',
+  system_program: '11111111111111111111111111111111',
+  tokenprogram: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  token_program: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  spltokenprogram: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  associatedtokenprogram: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+  associated_token_program: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+  ataprogram: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
+  rent: 'SysvarRent111111111111111111111111111111111',
+  sysvarrent: 'SysvarRent111111111111111111111111111111111',
+  clock: 'SysvarC1ock11111111111111111111111111111111',
+  sysvarclock: 'SysvarC1ock11111111111111111111111111111111',
+}
+
 
 function findMissingFields(
   idl: AnchorIDL,

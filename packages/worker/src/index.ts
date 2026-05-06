@@ -23,6 +23,7 @@ import ingestRoutes from './routes/ingest'
 import aiRoutes from './routes/ai'
 import adminRoutes from './routes/admin'
 import discoveryRoutes from './routes/discovery'
+import listsRoutes from './routes/lists'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -62,7 +63,7 @@ app.use(
       ]
       return corsOrigins.includes(origin) ? origin : corsOrigins[0]
     },
-    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Scope-Key'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -80,6 +81,7 @@ app.route('/api/idl', idlRoutes)
 app.route('/api/ingest', ingestRoutes)
 app.route('/api/admin', adminRoutes)
 app.route('/api', aiRoutes)
+app.route('/api/lists', listsRoutes)
 app.route('/api', apiRoutes)
 
 // 404 handler

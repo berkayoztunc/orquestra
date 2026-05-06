@@ -101,7 +101,7 @@ async function fetchIDL(
 
 // ── MCP server factory ────────────────────────────────────────────────────────
 
-function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
+function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): McpServer {
   const server = new McpServer({ name: 'orquestra', version: '1.0.0' })
 
   // ── Tool 1: search_programs ──────────────────────────────────────────────────
@@ -133,41 +133,97 @@ function createServer(env: Bindings, ctx: ExecutionContext): McpServer {
         const db = env.DB
         let results: any[] = []
 
+        // ── Scope key resolution ────────────────────────────────────────────
+        // If a scope key was provided in the X-Scope-Key header, restrict
+        // results to programs that belong to that list.
+        let scopeListId: string | null = null
+        if (scopeKey) {
+          const scopeRow = await db
+            ?.prepare('SELECT id FROM program_lists WHERE scope_key = ?')
+            .bind(scopeKey)
+            .first()
+          if (!scopeRow) {
+            return {
+              isError: true,
+              content: [{ type: 'text', text: 'Invalid scope key. Please check your X-Scope-Key header.' }],
+            }
+          }
+          scopeListId = scopeRow.id as string
+        }
+
         if (programId) {
           // Exact lookup by program ID
-          const row = await db
-            ?.prepare(
-              `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+          const baseQuery = scopeListId
+            ? `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+               FROM projects p LEFT JOIN users u ON p.user_id = u.id
+               JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
+               WHERE p.program_id = ? AND p.is_public = 1
+               LIMIT 1`
+            : `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
                FROM projects p LEFT JOIN users u ON p.user_id = u.id
                WHERE p.program_id = ? AND p.is_public = 1
-               LIMIT 1`,
-            )
-            .bind(programId)
-            .first()
+               LIMIT 1`
+          const row = scopeListId
+            ? await db?.prepare(baseQuery).bind(scopeListId, programId).first()
+            : await db?.prepare(baseQuery).bind(programId).first()
           if (row) results = [row]
         } else if (query) {
-          // Use FTS search for text queries
-          const { results: searchResults } = await searchProjects(db, query, limit, 0)
-          results = searchResults.map((r) => ({
-            id: r.id,
-            name: r.name,
-            program_id: r.program_id,
-            description: r.description,
-            updated_at: new Date().toISOString(),
-            username: r.username,
-          }))
+          if (scopeListId) {
+            // Scoped text search — filter FTS results by list membership
+            const { results: searchResults } = await searchProjects(db, query, limit, 0)
+            const projectIds = searchResults.map((r) => r.id)
+            if (projectIds.length > 0) {
+              const placeholders = projectIds.map(() => '?').join(',')
+              const { results: scopedRows } = await db
+                ?.prepare(
+                  `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+                   FROM projects p LEFT JOIN users u ON p.user_id = u.id
+                   JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
+                   WHERE p.id IN (${placeholders}) AND p.is_public = 1`,
+                )
+                .bind(scopeListId, ...projectIds)
+                .all()
+              results = scopedRows ?? []
+            }
+          } else {
+            // Use FTS search for text queries
+            const { results: searchResults } = await searchProjects(db, query, limit, 0)
+            results = searchResults.map((r) => ({
+              id: r.id,
+              name: r.name,
+              program_id: r.program_id,
+              description: r.description,
+              updated_at: new Date().toISOString(),
+              username: r.username,
+            }))
+          }
         } else {
-          // Return recent public projects
-          const { results: rows } = await db
-            ?.prepare(
-              `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
-               FROM projects p LEFT JOIN users u ON p.user_id = u.id
-               WHERE p.is_public = 1
-               ORDER BY p.updated_at DESC LIMIT ?`,
-            )
-            .bind(limit)
-            .all()
-          results = rows ?? []
+          if (scopeListId) {
+            // Return all programs in the scoped list
+            const { results: rows } = await db
+              ?.prepare(
+                `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+                 FROM projects p LEFT JOIN users u ON p.user_id = u.id
+                 JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
+                 WHERE p.is_public = 1
+                 ORDER BY pli.added_at DESC LIMIT ?`,
+              )
+              .bind(scopeListId, limit)
+              .all()
+            results = rows ?? []
+          } else {
+            // Return recent public projects
+            const { results: rows } = await db
+              ?.prepare(
+                `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+                 FROM projects p LEFT JOIN users u ON p.user_id = u.id
+                 WHERE p.is_public = 1
+                 ORDER BY p.updated_at DESC LIMIT ?`,
+              )
+              .bind(limit)
+              .all()
+            results = rows ?? []
+          }
         }
 
         if (results.length === 0) {
@@ -933,7 +989,9 @@ export async function handleMcpRequest(
   env: Bindings,
   ctx: ExecutionContext,
 ): Promise<Response> {
-  const server = createServer(env, ctx)
+  // Read optional scope key from the X-Scope-Key header
+  const scopeKey = request.headers.get('X-Scope-Key') ?? undefined
+  const server = createServer(env, ctx, scopeKey)
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     // No sessionIdGenerator → stateless mode: no session headers, no auth requirement

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import AddToListButton from './AddToListButton'
 
 const CATEGORY_LABELS: Record<string, string> = {
   'dex-amm': 'DEX / AMM',
@@ -62,6 +63,9 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
           }`}
         >
           {project.is_public ? 'Public' : 'Private'}
+        </span>
+        <span onClick={(e) => { e.preventDefault(); e.stopPropagation() }} className="ml-2">
+          <AddToListButton projectId={project.id} />
         </span>
       </div>
 

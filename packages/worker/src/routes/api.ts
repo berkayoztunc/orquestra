@@ -22,6 +22,147 @@ function getCurrentTimestamp(): string {
   return new Date().toISOString()
 }
 
+const CUSTOM_API_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+type CustomApiMethod = (typeof CUSTOM_API_METHODS)[number]
+type CustomApiParameter = { name: string; description: string; required?: boolean }
+type CustomApiInput = {
+  name?: string
+  method?: string
+  url?: string
+  purpose?: string
+  parameters?: CustomApiParameter[]
+  exampleRequest?: string
+  responseNotes?: string
+  authNotes?: string
+}
+type CustomApiRow = {
+  id: string
+  project_id: string
+  name: string
+  method: CustomApiMethod
+  url: string
+  purpose: string
+  parameters_json: string | null
+  example_request: string | null
+  response_notes: string | null
+  auth_notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+function isAllowedCustomApiUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    if (url.protocol === 'https:') return true
+    if (url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) return true
+  } catch {
+    return false
+  }
+  return false
+}
+
+function containsLikelySecret(value: string): boolean {
+  const withoutPlaceholders = value.replace(/<[^>\n]{1,80}>/g, '<placeholder>')
+  const patterns = [
+    /\bBearer\s+(?!<placeholder>)[A-Za-z0-9._~+/=-]{24,}/i,
+    /\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*(?!<placeholder>)[A-Za-z0-9._~+/=-]{16,}/i,
+    /\bsk-[A-Za-z0-9]{20,}\b/i,
+    /\b[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/,
+  ]
+  return patterns.some((pattern) => pattern.test(withoutPlaceholders))
+}
+
+function validateCustomApiInput(body: CustomApiInput, partial = false): { ok: true; data: CustomApiInput } | { ok: false; error: string } {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, error: 'Request body must be an object' }
+  }
+
+  const requiredFields: Array<keyof CustomApiInput> = ['name', 'method', 'url', 'purpose']
+  if (!partial) {
+    for (const field of requiredFields) {
+      if (!body[field] || typeof body[field] !== 'string') {
+        return { ok: false, error: `Missing required field: ${field}` }
+      }
+    }
+  }
+
+  if (body.name !== undefined && (typeof body.name !== 'string' || body.name.trim().length === 0 || body.name.length > 120)) {
+    return { ok: false, error: 'Name is required and must be 120 characters or less' }
+  }
+  if (body.method !== undefined) {
+    if (typeof body.method !== 'string') {
+      return { ok: false, error: 'Method must be one of GET, POST, PUT, PATCH, DELETE' }
+    }
+    const method = body.method.toUpperCase()
+    if (!CUSTOM_API_METHODS.includes(method as CustomApiMethod)) {
+      return { ok: false, error: 'Method must be one of GET, POST, PUT, PATCH, DELETE' }
+    }
+    body.method = method
+  }
+  if (body.url !== undefined && (typeof body.url !== 'string' || body.url.length > 2048 || !isAllowedCustomApiUrl(body.url))) {
+    return { ok: false, error: 'URL must be https:// or local http://localhost/127.0.0.1 and 2048 characters or less' }
+  }
+  if (body.purpose !== undefined && (typeof body.purpose !== 'string' || body.purpose.trim().length === 0 || body.purpose.length > 1000)) {
+    return { ok: false, error: 'Purpose is required and must be 1000 characters or less' }
+  }
+  if (body.exampleRequest !== undefined && (typeof body.exampleRequest !== 'string' || body.exampleRequest.length > 5000)) {
+    return { ok: false, error: 'Example request must be 5000 characters or less' }
+  }
+  if (body.responseNotes !== undefined && (typeof body.responseNotes !== 'string' || body.responseNotes.length > 5000)) {
+    return { ok: false, error: 'Response notes must be 5000 characters or less' }
+  }
+  if (body.authNotes !== undefined) {
+    if (typeof body.authNotes !== 'string' || body.authNotes.length > 1000) {
+      return { ok: false, error: 'Auth notes must be 1000 characters or less' }
+    }
+    if (containsLikelySecret(body.authNotes)) {
+      return { ok: false, error: 'Auth notes must use placeholders like Bearer <API_KEY>; do not store real secrets' }
+    }
+  }
+  if (body.parameters !== undefined) {
+    if (!Array.isArray(body.parameters) || body.parameters.length > 25) {
+      return { ok: false, error: 'Parameters must be an array with at most 25 entries' }
+    }
+    for (const param of body.parameters) {
+      if (!param || typeof param.name !== 'string' || param.name.trim().length === 0 || param.name.length > 120) {
+        return { ok: false, error: 'Each parameter needs a name of 120 characters or less' }
+      }
+      if (typeof param.description !== 'string' || param.description.trim().length === 0 || param.description.length > 1000) {
+        return { ok: false, error: 'Each parameter needs a description of 1000 characters or less' }
+      }
+    }
+  }
+
+  return { ok: true, data: body }
+}
+
+function parseCustomApiParameters(value: string | null): CustomApiParameter[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function serializeCustomApiRow(row: CustomApiRow) {
+  return {
+    id: row.id,
+    project_id: row.project_id,
+    name: row.name,
+    method: row.method,
+    url: row.url,
+    purpose: row.purpose,
+    parameters: parseCustomApiParameters(row.parameters_json),
+    example_request: row.example_request,
+    response_notes: row.response_notes,
+    auth_notes: row.auth_notes,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
+}
+
 type Env = {
   Variables: Record<string, unknown>
   Bindings: {
@@ -1503,6 +1644,184 @@ app.delete('/:projectId/addresses/:addressId', authMiddleware, async (c) => {
     return c.json({ message: 'Address deleted' })
   } catch (err) {
     return c.json({ error: 'Failed to delete address' }, 500)
+  }
+})
+
+// ── External API endpoint documentation ─────────────
+
+// List owner-documented external API endpoints for a project
+app.get('/:projectId/external-apis', optionalAuthMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const userId = c.get('userId') as string | undefined
+
+  try {
+    const db = c.env?.DB
+
+    const project = await db?.prepare('SELECT id, is_public, user_id FROM projects WHERE id = ?').bind(projectId).first()
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404)
+    }
+
+    if (!project.is_public && project.user_id !== userId) {
+      return c.json({ error: 'Project not found or not public' }, 404)
+    }
+
+    const results = await db
+      ?.prepare(
+        'SELECT id, project_id, name, method, url, purpose, parameters_json, example_request, response_notes, auth_notes, created_at, updated_at FROM custom_api_endpoints WHERE project_id = ? ORDER BY created_at ASC'
+      )
+      .bind(projectId)
+      .all()
+
+    const endpoints = ((results?.results || []) as CustomApiRow[]).map(serializeCustomApiRow)
+    return c.json({ projectId, endpoints })
+  } catch (err) {
+    return c.json({ error: 'Failed to list external API endpoints' }, 500)
+  }
+})
+
+// Add external API endpoint documentation (owner only)
+app.post('/:projectId/external-apis', authMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const userId = c.get('userId') as string
+
+  try {
+    const body = await c.req.json<CustomApiInput>()
+    const validation = validateCustomApiInput(body)
+    if (!validation.ok) {
+      return c.json({ error: validation.error }, 400)
+    }
+
+    const db = c.env?.DB
+
+    const project = await db?.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+    if (!project) {
+      return c.json({ error: 'Project not found or access denied' }, 404)
+    }
+
+    const countResult = await db?.prepare('SELECT COUNT(*) as count FROM custom_api_endpoints WHERE project_id = ?').bind(projectId).first()
+    if ((countResult as any)?.count >= 50) {
+      return c.json({ error: 'Maximum of 50 external API endpoints per project' }, 400)
+    }
+
+    const endpointId = generateId()
+    const now = getCurrentTimestamp()
+    const data = validation.data
+
+    await db
+      ?.prepare(
+        'INSERT INTO custom_api_endpoints (id, project_id, name, method, url, purpose, parameters_json, example_request, response_notes, auth_notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+      .bind(
+        endpointId,
+        projectId,
+        data.name!.trim(),
+        data.method!,
+        data.url!.trim(),
+        data.purpose!.trim(),
+        JSON.stringify(data.parameters || []),
+        data.exampleRequest?.trim() || null,
+        data.responseNotes?.trim() || null,
+        data.authNotes?.trim() || null,
+        now,
+        now,
+      )
+      .run()
+
+    return c.json({
+      id: endpointId,
+      project_id: projectId,
+      name: data.name!.trim(),
+      method: data.method,
+      url: data.url!.trim(),
+      purpose: data.purpose!.trim(),
+      parameters: data.parameters || [],
+      example_request: data.exampleRequest?.trim() || null,
+      response_notes: data.responseNotes?.trim() || null,
+      auth_notes: data.authNotes?.trim() || null,
+      created_at: now,
+      updated_at: now,
+    }, 201)
+  } catch (err) {
+    return c.json({ error: 'Failed to add external API endpoint', details: (err as Error).message }, 500)
+  }
+})
+
+// Update external API endpoint documentation (owner only)
+app.put('/:projectId/external-apis/:endpointId', authMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const endpointId = c.req.param('endpointId')
+  const userId = c.get('userId') as string
+
+  try {
+    const body = await c.req.json<CustomApiInput>()
+    const validation = validateCustomApiInput(body, true)
+    if (!validation.ok) {
+      return c.json({ error: validation.error }, 400)
+    }
+
+    const db = c.env?.DB
+
+    const project = await db?.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+    if (!project) {
+      return c.json({ error: 'Project not found or access denied' }, 404)
+    }
+
+    const data = validation.data
+    const updates: string[] = []
+    const values: any[] = []
+
+    if (data.name !== undefined) { updates.push('name = ?'); values.push(data.name.trim()) }
+    if (data.method !== undefined) { updates.push('method = ?'); values.push(data.method) }
+    if (data.url !== undefined) { updates.push('url = ?'); values.push(data.url.trim()) }
+    if (data.purpose !== undefined) { updates.push('purpose = ?'); values.push(data.purpose.trim()) }
+    if (data.parameters !== undefined) { updates.push('parameters_json = ?'); values.push(JSON.stringify(data.parameters)) }
+    if (data.exampleRequest !== undefined) { updates.push('example_request = ?'); values.push(data.exampleRequest.trim() || null) }
+    if (data.responseNotes !== undefined) { updates.push('response_notes = ?'); values.push(data.responseNotes.trim() || null) }
+    if (data.authNotes !== undefined) { updates.push('auth_notes = ?'); values.push(data.authNotes.trim() || null) }
+
+    if (updates.length === 0) {
+      return c.json({ error: 'No fields to update' }, 400)
+    }
+
+    const now = getCurrentTimestamp()
+    updates.push('updated_at = ?')
+    values.push(now, endpointId, projectId)
+
+    const result = await db
+      ?.prepare(`UPDATE custom_api_endpoints SET ${updates.join(', ')} WHERE id = ? AND project_id = ?`)
+      .bind(...values)
+      .run()
+
+    if ((result as any)?.meta?.changes === 0) {
+      return c.json({ error: 'External API endpoint not found' }, 404)
+    }
+
+    return c.json({ message: 'External API endpoint updated', endpointId, updated_at: now })
+  } catch (err) {
+    return c.json({ error: 'Failed to update external API endpoint', details: (err as Error).message }, 500)
+  }
+})
+
+// Delete external API endpoint documentation (owner only)
+app.delete('/:projectId/external-apis/:endpointId', authMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const endpointId = c.req.param('endpointId')
+  const userId = c.get('userId') as string
+
+  try {
+    const db = c.env?.DB
+
+    const project = await db?.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').bind(projectId, userId).first()
+    if (!project) {
+      return c.json({ error: 'Project not found or access denied' }, 404)
+    }
+
+    await db?.prepare('DELETE FROM custom_api_endpoints WHERE id = ? AND project_id = ?').bind(endpointId, projectId).run()
+
+    return c.json({ message: 'External API endpoint deleted' })
+  } catch (err) {
+    return c.json({ error: 'Failed to delete external API endpoint' }, 500)
   }
 })
 

@@ -71,7 +71,9 @@ const mcpConfig = `{
   }
 }`
 
-const curlExample = `curl -X POST https://api.orquestra.dev/api/marinade/instructions/deposit/build \\
+const curlExample = `API=https://api.orquestra.dev
+
+curl -X POST "$API/api/marinade/instructions/deposit/build" \\
   -H "X-API-Key: orq_live_xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -265,27 +267,31 @@ export default function Home(): JSX.Element {
         </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-surface-elevated/60 p-4 md:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
+      <section className="grid min-w-0 gap-5 lg:grid-cols-2">
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-surface-elevated/60 p-3 sm:p-4 md:p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">REST transaction build</p>
-              <h2 className="mt-1 text-xl font-bold text-white">HTTP in, base58 transaction out.</h2>
+              <h2 className="mt-1 text-lg font-bold leading-tight text-white sm:text-xl">HTTP in, base58 transaction out.</h2>
             </div>
-            <span className="hidden rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary sm:inline-flex">No SDK</span>
+            <span className="w-fit rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">No SDK</span>
           </div>
-          <CodeBlock language="bash" code={curlExample} copyable={false} maxHeightClassName="max-h-[340px]" />
+          <div className="min-w-0 [&_pre]:!text-[11px] sm:[&_pre]:!text-xs">
+            <CodeBlock language="bash" code={curlExample} copyable={false} wrapLongLines maxHeightClassName="max-h-[340px]" />
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-surface-elevated/60 p-4 md:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-surface-elevated/60 p-3 sm:p-4 md:p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">AI agent setup</p>
-              <h2 className="mt-1 text-xl font-bold text-white">Give Claude program-level Solana tools.</h2>
+              <h2 className="mt-1 text-lg font-bold leading-tight text-white sm:text-xl">Give Claude program-level Solana tools.</h2>
             </div>
-            <span className="hidden rounded-full border border-secondary/20 bg-secondary/10 px-3 py-1 text-xs text-secondary sm:inline-flex">MCP</span>
+            <span className="w-fit rounded-full border border-secondary/20 bg-secondary/10 px-3 py-1 text-xs text-secondary">MCP</span>
           </div>
-          <CodeBlock language="json" code={mcpConfig} copyable={false} maxHeightClassName="max-h-[340px]" />
+          <div className="min-w-0 [&_pre]:!text-[11px] sm:[&_pre]:!text-xs">
+            <CodeBlock language="json" code={mcpConfig} copyable={false} wrapLongLines maxHeightClassName="max-h-[340px]" />
+          </div>
         </div>
       </section>
 

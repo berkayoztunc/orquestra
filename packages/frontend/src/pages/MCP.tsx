@@ -330,6 +330,79 @@ export default function MCP(): JSX.Element {
           Private projects remain inaccessible even if project IDs are known.
         </p>
       </div>
+
+      {/* Scope Keys */}
+      <div className="card p-5 sm:p-6 space-y-5">
+        <div className="flex items-center gap-2">
+          <KeyIcon className="w-4 h-4 text-primary" />
+          <h2 className="text-lg sm:text-xl font-bold text-white">Scope Keys</h2>
+        </div>
+        <p className="text-sm text-gray-400 leading-relaxed">
+          Scope Keys let you restrict <code className="bg-white/10 px-1 rounded text-xs">search_programs</code>{' '}
+          to a curated collection of programs you've saved in{' '}
+          <a href="/lists" className="text-primary hover:underline">My Lists</a>.
+          Without a scope key every public program is searchable — a scope key narrows results to only the programs
+          in that list.
+        </p>
+
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-gray-300">How to use a scope key:</p>
+          <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
+            <li>
+              Go to <a href="/lists" className="text-primary hover:underline">My Lists</a>, create a list, and
+              add the programs you want to include.
+            </li>
+            <li>Copy the scope key (<code className="bg-white/10 px-1 rounded text-xs">sk_…</code>) shown on the list.</li>
+            <li>Add it to your MCP client config as shown below.</li>
+          </ol>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-gray-300">Config examples with scope key:</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="text-xs text-gray-500 font-mono mb-1.5">Claude Code / Cursor</p>
+              <CodeBlock
+                code={JSON.stringify({
+                  mcpServers: {
+                    orquestra: {
+                      type: 'http',
+                      url: MCP_ENDPOINT,
+                      headers: { 'X-Scope-Key': 'sk_your_scope_key_here' },
+                    },
+                  },
+                }, null, 2)}
+                language="json"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-mono mb-1.5">Claude Desktop (via wrapper)</p>
+              <CodeBlock
+                code={JSON.stringify({
+                  mcpServers: {
+                    orquestra: {
+                      command: 'npx',
+                      args: [
+                        '-y',
+                        '@modelcontextprotocol/client-streamable-http',
+                        '--header',
+                        'X-Scope-Key: sk_your_scope_key_here',
+                        MCP_ENDPOINT,
+                      ],
+                    },
+                  },
+                }, null, 2)}
+                language="json"
+              />
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-500">
+          You can regenerate a scope key at any time from My Lists — the old key stops working immediately.
+          Regeneration does not affect the programs in the list.
+        </p>
+      </div>
     </div>
   )
 }

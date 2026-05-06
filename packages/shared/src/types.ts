@@ -64,6 +64,41 @@ export interface KnownAddress {
   updated_at: string
 }
 
+// Owner-documented external API/indexer endpoint types
+export type CustomApiEndpointMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+
+export interface CustomApiParameter {
+  name: string
+  description: string
+  required?: boolean
+}
+
+export interface CustomApiEndpoint {
+  id: string
+  project_id: string
+  name: string
+  method: CustomApiEndpointMethod
+  url: string
+  purpose: string
+  parameters: CustomApiParameter[]
+  example_request: string | null
+  response_notes: string | null
+  auth_notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CustomApiEndpointInput {
+  name: string
+  method: CustomApiEndpointMethod
+  url: string
+  purpose: string
+  parameters?: CustomApiParameter[]
+  exampleRequest?: string
+  responseNotes?: string
+  authNotes?: string
+}
+
 // Solana IDL types (simplified)
 export interface AnchorIDL {
   version?: string
@@ -201,6 +236,32 @@ export interface GitHubUser {
   email: string | null
   avatar_url: string
   name: string | null
+}
+
+// Program List types
+export interface ProgramList {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  is_default: boolean
+  scope_key: string
+  item_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ProgramListItem {
+  item_id: string
+  added_at: string
+  project_id: string
+  name: string
+  description: string | null
+  program_id: string
+  is_public: boolean
+  updated_at: string
+  username?: string | null
+  avatar_url?: string | null
 }
 
 // AI Analysis types

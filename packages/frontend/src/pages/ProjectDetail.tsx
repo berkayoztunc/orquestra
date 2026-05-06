@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useProjectsStore } from '../store/projects'
 import { useAuthStore } from '../store/auth'
 import { useToast } from '../components/Toast'
+import AddToListButton from '../components/AddToListButton'
 import {
   listInstructions,
   getAccounts,
@@ -24,8 +25,9 @@ import {
 import InstructionExplorer from '../components/InstructionExplorer'
 import PDAExplorer from '../components/PDAExplorer'
 import AccountDataViewer from '../components/AccountDataViewer'
+import ExternalApisPanel from '../components/ExternalApisPanel'
 
-type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'live' | 'docs' | 'addresses' | 'settings'
+type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'live' | 'docs' | 'addresses' | 'externalApis' | 'settings'
 
 export default function ProjectDetail(): JSX.Element {
   const { programId } = useParams<{ programId: string }>()
@@ -242,6 +244,7 @@ export default function ProjectDetail(): JSX.Element {
     { id: 'live', label: 'Live Data' },
     { id: 'docs', label: 'Docs' },
     { id: 'addresses', label: 'Addresses' },
+    { id: 'externalApis', label: 'External APIs' },
     ...(!isSystemProject && selectedProject.isOwner ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
   ]
 
@@ -613,6 +616,7 @@ export default function ProjectDetail(): JSX.Element {
             )}
           </div>
           <div className="flex items-start gap-3">
+            <AddToListButton projectId={selectedProject.id} />
             <button
               onClick={async () => {
                 const url = `${window.location.origin}/project/${selectedProject.program_id}`
@@ -1022,6 +1026,11 @@ export default function ProjectDetail(): JSX.Element {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* External APIs Tab */}
+            {activeTab === 'externalApis' && (
+              <ExternalApisPanel projectId={projectId!} isOwner={Boolean(selectedProject.isOwner)} />
             )}
 
             {/* Settings Tab */}

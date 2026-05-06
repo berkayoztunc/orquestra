@@ -14,6 +14,37 @@ type Env = {
 
 const app = new Hono<Env>()
 
+type CustomApiParameter = { name: string; description: string; required?: boolean }
+type CustomApiRow = {
+  name: string
+  method: string
+  url: string
+  purpose: string
+  parameters_json: string | null
+  example_request: string | null
+  response_notes: string | null
+  auth_notes: string | null
+}
+
+function parseCustomApiParameters(value: string | null): CustomApiParameter[] {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function escapeMarkdownTable(value: string): string {
+  return value.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
+}
+
+function fenced(value: string): string {
+  const fence = value.includes('```') ? '````' : '```'
+  return `${fence}\n${value}\n${fence}`
+}
+
 app.get('/project/:projectId/llms.txt', async (c) => {
   const projectId = c.req.param('projectId')
 
@@ -93,6 +124,50 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       knownAddressesSection.push('')
     }
 
+    const externalApis = await db
+      ?.prepare(
+        'SELECT name, method, url, purpose, parameters_json, example_request, response_notes, auth_notes FROM custom_api_endpoints WHERE project_id = ? ORDER BY created_at ASC'
+      )
+      .bind(projectId)
+      .all()
+
+    const externalApisSection: string[] = []
+    if (externalApis?.results?.length) {
+      externalApisSection.push('## External APIs', '')
+      externalApisSection.push('These are third-party/external APIs documented by the project owner. Orquestra does not execute or proxy them.', '')
+
+      for (const row of externalApis.results as CustomApiRow[]) {
+        externalApisSection.push(`### ${row.name}`, '')
+        externalApisSection.push(`- Method: \`${row.method}\``)
+        externalApisSection.push(`- URL: \`${row.url}\``)
+        externalApisSection.push(`- Purpose: ${row.purpose}`)
+        if (row.auth_notes) {
+          externalApisSection.push(`- Auth: ${row.auth_notes}`)
+        }
+
+        const parameters = parseCustomApiParameters(row.parameters_json)
+        if (parameters.length) {
+          externalApisSection.push('', '| Parameter | Required | Description |')
+          externalApisSection.push('|-----------|----------|-------------|')
+          for (const param of parameters) {
+            externalApisSection.push(
+              `| ${escapeMarkdownTable(param.name)} | ${param.required ? 'Yes' : 'No'} | ${escapeMarkdownTable(param.description)} |`,
+            )
+          }
+        }
+
+        if (row.example_request) {
+          externalApisSection.push('', 'Example request:', '', fenced(row.example_request))
+        }
+
+        if (row.response_notes) {
+          externalApisSection.push('', 'Response notes:', '', row.response_notes)
+        }
+
+        externalApisSection.push('')
+      }
+    }
+
     const llmsText = [
       '# Orquestra llms.txt',
       `Project: ${projectName}`,
@@ -120,6 +195,7 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       '- If details are missing or ambiguous, ask for clarification or fetch the relevant endpoint.',
       '',
       ...knownAddressesSection,
+      ...externalApisSection,
       '---',
       '',
       docsText,

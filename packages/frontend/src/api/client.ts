@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { CustomApiEndpointInput } from '@shared/types'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://api.orquestra.dev/api'
 const AUTH_BASE = import.meta.env.VITE_AUTH_URL || '/auth'
@@ -223,6 +224,28 @@ export async function deleteKnownAddress(projectId: string, addressId: string) {
   return res.data
 }
 
+// ─── External API Endpoint Documentation ─────────────
+
+export async function listCustomApiEndpoints(projectId: string) {
+  const res = await api.get(`/${projectId}/external-apis`)
+  return res.data.endpoints
+}
+
+export async function addCustomApiEndpoint(projectId: string, data: CustomApiEndpointInput) {
+  const res = await api.post(`/${projectId}/external-apis`, data)
+  return res.data
+}
+
+export async function updateCustomApiEndpoint(projectId: string, endpointId: string, data: Partial<CustomApiEndpointInput>) {
+  const res = await api.put(`/${projectId}/external-apis/${endpointId}`, data)
+  return res.data
+}
+
+export async function deleteCustomApiEndpoint(projectId: string, endpointId: string) {
+  const res = await api.delete(`/${projectId}/external-apis/${endpointId}`)
+  return res.data
+}
+
 // ─── Project Deletion ────────────────────────────────
 
 export async function deleteProject(projectId: string, confirmName: string) {
@@ -340,6 +363,78 @@ export async function getPublicStats(): Promise<PublicStats> {
 export async function getAdminAnalytics(): Promise<AdminAnalytics> {
   const workerBase = import.meta.env.VITE_WORKER_URL || 'https://api.orquestra.dev'
   const res = await axios.get(`${workerBase}/api/admin/analytics`)
+  return res.data
+}
+
+// ─── Program Lists ───────────────────────────────────
+
+export interface ProgramList {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  is_default: boolean
+  scope_key: string
+  item_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ProgramListItem {
+  item_id: string
+  added_at: string
+  project_id: string
+  name: string
+  description: string | null
+  program_id: string
+  is_public: boolean
+  updated_at: string
+  username?: string | null
+  avatar_url?: string | null
+}
+
+export async function getLists(): Promise<ProgramList[]> {
+  const res = await api.get('/lists')
+  return res.data.lists
+}
+
+export async function createList(name: string, description?: string): Promise<ProgramList> {
+  const res = await api.post('/lists', { name, description })
+  return res.data.list
+}
+
+export async function updateList(id: string, data: { name?: string; description?: string }) {
+  const res = await api.put(`/lists/${id}`, data)
+  return res.data
+}
+
+export async function deleteList(id: string) {
+  const res = await api.delete(`/lists/${id}`)
+  return res.data
+}
+
+export async function getListItems(listId: string): Promise<ProgramListItem[]> {
+  const res = await api.get(`/lists/${listId}/items`)
+  return res.data.items
+}
+
+export async function addToList(listId: string, projectId: string) {
+  const res = await api.post(`/lists/${listId}/items`, { projectId })
+  return res.data
+}
+
+export async function addToDefaultList(projectId: string) {
+  const res = await api.post('/lists/default/items', { projectId })
+  return res.data
+}
+
+export async function removeFromList(listId: string, projectId: string) {
+  const res = await api.delete(`/lists/${listId}/items/${projectId}`)
+  return res.data
+}
+
+export async function regenerateScopeKey(listId: string): Promise<{ scope_key: string }> {
+  const res = await api.post(`/lists/${listId}/scope-key`)
   return res.data
 }
 

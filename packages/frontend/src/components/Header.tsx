@@ -111,6 +111,9 @@ export default function Header(): JSX.Element {
                 <Link to="/dashboard" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
                   Dashboard
                 </Link>
+                <Link to="/lists" className="text-gray-400 hover:text-primary transition-colors text-sm font-medium">
+                  My Lists
+                </Link>
                 <div className="flex items-center gap-4 pl-4 border-l border-white/10">
                   {user?.avatar_url && (
                     <img
@@ -252,6 +255,13 @@ export default function Header(): JSX.Element {
                     className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
                   >
                     Dashboard
+                  </Link>
+                  <Link
+                    to="/lists"
+                    onClick={closeMobileMenu}
+                    className="text-gray-400 hover:text-primary transition-colors text-sm font-medium py-2"
+                  >
+                    My Lists
                   </Link>
                   <div className="flex items-center gap-3 py-2 border-t border-white/5 mt-2 pt-4">
                     {user?.avatar_url && (

@@ -21,6 +21,7 @@ import authRoutes from './routes/auth'
 import llmsRoutes from './routes/llms'
 import ingestRoutes from './routes/ingest'
 import aiRoutes from './routes/ai'
+import agentRoutes from './routes/agent'
 import adminRoutes from './routes/admin'
 import discoveryRoutes from './routes/discovery'
 import listsRoutes from './routes/lists'
@@ -42,6 +43,7 @@ type Env = {
     API_BASE_URL: string
     CORS_ORIGIN: string
     INGEST_API_KEY: string
+    AI: Ai
   }
 }
 
@@ -80,6 +82,7 @@ app.use('/api/*', apiRateLimit)
 app.route('/api/idl', idlRoutes)
 app.route('/api/ingest', ingestRoutes)
 app.route('/api/admin', adminRoutes)
+app.route('/api/agent', agentRoutes)
 app.route('/api', aiRoutes)
 app.route('/api/lists', listsRoutes)
 app.route('/api', apiRoutes)

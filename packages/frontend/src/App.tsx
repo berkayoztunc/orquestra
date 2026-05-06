@@ -15,6 +15,7 @@ import API from '@/pages/API'
 import Pricing from '@/pages/Pricing'
 import Analytics from '@/pages/Analytics'
 import Lists from '@/pages/Lists'
+import AgentChat from '@/pages/AgentChat'
 import { ToastProvider } from '@/components/Toast'
 import { useAuthStore } from '@/store/auth'
 
@@ -42,6 +43,7 @@ function App(): JSX.Element {
             <Route path="/docs/api" element={<API />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/agent" element={<AgentChat />} />
             <Route path="/lists" element={<Lists />} />
             <Route path="*" element={<NotFound />} />
           </Route>

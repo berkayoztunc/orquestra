@@ -1,14 +1,16 @@
-# Shared
+# Shared Package
 
-Shared TypeScript types and utilities used across frontend and worker packages.
+Shared TypeScript types and utility functions used by the frontend and worker.
 
 ## Exports
 
-- `types.ts` - TypeScript type definitions for all entities
-- `utils.ts` - Utility functions (validation, string manipulation, etc.)
+- `src/types.ts` - user, project, IDL, API key, analytics, and response types
+- `src/utils.ts` - validation and formatting helpers
 
 ## Usage
 
-```typescript
-import { User, Project, isValidSolanaAddress } from '@orquestra/shared'
+```ts
+import { isValidSolanaAddress } from '@orquestra/shared'
 ```
+
+See [../../docs/architecture.md](../../docs/architecture.md) for package architecture.

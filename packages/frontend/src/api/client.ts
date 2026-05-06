@@ -154,6 +154,73 @@ export async function buildTransaction(
   return res.data
 }
 
+// ─── AI Transaction Agent ─────────────────────────────
+
+export type TxAgentNetwork = 'mainnet-beta' | 'devnet' | 'testnet'
+
+export interface TxAgentState {
+  projectId?: string
+  programId?: string
+  query?: string
+  instruction?: string
+  network?: TxAgentNetwork
+  feePayer?: string
+  accounts?: Record<string, string>
+  args?: Record<string, unknown>
+}
+
+export interface TxAgentMissingField {
+  kind: 'project' | 'instruction' | 'feePayer' | 'account' | 'arg'
+  name: string
+  type?: string
+  reason: string
+}
+
+export interface TxAgentResponse {
+  status: 'needs_input' | 'simulated' | 'failed'
+  message: string
+  state: TxAgentState
+  missingFields: TxAgentMissingField[]
+  candidates?: Array<{
+    projectId: string
+    name: string
+    programId: string
+    description?: string | null
+  }>
+  instructionSchema?: {
+    name: string
+    accounts: Array<{ name: string; isSigner: boolean; isWritable: boolean; isOptional: boolean }>
+    args: Array<{ name: string; type: string }>
+  }
+  build?: {
+    serializedTransaction: string
+    transaction: string
+    encoding: 'base58' | 'base64'
+    wireFormat: string
+    network: string
+    rpcUrlHost: string
+    recentBlockhash: string
+    lastValidBlockHeight?: number
+    riskLevel: 'low' | 'medium' | 'high'
+    riskReasons: string[]
+    estimatedFee: number
+    accounts: Array<{ name: string; pubkey: string; isSigner: boolean; isWritable: boolean }>
+    instruction: { name: string; programId: string; data: string }
+  }
+  simulation?: {
+    success: boolean
+    err: unknown | null
+    logs: string[] | null
+    decodedError: { code: number; name: string; msg: string } | null
+  }
+  error?: string
+}
+
+export async function runTxAgent(data: { message: string; state?: TxAgentState }) {
+  const res = await api.post('/agent/tx', data)
+  return res.data as TxAgentResponse
+}
+
 // ─── Accounts / Errors / Events / Types ──────────────
 
 export async function getAccounts(projectId: string) {

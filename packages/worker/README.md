@@ -1,46 +1,28 @@
-# Worker
+# Worker Package
 
-Hono REST API backend running on Cloudflare Workers.
+Cloudflare Worker backend for Orquestra. It serves the REST API, MCP server, auth routes, generated docs, and discovery metadata.
 
-## API Endpoints
+## Main Surfaces
 
-### Health
-- `GET /health` - Health check
-- `GET /health/ping` - Ping endpoint
-
-### Authentication
-- `GET /auth/github` - Start GitHub OAuth flow
-- `POST /auth/github/callback` - Handle GitHub OAuth callback
-- `POST /auth/logout` - Logout
-
-### IDL Management
-- `POST /api/idl/upload` - Upload new IDL
-- `GET /api/idl/:projectId` - Get IDL by project
-- `PUT /api/idl/:projectId` - Update IDL
-- `DELETE /api/idl/:projectId` - Delete IDL
-
-### API Access
-- `GET /api/:projectId/instructions` - List all instructions
-- `GET /api/:projectId/instructions/:name` - Get instruction details
-- `POST /api/:projectId/instructions/:name/build` - Build transaction
-- `GET /api/:projectId/accounts` - List account types
-- `GET /api/:projectId/errors` - List error codes
-- `GET /api/:projectId/events` - List events
-- `GET /api/:projectId/docs` - Get Markdown documentation
-- `GET /api/:projectId/idl` - Get raw IDL
+- REST API under `/api`
+- MCP endpoint at `/mcp`
+- GitHub OAuth under `/auth`
+- `llms.txt` docs under `/project/:projectId/llms.txt`
+- OpenAPI and well-known discovery metadata
+- Admin and ingest routes protected by `X-Ingest-Key`
 
 ## Development
 
 ```bash
-npm run dev
+bun --cwd packages/worker run dev
 ```
 
-Server runs on http://localhost:8787
+The worker runs on `http://localhost:8787`.
 
-## Deployment
+## Tests
 
 ```bash
-npm run deploy
+bun --cwd packages/worker test
 ```
 
-Deploys to Cloudflare Workers production environment.
+See [../../docs/api-reference.md](../../docs/api-reference.md) and [../../docs/mcp-tools.md](../../docs/mcp-tools.md) for details.

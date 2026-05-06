@@ -1,27 +1,32 @@
-# Frontend
+# Frontend Package
 
-React + TypeScript + Tailwind CSS dashboard for orquestra.
+React, TypeScript, Vite, and Tailwind dashboard for Orquestra.
 
 ## Features
 
-- User authentication via GitHub OAuth
-- IDL file upload and management
-- Project configuration (metadata, socials, visibility)
-- API key management for private projects
-- Usage statistics and monitoring
+- Home, explorer, API, MCP, CLI, pricing, analytics, and dashboard pages
+- GitHub OAuth flow
+- IDL upload and project management
+- Instruction explorer and transaction build UI
+- PDA explorer and account data viewer
+- API key management
+- Known addresses and external API docs panels
+- Program lists and MCP scope keys
 
 ## Development
 
 ```bash
-npm run dev
+bun --cwd packages/frontend run dev
 ```
 
-Server runs on http://localhost:5173
+The frontend runs on `http://localhost:5173`.
 
-## Building
+## Build
 
 ```bash
-npm run build
+bun --cwd packages/frontend run build
 ```
 
-Output is in `dist/` directory, ready for Cloudflare Pages.
+The production output is written to `packages/frontend/dist`.
+
+See [../../docs/dashboard.md](../../docs/dashboard.md) for user-facing dashboard documentation.

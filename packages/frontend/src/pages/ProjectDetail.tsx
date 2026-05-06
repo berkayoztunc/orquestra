@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { Calendar, CheckCircle2, Clipboard, Clock3, GitBranch, Globe2, LockKeyhole, Share2 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { useProjectsStore } from '../store/projects'
 import { useAuthStore } from '../store/auth'
 import { useToast } from '../components/Toast'
@@ -51,6 +54,7 @@ export default function ProjectDetail(): JSX.Element {
   const [editedDocs, setEditedDocs] = useState('')
   const [isCustomDocs, setIsCustomDocs] = useState(false)
   const [isRegeneratingDocs, setIsRegeneratingDocs] = useState(false)
+  const [docsViewMode, setDocsViewMode] = useState<'preview' | 'raw'>('preview')
 
   // Known addresses state
   const [knownAddresses, setKnownAddresses] = useState<any[]>([])
@@ -467,41 +471,58 @@ export default function ProjectDetail(): JSX.Element {
       )}
 
       {/* Project Header - Modern */}
-      <div className="card-static p-6">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                <span className="text-primary font-bold text-lg">
-                  {selectedProject.name.charAt(0).toUpperCase()}
-                </span>
+      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
+        <div className="flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-lg font-semibold text-primary">
+                {selectedProject.avatar_url ? (
+                  <img
+                    src={selectedProject.avatar_url}
+                    alt={selectedProject.username || selectedProject.name}
+                    className="h-full w-full rounded-xl object-cover"
+                  />
+                ) : (
+                  selectedProject.name.charAt(0).toUpperCase()
+                )}
               </div>
-              <div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h1 className="text-2xl font-bold text-white">{selectedProject.name}</h1>
+
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span
-                    className={`badge ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
                       selectedProject.is_public
-                        ? 'badge-primary'
-                        : 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20'
+                        ? 'border-primary/20 bg-primary/10 text-primary'
+                        : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-300'
                     }`}
                   >
+                    {selectedProject.is_public ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <LockKeyhole className="h-3.5 w-3.5" />
+                    )}
                     {selectedProject.is_public ? 'Public' : 'Private'}
                   </span>
+                  {selectedProject.username && (
+                    <span className="text-sm text-gray-500">by {selectedProject.username}</span>
+                  )}
                 </div>
-                {selectedProject.username && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    by {selectedProject.username}
+
+                <h1 className="text-3xl font-semibold tracking-normal text-white sm:text-4xl">
+                  {selectedProject.name}
+                </h1>
+
+                {selectedProject.description && (
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400 sm:text-base">
+                    {selectedProject.description}
                   </p>
                 )}
               </div>
             </div>
-            {selectedProject.description && (
-              <p className="text-gray-400 mb-4 max-w-2xl">{selectedProject.description}</p>
-            )}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Program:</span>
-              <code className="text-primary font-mono text-xs bg-primary/10 px-2 py-1 rounded">
+
+            <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-white/10 bg-dark-950/40 p-3 sm:flex-row sm:items-center">
+              <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Program</span>
+              <code className="min-w-0 flex-1 truncate font-mono text-xs text-primary sm:text-sm">
                 {selectedProject.program_id}
               </code>
               <button
@@ -509,55 +530,47 @@ export default function ProjectDetail(): JSX.Element {
                   navigator.clipboard.writeText(selectedProject.program_id)
                   showToast('Copied to clipboard', 'success')
                 }}
-                className="text-gray-500 hover:text-primary transition-colors"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                title="Copy program ID"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
+                <Clipboard className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Meta info row */}
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3 text-xs text-gray-500">
+            <div className="grid gap-2 text-xs text-gray-500 sm:grid-cols-3">
               {selectedProject.latestVersion !== undefined && (
-                <div className="flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" />
-                  </svg>
-                  <span>IDL v{selectedProject.latestVersion}</span>
-                  {selectedProject.latestVersionDate && (
-                    <span className="text-gray-600">({new Date(selectedProject.latestVersionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })})</span>
-                  )}
+                <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
+                  <GitBranch className="h-3.5 w-3.5 text-gray-600" />
+                  <span className="truncate">
+                    IDL v{selectedProject.latestVersion}
+                    {selectedProject.latestVersionDate && (
+                      <span className="text-gray-600">
+                        {' '}{new Date(selectedProject.latestVersionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                  </span>
                 </div>
               )}
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+              <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
+                <Clock3 className="h-3.5 w-3.5 text-gray-600" />
                 <span>Updated {new Date(selectedProject.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+              <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
+                <Calendar className="h-3.5 w-3.5 text-gray-600" />
                 <span>Created {new Date(selectedProject.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               </div>
             </div>
 
-            {/* Social Links Display */}
             {selectedProject.socials && Object.values(selectedProject.socials).some(v => v) && (
-              <div className="flex items-center gap-3 mt-4 flex-wrap">
+              <div className="flex flex-wrap items-center gap-2">
                 {selectedProject.socials.twitter && (
                   <a
                     href={selectedProject.socials.twitter.startsWith('http') ? selectedProject.socials.twitter : `https://twitter.com/${selectedProject.socials.twitter.replace('@', '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition-colors bg-white/5 px-2.5 py-1.5 rounded-lg"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-primary/25 hover:text-primary"
                   >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                    </svg>
-                    <span>Twitter</span>
+                    Twitter
                   </a>
                 )}
                 {selectedProject.socials.discord && (
@@ -565,12 +578,9 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.discord.startsWith('http') ? selectedProject.socials.discord : `https://discord.gg/${selectedProject.socials.discord}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#5865F2] transition-colors bg-white/5 px-2.5 py-1.5 rounded-lg"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-[#5865F2]/40 hover:text-[#8ea0ff]"
                   >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z" />
-                    </svg>
-                    <span>Discord</span>
+                    Discord
                   </a>
                 )}
                 {selectedProject.socials.telegram && (
@@ -578,12 +588,9 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.telegram.startsWith('http') ? selectedProject.socials.telegram : `https://t.me/${selectedProject.socials.telegram.replace('@', '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#26A5E4] transition-colors bg-white/5 px-2.5 py-1.5 rounded-lg"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-[#26A5E4]/40 hover:text-[#73caff]"
                   >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
-                    </svg>
-                    <span>Telegram</span>
+                    Telegram
                   </a>
                 )}
                 {selectedProject.socials.github && (
@@ -591,12 +598,9 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.github.startsWith('http') ? selectedProject.socials.github : `https://github.com/${selectedProject.socials.github}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors bg-white/5 px-2.5 py-1.5 rounded-lg"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-white/25 hover:text-white"
                   >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
-                    </svg>
-                    <span>GitHub</span>
+                    GitHub
                   </a>
                 )}
                 {selectedProject.socials.website && (
@@ -604,19 +608,18 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.website.startsWith('http') ? selectedProject.socials.website : `https://${selectedProject.socials.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition-colors bg-white/5 px-2.5 py-1.5 rounded-lg"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-primary/25 hover:text-primary"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                    </svg>
-                    <span>Website</span>
+                    <Globe2 className="h-3.5 w-3.5" />
+                    Website
                   </a>
                 )}
               </div>
             )}
           </div>
-          <div className="flex items-start gap-3">
-            <AddToListButton projectId={selectedProject.id} />
+
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row lg:justify-end">
+            <AddToListButton projectId={selectedProject.id} variant="header" />
             <button
               onClick={async () => {
                 const url = `${window.location.origin}/project/${selectedProject.program_id}`
@@ -635,24 +638,15 @@ export default function ProjectDetail(): JSX.Element {
                   /* user dismissed share sheet */
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-200 transition-all duration-200 hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
               title="Share this program"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-              </svg>
+              <Share2 className="h-3.5 w-3.5" />
               Share
             </button>
-            {selectedProject.avatar_url && (
-              <img
-                src={selectedProject.avatar_url}
-                alt={selectedProject.username || ''}
-                className="w-10 h-10 rounded-lg border border-white/10"
-              />
-            )}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Tabs - Modern */}
       <div
@@ -893,6 +887,22 @@ export default function ProjectDetail(): JSX.Element {
                         LLMs
                       </a>
                     )}
+                    {!isEditingDocs && (
+                      <div className="flex items-center border border-white/10 rounded-lg overflow-hidden text-sm">
+                        <button
+                          onClick={() => setDocsViewMode('preview')}
+                          className={`px-3 py-1.5 transition-colors ${docsViewMode === 'preview' ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={() => setDocsViewMode('raw')}
+                          className={`px-3 py-1.5 transition-colors ${docsViewMode === 'raw' ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                        >
+                          Raw
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 {isEditingDocs ? (
@@ -919,9 +929,36 @@ export default function ProjectDetail(): JSX.Element {
                     </div>
                   </div>
                 ) : (
-                  <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono leading-relaxed max-h-[600px] overflow-y-auto p-4 bg-surface-elevated rounded-xl">
-                    {docs || 'Loading...'}
-                  </pre>
+                  <div className="max-h-[600px] overflow-y-auto rounded-xl bg-surface-elevated p-5">
+                    {docsViewMode === 'raw' ? (
+                      <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono leading-relaxed">
+                        {docs || 'Loading...'}
+                      </pre>
+                    ) : (
+                      <div className="prose prose-invert prose-sm max-w-none
+                        prose-headings:text-white prose-headings:font-bold
+                        prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                        prose-p:text-gray-300 prose-p:leading-relaxed
+                        prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                        prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                        prose-pre:bg-dark-900 prose-pre:border prose-pre:border-white/10 prose-pre:rounded-xl prose-pre:p-4
+                        prose-pre:text-gray-300 prose-pre:text-sm prose-pre:overflow-x-auto
+                        prose-blockquote:border-l-primary prose-blockquote:text-gray-400
+                        prose-strong:text-white prose-em:text-gray-300
+                        prose-ul:text-gray-300 prose-ol:text-gray-300
+                        prose-li:marker:text-primary
+                        prose-hr:border-white/10
+                        prose-table:text-sm
+                        prose-th:text-gray-300 prose-th:border-white/10 prose-th:bg-white/5 prose-th:p-2
+                        prose-td:text-gray-400 prose-td:border-white/10 prose-td:p-2">
+                        {docs ? (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{docs}</ReactMarkdown>
+                        ) : (
+                          <p className="text-gray-500 text-sm">Loading...</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

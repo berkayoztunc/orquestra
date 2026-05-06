@@ -10,6 +10,8 @@ export interface SearchResult {
   name: string
   description: string | null
   program_id: string
+  is_public: boolean | number
+  updated_at: string
   username: string
   avatar_url: string | null
   category: string | null
@@ -25,6 +27,8 @@ interface FTSRow {
   name: string
   description: string | null
   program_id: string
+  is_public: boolean | number
+  updated_at: string
   username: string
   avatar_url: string | null
   category: string | null
@@ -92,6 +96,8 @@ export async function searchProjects(
           p.name,
           p.description,
           p.program_id,
+          p.is_public,
+          p.updated_at,
           u.username,
           u.avatar_url,
           COALESCE(pc.category, '') as category,
@@ -112,6 +118,8 @@ export async function searchProjects(
           p.name,
           p.description,
           p.program_id,
+          p.is_public,
+          p.updated_at,
           u.username,
           u.avatar_url,
           COALESCE(pc.category, '') as category,

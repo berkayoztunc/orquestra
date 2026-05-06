@@ -12,18 +12,21 @@
     "lint:fix": "eslint src --ext .ts,.tsx --fix"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.1",
-    "zustand": "^4.4.6",
-    "axios": "^1.6.2",
-    "@solana/web3.js": "^1.87.6",
     "@solana/wallet-adapter-react": "^0.15.35",
     "@solana/wallet-adapter-react-ui": "^0.9.35",
     "@solana/wallet-adapter-wallets": "^0.19.32",
-    "lucide-react": "^0.294.0",
+    "@solana/web3.js": "^1.87.6",
+    "@tailwindcss/typography": "^0.5.19",
+    "axios": "^1.6.2",
     "clsx": "^2.0.0",
-    "react-syntax-highlighter": "^15.6.1"
+    "lucide-react": "^0.294.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^6.20.1",
+    "react-syntax-highlighter": "^15.6.1",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^4.4.6"
   },
   "devDependencies": {
     "react": "^18.2.0",

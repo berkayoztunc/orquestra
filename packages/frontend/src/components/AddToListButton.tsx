@@ -5,9 +5,10 @@ import { useToast } from './Toast'
 
 interface AddToListButtonProps {
   projectId: string
+  variant?: 'default' | 'header'
 }
 
-export default function AddToListButton({ projectId }: AddToListButtonProps): JSX.Element | null {
+export default function AddToListButton({ projectId, variant = 'default' }: AddToListButtonProps): JSX.Element | null {
   const { isAuthenticated } = useAuthStore()
   const { lists, loadLists, addToList, addToDefaultList } = useProgramListsStore()
   const { showToast } = useToast()
@@ -79,12 +80,17 @@ export default function AddToListButton({ projectId }: AddToListButtonProps): JS
     setOpen((prev) => !prev)
   }
 
+  const label = variant === 'header' ? 'Save' : lists.length > 1 ? 'Add to list' : 'Save'
+  const buttonClassName = variant === 'header'
+    ? 'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-200 transition-all duration-200 hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50'
+    : 'flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-primary transition-colors border border-white/10 hover:border-primary/40 rounded-lg px-2 py-1 bg-transparent hover:bg-primary/5 disabled:opacity-50'
+
   return (
     <div ref={dropdownRef} className="relative" onClick={(e) => e.stopPropagation()}>
       <button
         onClick={handleButtonClick}
         disabled={loading}
-        className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-primary transition-colors border border-white/10 hover:border-primary/40 rounded-lg px-2 py-1 bg-transparent hover:bg-primary/5 disabled:opacity-50"
+        className={buttonClassName}
         title="Add to list"
       >
         {loading ? (
@@ -94,7 +100,7 @@ export default function AddToListButton({ projectId }: AddToListButtonProps): JS
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
         )}
-        {lists.length > 1 ? 'Add to list' : 'Save'}
+        {label}
       </button>
 
       {open && lists.length > 1 && (

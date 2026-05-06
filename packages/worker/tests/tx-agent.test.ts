@@ -86,6 +86,38 @@ describe('tx-agent state machine', () => {
     expect(response.missingFields.some((field) => field.name === 'amount')).toBe(true)
   })
 
+  test('searches program keywords from a broad natural-language prompt', async () => {
+    const env = makeEnv({
+      aiResponse: '{"query":"Find a simple counter program and build increment by 1 on devnet","network":"devnet","instruction":"increment","args":{"amount":1}}',
+      searchRows: [
+        {
+          rank: 0,
+          id: 'proj_counter',
+          name: 'Counter Program',
+          description: 'A simple counter on Solana',
+          program_id: programId,
+          is_public: 1,
+          updated_at: '2026-01-01T00:00:00.000Z',
+          username: 'system',
+          avatar_url: null,
+          category: '',
+          tags: 'counter',
+          aliases: '',
+        },
+      ],
+    })
+
+    const response = await runTxAgent(env as any, {
+      message: 'Find a simple counter program and build increment by 1 on devnet.',
+    })
+
+    expect(response.state.projectId).toBe('proj_counter')
+    expect(response.state.programId).toBe(programId)
+    expect(response.message).toContain('please provide')
+    expect(response.missingFields.some((field) => field.kind === 'project')).toBe(false)
+    expect(response.missingFields.some((field) => field.kind === 'feePayer')).toBe(true)
+  })
+
   test('builds and simulates a completed unsigned transaction with mocked AI and RPC', async () => {
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? '{}')) as { method?: string }
@@ -136,7 +168,7 @@ describe('tx-agent state machine', () => {
   })
 })
 
-function makeEnv(options: { aiResponse: string }) {
+function makeEnv(options: { aiResponse: string; searchRows?: any[] }) {
   const projectRow = {
     id: 'proj_counter',
     name: 'Counter Program',
@@ -150,6 +182,9 @@ function makeEnv(options: { aiResponse: string }) {
         bind(...args: unknown[]) {
           return {
             async first() {
+              if (sql.includes('COUNT(*) as count')) {
+                return { count: options.searchRows?.length ?? 0 }
+              }
               if (sql.includes('WHERE program_id = ?')) {
                 return args[0] === programId ? { id: projectRow.id } : null
               }
@@ -162,6 +197,9 @@ function makeEnv(options: { aiResponse: string }) {
               return null
             },
             async all() {
+              if (sql.includes('projects_fts')) {
+                return { results: options.searchRows ?? [] }
+              }
               return { results: [] }
             },
           }

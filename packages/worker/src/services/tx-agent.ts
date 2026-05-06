@@ -206,7 +206,7 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
   const state = mergeTxAgentState(normalizeState(request.state), extraction, request.message)
   state.network = state.network ?? DEFAULT_NETWORK
 
-  const projectResolution = await resolveProject(env.DB, env.IDLS, state)
+  const projectResolution = await resolveProject(env.DB, env.IDLS, state, request.message)
   if (projectResolution.type === 'needs_input') {
     return {
       status: 'needs_input',
@@ -350,6 +350,8 @@ Allowed JSON keys:
 Rules:
 - Extract only values explicitly provided by the user or existing state.
 - Do not invent public keys, accounts, PDA seeds, token accounts, or amounts.
+- For query, extract only the likely protocol/program name or search keywords, not the whole action.
+  Examples: "stake 1 SOL with Marinade" -> "Marinade"; "increment a counter" -> "counter".
 - If the user gives a wallet public key and no explicit fee payer, set feePayer to that public key.
 - If unsure about project or instruction, use query and leave uncertain fields null.`
 
@@ -375,6 +377,7 @@ async function resolveProject(
   db: D1Database,
   kv: KVNamespace,
   state: TxAgentState,
+  userMessage: string,
 ): Promise<
   | { type: 'resolved'; project: ProjectData }
   | { type: 'needs_input'; message: string; candidates?: TxAgentCandidate[] }
@@ -397,30 +400,110 @@ async function resolveProject(
     return { type: 'needs_input', message: `Program "${state.programId}" was not found in public Orquestra projects.` }
   }
 
-  if (state.query) {
-    const { results } = await searchProjects(db, state.query, 5, 0)
-    if (results.length === 1) {
-      const project = await fetchProjectIDL(db, kv, results[0].id)
+  const searchQueries = buildProjectSearchQueries(state, userMessage)
+  if (searchQueries.length > 0) {
+    const seen = new Set<string>()
+    const candidates: TxAgentCandidate[] = []
+
+    for (const query of searchQueries) {
+      const { results } = await searchProjects(db, query, 5, 0)
+      for (const result of results) {
+        if (seen.has(result.id)) continue
+        seen.add(result.id)
+        candidates.push({
+          projectId: result.id,
+          name: result.name,
+          programId: result.program_id,
+          description: result.description,
+        })
+      }
+      if (candidates.length >= 5) break
+    }
+
+    if (candidates.length === 1) {
+      const project = await fetchProjectIDL(db, kv, candidates[0].projectId)
       if (project) return { type: 'resolved', project }
     }
-    if (results.length > 0) {
+    if (candidates.length > 0) {
       return {
         type: 'needs_input',
-        message: 'I found multiple matching programs. Which project should I use?',
-        candidates: results.map((r) => ({
-          projectId: r.id,
-          name: r.name,
-          programId: r.program_id,
-          description: r.description,
-        })),
+        message: 'I found matching programs. Pick one by name, program ID, or project ID.',
+        candidates,
       }
+    }
+
+    return {
+      type: 'needs_input',
+      message: `I searched public Orquestra programs for "${searchQueries.join('", "')}" but did not find a match. Try a protocol name, exact program ID, or upload the IDL first.`,
     }
   }
 
   return {
     type: 'needs_input',
-    message: 'Which Solana program or Orquestra project should I use?',
+    message: 'Tell me the protocol, program name, or program ID to search public Orquestra projects.',
   }
+}
+
+function buildProjectSearchQueries(state: TxAgentState, userMessage: string): string[] {
+  const queries: string[] = []
+  const add = (value: string | undefined) => {
+    const normalized = normalizeSearchQuery(value)
+    if (normalized && !queries.includes(normalized)) queries.push(normalized)
+  }
+
+  add(state.query)
+
+  for (const pubkey of userMessage.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/g) ?? []) {
+    add(pubkey)
+  }
+
+  const cleaned = normalizeSearchQuery(userMessage)
+  add(cleaned)
+
+  const keywords = cleaned
+    .split(/\s+/)
+    .filter((word) => word.length >= 4)
+    .filter((word) => !PROJECT_SEARCH_STOPWORDS.has(word))
+
+  for (const keyword of keywords) add(keyword)
+
+  return queries.slice(0, 6)
+}
+
+const PROJECT_SEARCH_STOPWORDS = new Set([
+  'find',
+  'simple',
+  'program',
+  'build',
+  'create',
+  'make',
+  'transaction',
+  'instruction',
+  'increment',
+  'decrement',
+  'initialize',
+  'devnet',
+  'testnet',
+  'mainnet',
+  'mainnet-beta',
+  'with',
+  'using',
+  'please',
+  'want',
+  'need',
+  'solana',
+])
+
+function normalizeSearchQuery(value: string | undefined): string {
+  if (!value) return ''
+  return value
+    .replace(/[^\w\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((word) => !PROJECT_SEARCH_STOPWORDS.has(word.toLowerCase()))
+    .join(' ')
+    .trim()
+    .slice(0, 100)
 }
 
 async function fetchProjectIDL(db: D1Database, kv: KVNamespace, projectId: string): Promise<ProjectData | null> {

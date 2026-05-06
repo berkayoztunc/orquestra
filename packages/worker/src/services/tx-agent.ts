@@ -27,6 +27,7 @@ export interface TxAgentState {
   feePayer?: string
   accounts?: Record<string, string>
   args?: Record<string, unknown>
+  projectCandidates?: TxAgentCandidate[]
 }
 
 export interface TxAgentRequest {
@@ -160,6 +161,7 @@ export function mergeTxAgentState(
     ...(previous ?? {}),
     accounts: { ...(previous?.accounts ?? {}) },
     args: { ...(previous?.args ?? {}) },
+    projectCandidates: previous?.projectCandidates ? [...previous.projectCandidates] : undefined,
   }
 
   for (const key of ['projectId', 'programId', 'query', 'instruction', 'network'] as const) {
@@ -208,6 +210,7 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
 
   const projectResolution = await resolveProject(env.DB, env.IDLS, state, request.message)
   if (projectResolution.type === 'needs_input') {
+    state.projectCandidates = projectResolution.candidates
     return {
       status: 'needs_input',
       message: projectResolution.message,
@@ -220,7 +223,11 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
   const project = projectResolution.project
   state.projectId = project.id
   state.programId = project.programId
+  delete state.projectCandidates
 
+  if (!state.instruction) {
+    state.instruction = inferInstructionName(project.idl, [request.message, state.query].filter(Boolean).join(' '))
+  }
   const instruction = state.instruction ? getInstruction(project.idl, state.instruction) : undefined
   if (!instruction) {
     return {
@@ -236,6 +243,7 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
 
   state.instruction = instruction.name
   const schema = buildInstructionSchema(project.idl, instruction)
+  autofillSignerAccounts(instruction, state)
   await deriveAvailablePdas(project, instruction, state)
   const missingFields = findMissingFields(project.idl, instruction, state)
   if (missingFields.length > 0) {
@@ -385,6 +393,12 @@ async function resolveProject(
   if (state.projectId) {
     const project = await fetchProjectIDL(db, kv, state.projectId)
     if (project) return { type: 'resolved', project }
+  }
+
+  const selectedProject = await resolveProjectReference(db, kv, state, userMessage)
+  if (selectedProject) return { type: 'resolved', project: selectedProject }
+
+  if (state.projectId) {
     return { type: 'needs_input', message: `Project "${state.projectId}" was not found or is not public.` }
   }
 
@@ -397,6 +411,8 @@ async function resolveProject(
       const project = await fetchProjectIDL(db, kv, row.id)
       if (project) return { type: 'resolved', project }
     }
+    const project = await fetchProjectIDL(db, kv, state.programId)
+    if (project) return { type: 'resolved', project }
     return { type: 'needs_input', message: `Program "${state.programId}" was not found in public Orquestra projects.` }
   }
 
@@ -427,7 +443,7 @@ async function resolveProject(
     if (candidates.length > 0) {
       return {
         type: 'needs_input',
-        message: 'I found matching programs. Pick one by name, program ID, or project ID.',
+        message: `I found ${candidates.length} matching programs. Say "use ${candidates[0].projectId}" or paste the program ID to continue.`,
         candidates,
       }
     }
@@ -478,7 +494,7 @@ const PROJECT_SEARCH_STOPWORDS = new Set([
   'create',
   'make',
   'transaction',
-  'instruction',
+    'instruction',
   'increment',
   'decrement',
   'initialize',
@@ -488,6 +504,7 @@ const PROJECT_SEARCH_STOPWORDS = new Set([
   'mainnet-beta',
   'with',
   'using',
+  'use',
   'please',
   'want',
   'need',
@@ -504,6 +521,44 @@ function normalizeSearchQuery(value: string | undefined): string {
     .join(' ')
     .trim()
     .slice(0, 100)
+}
+
+async function resolveProjectReference(
+  db: D1Database,
+  kv: KVNamespace,
+  state: TxAgentState,
+  userMessage: string,
+): Promise<ProjectData | null> {
+  const message = userMessage.toLowerCase()
+  for (const candidate of state.projectCandidates ?? []) {
+    const fields = [candidate.projectId, candidate.programId, candidate.name]
+    if (fields.some((field) => message.includes(field.toLowerCase()))) {
+      return fetchProjectIDL(db, kv, candidate.projectId)
+    }
+  }
+
+  for (const token of extractReferenceTokens(userMessage)) {
+    const byProjectId = await fetchProjectIDL(db, kv, token)
+    if (byProjectId) return byProjectId
+
+    const row = await db
+      .prepare('SELECT id FROM projects WHERE program_id = ? AND is_public = 1 LIMIT 1')
+      .bind(token)
+      .first<{ id: string }>()
+    if (row?.id) {
+      const byProgramId = await fetchProjectIDL(db, kv, row.id)
+      if (byProgramId) return byProgramId
+    }
+  }
+
+  return null
+}
+
+function extractReferenceTokens(text: string): string[] {
+  return text
+    .split(/[^A-Za-z0-9_-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 8 && token.length <= 64)
 }
 
 async function fetchProjectIDL(db: D1Database, kv: KVNamespace, projectId: string): Promise<ProjectData | null> {
@@ -561,6 +616,30 @@ function buildInstructionSchema(idl: AnchorIDL, instruction: AnchorInstruction):
   }
 }
 
+function inferInstructionName(idl: AnchorIDL, text: string): string | undefined {
+  const normalized = text.toLowerCase()
+  const exact = idl.instructions.find((instruction) => normalized.includes(instruction.name.toLowerCase()))
+  if (exact) return exact.name
+
+  const keywords = normalized.split(/[^a-z0-9]+/).filter(Boolean)
+  return idl.instructions.find((instruction) => {
+    const name = instruction.name.toLowerCase()
+    return keywords.some((keyword) => keyword.length >= 4 && (name.includes(keyword) || keyword.includes(name)))
+  })?.name
+}
+
+function autofillSignerAccounts(instruction: AnchorInstruction, state: TxAgentState): void {
+  if (!state.feePayer) return
+  for (const account of instruction.accounts) {
+    const normalized = normalizeAccountMeta(account)
+    if (!normalized.isSigner || state.accounts?.[normalized.name]) continue
+    state.accounts = {
+      ...(state.accounts ?? {}),
+      [normalized.name]: state.feePayer,
+    }
+  }
+}
+
 function findMissingFields(
   idl: AnchorIDL,
   instruction: AnchorInstruction,
@@ -610,6 +689,7 @@ function normalizeState(state: TxAgentState | undefined): TxAgentState {
     network: isNetwork(state?.network) ? state.network : undefined,
     accounts: isStringRecord(state?.accounts) ? { ...state.accounts } : undefined,
     args: isPlainObject(state?.args) ? { ...state.args } : undefined,
+    projectCandidates: Array.isArray(state?.projectCandidates) ? state.projectCandidates : undefined,
   }
 }
 

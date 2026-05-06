@@ -18,8 +18,13 @@ const testIDL: AnchorIDL = {
     {
       name: 'increment',
       accounts: [
+        {
+          name: 'counter',
+          isMut: true,
+          isSigner: false,
+          pda: { seeds: [{ kind: 'account', value: 'authority' }] },
+        },
         { name: 'authority', isMut: false, isSigner: true },
-        { name: 'counter', isMut: true, isSigner: false },
       ],
       args: [{ name: 'amount', type: 'u64' }],
     },
@@ -118,6 +123,73 @@ describe('tx-agent state machine', () => {
     expect(response.missingFields.some((field) => field.kind === 'feePayer')).toBe(true)
   })
 
+  test('selects a prior candidate when the user says use its project id', async () => {
+    const env = makeEnv({
+      projectId: 'ns6v9lmws7pakpl1itfma',
+      aiResponse: '{"programId":"ns6v9lmws7pakpl1itfma"}',
+    })
+
+    const response = await runTxAgent(env as any, {
+      message: 'use ns6v9lmws7pakpl1itfma',
+      state: {
+        projectCandidates: [
+          {
+            projectId: 'ns6v9lmws7pakpl1itfma',
+            name: 'simple_counter_devnet',
+            programId,
+          },
+        ],
+      },
+    })
+
+    expect(response.state.projectId).toBe('ns6v9lmws7pakpl1itfma')
+    expect(response.message).toContain('Which instruction')
+  })
+
+  test('autofills signer accounts from fee payer and derives PDA accounts', async () => {
+    globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { method?: string }
+      if (body.method === 'getLatestBlockhash') {
+        return jsonRpc({
+          value: {
+            blockhash: '11111111111111111111111111111111',
+            lastValidBlockHeight: 123,
+          },
+        })
+      }
+      if (body.method === 'simulateTransaction') {
+        return jsonRpc({
+          value: {
+            err: null,
+            logs: ['Program log: consumed 1000 of 200000 compute units'],
+          },
+        })
+      }
+      return jsonRpc(null)
+    }) as typeof fetch
+
+    const env = makeEnv({
+      aiResponse: '{}',
+    })
+
+    const response = await runTxAgent(env as any, {
+      message: 'feePayer is 11111111111111111111111111111111 you can find rest',
+      state: {
+        projectId: 'proj_counter',
+        instruction: 'increment',
+        network: 'devnet',
+        feePayer: authority,
+        args: {
+          amount: 1,
+        },
+      },
+    })
+
+    expect(response.status).toBe('simulated')
+    expect(response.state.accounts?.authority).toBe(authority)
+    expect(response.state.accounts?.counter).toBeDefined()
+  })
+
   test('builds and simulates a completed unsigned transaction with mocked AI and RPC', async () => {
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? '{}')) as { method?: string }
@@ -168,9 +240,9 @@ describe('tx-agent state machine', () => {
   })
 })
 
-function makeEnv(options: { aiResponse: string; searchRows?: any[] }) {
+function makeEnv(options: { aiResponse: string; searchRows?: any[]; projectId?: string }) {
   const projectRow = {
-    id: 'proj_counter',
+    id: options.projectId ?? 'proj_counter',
     name: 'Counter Program',
     program_id: programId,
     is_public: 1,

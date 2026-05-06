@@ -167,6 +167,12 @@ export interface TxAgentState {
   feePayer?: string
   accounts?: Record<string, string>
   args?: Record<string, unknown>
+  projectCandidates?: Array<{
+    projectId: string
+    name: string
+    programId: string
+    description?: string | null
+  }>
 }
 
 export interface TxAgentMissingField {

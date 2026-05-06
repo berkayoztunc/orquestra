@@ -31,8 +31,18 @@ app.post('/tx', async (c) => {
     return c.json({ error: validation.error }, 400)
   }
 
-  const response = await runTxAgent(c.env, validation.request)
-  return c.json(response, response.status === 'failed' && response.error ? 422 : 200)
+  try {
+    const response = await runTxAgent(c.env, validation.request)
+    return c.json(response)
+  } catch (err) {
+    return c.json({
+      status: 'failed',
+      message: 'The transaction agent hit an internal error before it could finish this turn.',
+      state: validation.request.state ?? {},
+      missingFields: [],
+      error: (err as Error).message,
+    })
+  }
 })
 
 function validateTxAgentRequest(body: unknown): { ok: true; request: TxAgentRequest } | { ok: false; error: string } {

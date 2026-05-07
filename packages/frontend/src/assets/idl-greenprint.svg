@@ -1,0 +1,54 @@
+<svg width="960" height="720" viewBox="0 0 960 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="720" rx="36" fill="#06110D"/>
+  <rect x="1" y="1" width="958" height="718" rx="35" stroke="#14F195" stroke-opacity="0.16" stroke-width="2"/>
+  <defs>
+    <pattern id="smallGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" stroke="#14F195" stroke-opacity="0.08" stroke-width="1"/>
+    </pattern>
+    <pattern id="largeGrid" width="96" height="96" patternUnits="userSpaceOnUse">
+      <rect width="96" height="96" fill="url(#smallGrid)"/>
+      <path d="M96 0H0V96" stroke="#14F195" stroke-opacity="0.16" stroke-width="1.4"/>
+    </pattern>
+    <linearGradient id="panelGlow" x1="184" y1="128" x2="814" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14F195" stop-opacity="0.24"/>
+      <stop offset="1" stop-color="#14F195" stop-opacity="0.03"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="960" height="720" fill="url(#largeGrid)"/>
+  <circle cx="480" cy="360" r="268" stroke="#14F195" stroke-opacity="0.12" stroke-width="2" stroke-dasharray="12 16"/>
+  <circle cx="480" cy="360" r="192" stroke="#14F195" stroke-opacity="0.18" stroke-width="2"/>
+  <path d="M150 214H810M150 506H810M230 126V594M730 126V594" stroke="#14F195" stroke-opacity="0.16" stroke-width="1.5" stroke-dasharray="10 14"/>
+
+  <g filter="url(#softGlow)">
+    <rect x="266" y="152" width="428" height="416" rx="24" fill="#0B1B14" stroke="#14F195" stroke-opacity="0.72" stroke-width="3"/>
+    <path d="M616 152V252H694" stroke="#14F195" stroke-opacity="0.7" stroke-width="3"/>
+    <path d="M616 152L694 252" stroke="#14F195" stroke-opacity="0.5" stroke-width="3"/>
+  </g>
+
+  <rect x="314" y="226" width="248" height="18" rx="9" fill="#14F195" fill-opacity="0.5"/>
+  <rect x="314" y="272" width="302" height="12" rx="6" fill="#14F195" fill-opacity="0.22"/>
+  <rect x="314" y="304" width="238" height="12" rx="6" fill="#14F195" fill-opacity="0.22"/>
+  <rect x="314" y="336" width="278" height="12" rx="6" fill="#14F195" fill-opacity="0.22"/>
+
+  <rect x="314" y="400" width="96" height="86" rx="16" fill="url(#panelGlow)" stroke="#14F195" stroke-opacity="0.5" stroke-width="2"/>
+  <rect x="432" y="400" width="96" height="86" rx="16" fill="url(#panelGlow)" stroke="#14F195" stroke-opacity="0.5" stroke-width="2"/>
+  <rect x="550" y="400" width="96" height="86" rx="16" fill="url(#panelGlow)" stroke="#14F195" stroke-opacity="0.5" stroke-width="2"/>
+  <path d="M344 430H380M344 456H392M462 430H498M462 456H510M580 430H616M580 456H628" stroke="#D7FFE9" stroke-opacity="0.86" stroke-width="5" stroke-linecap="round"/>
+
+  <path d="M172 360H266M694 360H788M480 82V152M480 568V638" stroke="#14F195" stroke-opacity="0.72" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="172" cy="360" r="8" fill="#14F195"/>
+  <circle cx="788" cy="360" r="8" fill="#14F195"/>
+  <circle cx="480" cy="82" r="8" fill="#14F195"/>
+  <circle cx="480" cy="638" r="8" fill="#14F195"/>
+
+  <path d="M116 106H314M116 106V166M844 614H646M844 614V554" stroke="#14F195" stroke-opacity="0.38" stroke-width="2"/>
+  <text x="116" y="92" fill="#D7FFE9" fill-opacity="0.72" font-family="JetBrains Mono, monospace" font-size="18" letter-spacing="2">ANCHOR IDL SCHEMA</text>
+  <text x="650" y="640" fill="#D7FFE9" fill-opacity="0.62" font-family="JetBrains Mono, monospace" font-size="15" letter-spacing="2">API SURFACE PLAN</text>
+</svg>

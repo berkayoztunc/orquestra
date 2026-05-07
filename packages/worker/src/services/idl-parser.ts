@@ -247,6 +247,51 @@ export function getCodamaDiscriminatorBytes(instruction: CodamaInstruction): Uin
   return null
 }
 
+/**
+ * Resolve the fields of a Codama account definition for API display.
+ * Returns the account's kind (struct/enum/etc.) and an array of field descriptors.
+ */
+export function resolveCodamaAccountFields(account: {
+  data: CodamaTypeNode
+  docs?: string[]
+}): { kind: string; fields: Array<{ name: string; typeStr: string; docs: string[] }> } {
+  if (!account.data) return { kind: 'unknown', fields: [] }
+  if (account.data.kind === 'structTypeNode') {
+    return {
+      kind: 'struct',
+      fields: (account.data.fields || []).map((f: any) => ({
+        name: f.name as string,
+        typeStr: resolveCodamaType(f.type),
+        docs: Array.isArray(f.docs) ? (f.docs as string[]) : [],
+      })),
+    }
+  }
+  return { kind: account.data.kind, fields: [] }
+}
+
+/**
+ * Return a human-readable description of the first discriminator in a Codama
+ * discriminators array.
+ *
+ * | discriminator kind       | returned kind  | returned value            |
+ * |--------------------------|----------------|---------------------------|
+ * | sizeDiscriminatorNode    | 'size'         | account size in bytes     |
+ * | fieldDiscriminatorNode   | 'field'        | 'fieldName@offset'        |
+ * | constantDiscriminatorNode| 'constant'     | null (bytes may vary)     |
+ * | (none)                   | 'none'         | null                      |
+ */
+export function describeCodamaDiscriminator(discriminators: any[]): {
+  kind: string
+  value: string | number | null
+} {
+  if (!discriminators || discriminators.length === 0) return { kind: 'none', value: null }
+  const d = discriminators[0] as any
+  if (d.kind === 'sizeDiscriminatorNode') return { kind: 'size', value: d.size as number }
+  if (d.kind === 'fieldDiscriminatorNode') return { kind: 'field', value: `${d.name}@${d.offset ?? 0}` }
+  if (d.kind === 'constantDiscriminatorNode') return { kind: 'constant', value: null }
+  return { kind: d.kind as string, value: null }
+}
+
 // Types imported inline to avoid path resolution issues in Workers
 interface AnchorIDL {
   version?: string

@@ -1,5 +1,16 @@
 import { Hono } from 'hono'
-import { optionalAuthMiddleware } from '../middleware/auth'
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
+import { generateDocumentation } from '../services/doc-generator'
+import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
+import type { AnchorIDL } from '../services/idl-parser'
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+}
+
+function getCurrentTimestamp(): string {
+  return new Date().toISOString()
+}
 
 type Env = {
   Variables: Record<string, unknown>
@@ -9,10 +20,35 @@ type Env = {
     CACHE: any
     API_BASE_URL: string
     INGEST_API_KEY: string
+    AI: Ai
+    AI_ANALYSIS_MODEL?: string
   }
 }
 
 const app = new Hono<Env>()
+
+function serializeAnalysis(analysis: any) {
+  let detailedAnalysis: Record<string, any> | null = null
+  if (analysis.detailed_analysis_json) {
+    try {
+      detailedAnalysis = JSON.parse(analysis.detailed_analysis_json as string)
+    } catch {
+      detailedAnalysis = null
+    }
+  }
+
+  return {
+    id: analysis.id,
+    projectId: analysis.project_id,
+    idlVersionId: analysis.idl_version_id,
+    idlVersion: analysis.idl_version,
+    shortDescription: analysis.short_description,
+    detailedAnalysis,
+    modelUsed: analysis.model_used,
+    generatedAt: analysis.generated_at,
+    createdAt: analysis.created_at,
+  }
+}
 
 /**
  * GET /api/projects/:projectId/ai-analysis
@@ -60,31 +96,94 @@ app.get('/projects/:projectId/ai-analysis', optionalAuthMiddleware, async (c) =>
       return c.json({ analysis: null, message: 'No AI analysis available for this project' })
     }
 
-    // Parse detailed_analysis_json if present
-    let detailedAnalysis: Record<string, any> | null = null
-    if (analysis.detailed_analysis_json) {
-      try {
-        detailedAnalysis = JSON.parse(analysis.detailed_analysis_json as string)
-      } catch {
-        detailedAnalysis = null
-      }
-    }
-
     return c.json({
-      analysis: {
-        id: analysis.id,
-        projectId: analysis.project_id,
-        idlVersionId: analysis.idl_version_id,
-        idlVersion: analysis.idl_version,
-        shortDescription: analysis.short_description,
-        detailedAnalysis,
-        modelUsed: analysis.model_used,
-        generatedAt: analysis.generated_at,
-        createdAt: analysis.created_at,
-      },
+      analysis: serializeAnalysis(analysis),
     })
   } catch (err) {
     return c.json({ error: 'Failed to fetch AI analysis', details: (err as Error).message }, 500)
+  }
+})
+
+/**
+ * POST /api/projects/:projectId/ai-analysis/regenerate
+ *
+ * Regenerates AI analysis for the latest IDL version. Owner only.
+ */
+app.post('/projects/:projectId/ai-analysis/regenerate', authMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const userId = c.get('userId') as string
+
+  try {
+    const db = c.env?.DB
+
+    const project = await db
+      ?.prepare('SELECT id, name, program_id, user_id FROM projects WHERE id = ? AND user_id = ?')
+      .bind(projectId, userId)
+      .first()
+
+    if (!project) {
+      return c.json({ error: 'Project not found or access denied' }, 404)
+    }
+
+    if (!c.env?.AI) {
+      return c.json({ error: 'AI binding not configured' }, 500)
+    }
+
+    const row = await db
+      ?.prepare(
+        'SELECT id, idl_json, cpi_md, version FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1',
+      )
+      .bind(projectId)
+      .first()
+
+    if (!row) {
+      return c.json({ error: 'IDL not found' }, 404)
+    }
+
+    const idl = JSON.parse(row.idl_json as string) as AnchorIDL
+    const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
+    const docs = generateDocumentation(
+      idl,
+      project.program_id as string,
+      apiBaseUrl,
+      projectId,
+      (row.cpi_md as string | null) ?? null,
+    )
+
+    if (c.env?.CACHE) {
+      await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+
+    const generated = await generateAndStoreAIAnalysis({
+      db,
+      ai: c.env.AI,
+      id: generateId(),
+      projectId,
+      idlVersionId: row.id as string,
+      idl,
+      docsText: docs.full,
+      programId: project.program_id as string,
+      projectName: project.name as string,
+      model: c.env.AI_ANALYSIS_MODEL,
+      now: getCurrentTimestamp(),
+    })
+
+    return c.json({
+      analysis: {
+        id: generated.id,
+        projectId: generated.projectId,
+        idlVersionId: generated.idlVersionId,
+        idlVersion: row.version,
+        shortDescription: generated.shortDescription,
+        detailedAnalysis: generated.detailedAnalysis,
+        modelUsed: generated.modelUsed,
+        generatedAt: generated.generatedAt,
+        createdAt: generated.createdAt,
+      },
+    })
+  } catch (err) {
+    console.error('[ai] Failed to regenerate AI analysis:', err)
+    return c.json({ error: 'Failed to regenerate AI analysis', details: (err as Error).message }, 500)
   }
 })
 

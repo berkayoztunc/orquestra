@@ -275,6 +275,45 @@ export async function resetDocs(projectId: string) {
   return res.data
 }
 
+// ─── AI Analysis ─────────────────────────────────────
+
+export interface AIAnalysisResponse {
+  analysis: {
+    id: string
+    projectId: string
+    idlVersionId: string | null
+    idlVersion?: number | null
+    shortDescription: string | null
+    detailedAnalysis: {
+      summary?: string
+      tags?: string[]
+      instructionCount?: number
+      accountCount?: number
+      errorCount?: number
+      eventCount?: number
+      capabilities?: string[]
+      keyInstructions?: Array<{ name: string; purpose: string }>
+      accountsOverview?: string[]
+      risks?: string[]
+      integrationNotes?: string[]
+    } | null
+    modelUsed: string | null
+    generatedAt: string | null
+    createdAt: string
+  } | null
+  message?: string
+}
+
+export async function getAIAnalysis(projectId: string) {
+  const res = await api.get(`/projects/${projectId}/ai-analysis`)
+  return res.data as AIAnalysisResponse
+}
+
+export async function regenerateAIAnalysis(projectId: string) {
+  const res = await api.post(`/projects/${projectId}/ai-analysis/regenerate`)
+  return res.data as AIAnalysisResponse
+}
+
 // ─── Known Addresses ─────────────────────────────────
 
 export async function listKnownAddresses(projectId: string) {

@@ -408,43 +408,86 @@ export function deserializeAccountData(
 // Codama account detection & deserialization
 // ────────────────────────────────────────────────────────
 
+/** Result of Codama account type detection, including the data start offset. */
+export interface CodamaAccountMatch {
+  name: string
+  data: CodamaTypeNode
+  /**
+   * Byte offset where serialized field data begins.
+   * - 0  for sizeDiscriminatorNode / fieldDiscriminatorNode (no prefix bytes)
+   * - 8  for Anchor-style SHA-256 discriminators or byte-based constant discriminators
+   */
+  startOffset: number
+}
+
 /**
- * Find a matching Codama account by comparing the first 8 bytes of raw on-chain
- * data against SHA-256("account:<Name>")[:8] for every account in the IDL.
- * Also checks explicit discriminator bytes stored in the IDL if present.
+ * Find a matching Codama account in the IDL for the given raw on-chain data.
+ *
+ * Discriminator strategy (in priority order for each account):
+ *   1. sizeDiscriminatorNode — match by exact data length; startOffset = 0
+ *   2. Explicit byte discriminators — match first N bytes; startOffset = N
+ *   3. Anchor-compatible SHA-256("account:<Name>")[:8]; startOffset = 8
+ *
+ * fieldDiscriminatorNode accounts are skipped for automated detection because
+ * verifying the field value requires partial deserialization.
  */
 export async function detectCodamaAccountType(
   rawData: Uint8Array,
   idl: CodamaIDL,
-): Promise<{ name: string; data: CodamaTypeNode } | null> {
+): Promise<CodamaAccountMatch | null> {
   const accounts = idl.program.accounts || []
-  if (!accounts.length || rawData.length < 8) return null
-  const dataDisc = rawData.slice(0, 8)
+  if (!accounts.length) return null
 
   for (const account of accounts) {
-    // Try explicit discriminator bytes from the IDL (any kind that carries bytes)
-    const explicitBytes = (account.discriminators || []).flatMap((d: any) => d.bytes || [])
+    const discs = (account.discriminators || []) as Array<Record<string, any>>
+
+    // 1. sizeDiscriminatorNode — match by exact data length, no prefix consumed
+    const sizeDisc = discs.find((d) => d.kind === 'sizeDiscriminatorNode')
+    if (sizeDisc) {
+      if (rawData.length === sizeDisc.size) {
+        return { name: account.name, data: account.data, startOffset: 0 }
+      }
+      // Size discriminator present but doesn't match — skip to next account
+      continue
+    }
+
+    // 2. fieldDiscriminatorNode — data also starts at 0 but we can't safely detect
+    //    without knowing the field type; skip automated detection for this kind
+    if (discs.some((d) => d.kind === 'fieldDiscriminatorNode')) continue
+
+    // 3. Explicit constant bytes (e.g., constantDiscriminatorNode with a bytes payload)
+    const explicitBytes = discs.flatMap((d) => d.bytes || [])
     if (explicitBytes.length >= 8) {
-      if (discriminatorsMatch(explicitBytes, dataDisc)) return { name: account.name, data: account.data }
-    } else {
-      // Fall back to Anchor-compatible: SHA-256("account:<Name>")[:8]
+      if (rawData.length >= 8 && discriminatorsMatch(explicitBytes, rawData.slice(0, 8))) {
+        return { name: account.name, data: account.data, startOffset: 8 }
+      }
+      continue
+    }
+
+    // 4. Anchor-compatible fallback: SHA-256("account:<Name>")[:8]
+    if (rawData.length >= 8) {
       const computed = await computeAccountDiscriminator(account.name)
-      if (discriminatorsMatch(computed, dataDisc)) return { name: account.name, data: account.data }
+      if (discriminatorsMatch(computed, rawData.slice(0, 8))) {
+        return { name: account.name, data: account.data, startOffset: 8 }
+      }
     }
   }
+
   return null
 }
 
 /**
- * Borsh-decode Codama account data (skips the 8-byte discriminator).
- * Handles the most common CodamaTypeNode kinds. Returns null for unknown types.
+ * Borsh-decode Codama account data starting at `startOffset`.
+ * Use `startOffset = 0` for accounts with sizeDiscriminatorNode (no prefix bytes).
+ * Use `startOffset = 8` for Anchor-style 8-byte discriminators (the default).
  */
 export function deserializeCodamaAccountData(
   rawData: Uint8Array,
   accountData: CodamaTypeNode,
   idl: CodamaIDL,
+  startOffset = 8,
 ): Record<string, unknown> {
-  const reader = new BorshReader(rawData, 8)
+  const reader = new BorshReader(rawData, startOffset)
   return decodeCodamaNode(reader, accountData, idl, 0) as Record<string, unknown>
 }
 
@@ -473,7 +516,19 @@ function decodeCodamaNode(reader: BorshReader, type: CodamaTypeNode, idl: Codama
     case 'stringTypeNode':   return reader.readString()
     case 'bytesTypeNode':    return btoa(String.fromCharCode(...reader.readByteVec()))
     case 'optionTypeNode': {
-      const tag = reader.readU8()
+      const isFixed = (type as any).fixed === true
+      const prefix = (type as any).prefix
+      // Determine tag size: SPL Token uses u32 COption (4-byte tag), standard Borsh uses u8
+      let tag: number
+      if (prefix?.format === 'u32') tag = reader.readU32()
+      else if (prefix?.format === 'u16') tag = reader.readU16()
+      else tag = reader.readU8()
+      if (isFixed) {
+        // Fixed-size option (COption): item bytes are always present in the data layout.
+        // Always decode the item — return null if tag=0, the decoded value if tag != 0.
+        const decoded = decodeCodamaNode(reader, type.item, idl, depth + 1)
+        return tag === 0 ? null : decoded
+      }
       if (tag === 0) return null
       return decodeCodamaNode(reader, type.item, idl, depth + 1)
     }
@@ -482,9 +537,17 @@ function decodeCodamaNode(reader: BorshReader, type: CodamaTypeNode, idl: Codama
     }
     case 'arrayTypeNode': {
       let count: number
-      if (type.count.kind === 'fixedCountNode') count = type.count.value
-      else if (type.count.kind === 'prefixedCountNode') count = reader.readU32()
-      else count = 0
+      if (type.count.kind === 'fixedCountNode') {
+        count = type.count.value
+      } else if (type.count.kind === 'prefixedCountNode') {
+        // Respect the actual prefix type (u8/u16/u32); default to u32 if not specified
+        const prefixFormat = (type.count as any).prefix?.format
+        if (prefixFormat === 'u8') count = reader.readU8()
+        else if (prefixFormat === 'u16') count = reader.readU16()
+        else count = reader.readU32()
+      } else {
+        count = 0 // remainderCountNode — consume remaining bytes as-is
+      }
       const arr: unknown[] = []
       for (let i = 0; i < count; i++) arr.push(decodeCodamaNode(reader, type.item, idl, depth + 1))
       return arr

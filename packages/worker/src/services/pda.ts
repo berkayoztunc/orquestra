@@ -403,11 +403,18 @@ function encodeCodamaSeedValue(value: any, type: CodamaTypeNode | undefined): Ui
 }
 
 /**
- * List all PDA definitions from a Codama IDL's program.pdas array.
- * Returns the same PdaAccountInfo shape the frontend expects.
+ * List all PDA definitions from a Codama IDL.
+ * Collects from two sources:
+ *   1. program.pdas — explicit top-level PDA definitions
+ *   2. Instruction account nodes whose defaultValue is a pdaValueNode — these
+ *      encode PDA-derivable accounts inline on the instruction (common in programs
+ *      that omit program.pdas and rely on instruction-level PDA hints instead).
  */
 export function listCodamaPdaAccounts(idl: CodamaIDL): PdaAccountInfo[] {
-  return (idl.program.pdas || []).map((pda) => {
+  const results: PdaAccountInfo[] = []
+
+  // ── 1. Explicit program.pdas ───────────────────────────────────────────────
+  for (const pda of (idl.program.pdas || [])) {
     const seeds: PdaAccountInfo['seeds'] = (pda.seeds || []).map((s) => {
       if (s.kind === 'constantPdaSeedNode') {
         let description = ''
@@ -429,27 +436,74 @@ export function listCodamaPdaAccounts(idl: CodamaIDL): PdaAccountInfo[] {
       }
       return { kind: s.kind, name: s.name }
     })
-    return { instruction: '', account: pda.name, seeds, customProgram: null }
-  })
+    results.push({ instruction: '', account: pda.name, seeds, customProgram: null })
+  }
+
+  // ── 2. Instruction accounts with pdaValueNode ──────────────────────────────
+  for (const ix of (idl.program.instructions || [])) {
+    for (const acc of (ix.accounts || [])) {
+      if ((acc as any).defaultValue?.kind !== 'pdaValueNode') continue
+      const pdaValue = (acc as any).defaultValue
+
+      // Resolve the linked program.pdas entry if present
+      const linkedPdaName = pdaValue.pda?.kind === 'pdaLinkNode' ? pdaValue.pda.name : null
+      const linkedPdaDef = linkedPdaName
+        ? (idl.program.pdas || []).find((p) => p.name === linkedPdaName)
+        : null
+
+      // Seeds come from the pdaValueNode overrides first, then the linked definition
+      const rawSeeds: any[] = (pdaValue.seeds?.length ? pdaValue.seeds : null) || linkedPdaDef?.seeds || []
+      const seeds: PdaAccountInfo['seeds'] = rawSeeds.map((s: any) => {
+        if (s.kind === 'pdaSeedValueNode') {
+          const argDef = (ix.arguments || []).find((a: any) => a.name === s.name)
+          return {
+            kind: argDef ? 'arg' : 'account',
+            name: s.name as string,
+            type: argDef ? resolveCodamaType(argDef.type) : undefined,
+          }
+        }
+        if (s.kind === 'constantPdaSeedNode') {
+          const v = s.value as any
+          const description = v?.kind === 'stringValueNode' ? v.string : (v?.kind === 'bytesValueNode' ? v.data || '' : '')
+          return { kind: 'const', description }
+        }
+        if (s.kind === 'variablePdaSeedNode') {
+          const argDef = (ix.arguments || []).find((a: any) => a.name === s.name)
+          return {
+            kind: 'arg',
+            name: s.name as string,
+            type: s.type ? resolveCodamaType(s.type) : (argDef ? resolveCodamaType(argDef.type) : undefined),
+          }
+        }
+        if (s.kind === 'programIdPdaSeedNode') {
+          return { kind: 'const', description: 'program_id' }
+        }
+        return { kind: s.kind, name: s.name as string }
+      })
+
+      // Skip if already present from program.pdas (by account name + instruction)
+      if (!results.some((r) => r.account === acc.name && r.instruction === ix.name)) {
+        results.push({ instruction: ix.name, account: acc.name, seeds, customProgram: null })
+      }
+    }
+  }
+
+  return results
 }
 
-/**
- * Derive a PDA from a Codama IDL program.pdas definition.
- * The pdaName corresponds to the PDA's name in program.pdas (used as 'account' param).
- */
-export async function deriveCodamaPda(
-  idl: CodamaIDL,
+/** Encode a raw Codama seed entry (constantPdaSeedNode / variablePdaSeedNode / programIdPdaSeedNode)
+ *  into a buffer and a description. Used by deriveCodamaPda for both program.pdas and pdaValueNode seeds. */
+async function resolveCodamaSeedBuffers(
+  seeds: any[],
   programId: string,
-  pdaName: string,
   seedValues: Record<string, any>,
-): Promise<PdaDerivationResult> {
-  const pdaDef = (idl.program.pdas || []).find((p) => p.name === pdaName)
-  if (!pdaDef) throw new Error(`PDA "${pdaName}" not found in IDL`)
+  instructionArgs?: any[],
+): Promise<{ buffers: Uint8Array[]; info: PdaDerivationResult['seeds'] }> {
+  const buffers: Uint8Array[] = []
+  const info: PdaDerivationResult['seeds'] = []
 
-  const seedBuffers: Uint8Array[] = []
-  const seedInfo: PdaDerivationResult['seeds'] = []
-
-  for (const s of pdaDef.seeds) {
+  for (const s of seeds) {
+    // constantPdaSeedNode
     if (s.kind === 'constantPdaSeedNode') {
       let bytes: Uint8Array
       if (s.value) {
@@ -457,18 +511,19 @@ export async function deriveCodamaPda(
         if (v.kind === 'stringValueNode') bytes = new TextEncoder().encode(v.string)
         else if (v.kind === 'bytesValueNode') bytes = Uint8Array.from(atob(v.data || ''), (c) => c.charCodeAt(0))
         else bytes = new TextEncoder().encode('')
-      } else if ((s as any).bytes) {
-        bytes = Uint8Array.from(atob((s as any).bytes), (c) => c.charCodeAt(0))
+      } else if (s.bytes) {
+        bytes = Uint8Array.from(atob(s.bytes), (c) => c.charCodeAt(0))
       } else {
         bytes = new Uint8Array(0)
       }
       let desc: string
       try { desc = new TextDecoder('utf-8', { fatal: true }).decode(bytes) } catch { desc = `0x${toHex(bytes)}` }
-      seedBuffers.push(bytes)
-      seedInfo.push({ kind: 'const', description: desc, hex: toHex(bytes) })
+      buffers.push(bytes)
+      info.push({ kind: 'const', description: desc, hex: toHex(bytes) })
       continue
     }
 
+    // variablePdaSeedNode
     if (s.kind === 'variablePdaSeedNode') {
       const name = s.name || ''
       const val = seedValues[name]
@@ -476,27 +531,95 @@ export async function deriveCodamaPda(
         throw new Error(`Missing seed value for "${name}"`)
       }
       const bytes = encodeCodamaSeedValue(val, s.type)
-      seedBuffers.push(bytes)
-      seedInfo.push({ kind: 'arg', name, value: val, hex: toHex(bytes) })
+      buffers.push(bytes)
+      info.push({ kind: 'arg', name, value: val, hex: toHex(bytes) })
       continue
     }
 
+    // pdaSeedValueNode (from pdaValueNode.seeds — links a named seed to an account/arg value)
+    if (s.kind === 'pdaSeedValueNode') {
+      const name = s.name || ''
+      const val = seedValues[name]
+      if (val === undefined || val === null || val === '') {
+        throw new Error(`Missing seed value for "${name}"`)
+      }
+      // Determine encoding from instruction argument type if available
+      const argDef = (instructionArgs || []).find((a: any) => a.name === name)
+      let bytes: Uint8Array
+      if (argDef?.type) {
+        bytes = encodeCodamaSeedValue(val, argDef.type)
+      } else if (isValidBase58Pubkey(String(val))) {
+        bytes = base58Decode(String(val))
+      } else {
+        bytes = new TextEncoder().encode(String(val))
+      }
+      buffers.push(bytes)
+      info.push({ kind: 'arg', name, value: val, hex: toHex(bytes) })
+      continue
+    }
+
+    // programIdPdaSeedNode
     if (s.kind === 'programIdPdaSeedNode') {
       const bytes = base58Decode(programId)
-      seedBuffers.push(bytes)
-      seedInfo.push({ kind: 'const', description: 'program_id', hex: toHex(bytes) })
+      buffers.push(bytes)
+      info.push({ kind: 'const', description: 'program_id', hex: toHex(bytes) })
       continue
     }
-    // Unknown seed kinds are skipped
+    // Unknown seed kinds skipped
   }
 
-  const programBytes = base58Decode(programId)
-  const [pdaBytes, bump] = await findProgramAddress(seedBuffers, programBytes)
+  return { buffers, info }
+}
 
-  return {
-    pda: base58Encode(pdaBytes),
-    bump,
-    programId,
-    seeds: seedInfo,
+/**
+ * Derive a PDA from a Codama IDL.
+ *
+ * Lookup order for `pdaName`:
+ *   1. program.pdas — explicit top-level PDA definitions
+ *   2. Instruction account nodes with `defaultValue.kind === 'pdaValueNode'`
+ *      where the account name matches `pdaName` (from any instruction)
+ *
+ * `seedValues` is a map of seed-name → value for all variable/arg seeds.
+ */
+export async function deriveCodamaPda(
+  idl: CodamaIDL,
+  programId: string,
+  pdaName: string,
+  seedValues: Record<string, any>,
+): Promise<PdaDerivationResult> {
+  // ── 1. program.pdas ──────────────────────────────────────────────────────
+  const pdaDef = (idl.program.pdas || []).find((p) => p.name === pdaName)
+  if (pdaDef) {
+    const { buffers, info } = await resolveCodamaSeedBuffers(pdaDef.seeds || [], programId, seedValues)
+    const [pdaBytes, bump] = await findProgramAddress(buffers, base58Decode(programId))
+    return { pda: base58Encode(pdaBytes), bump, programId, seeds: info }
   }
+
+  // ── 2. Instruction account pdaValueNode ───────────────────────────────────
+  for (const ix of (idl.program.instructions || [])) {
+    const acc = (ix.accounts || []).find(
+      (a: any) => a.name === pdaName && a.defaultValue?.kind === 'pdaValueNode',
+    )
+    if (!acc) continue
+
+    const pdaValue = (acc as any).defaultValue
+
+    // Resolve linked program.pdas if referenced
+    const linkedPdaName = pdaValue.pda?.kind === 'pdaLinkNode' ? pdaValue.pda.name : null
+    const linkedPdaDef = linkedPdaName
+      ? (idl.program.pdas || []).find((p) => p.name === linkedPdaName)
+      : null
+
+    const rawSeeds: any[] = (pdaValue.seeds?.length ? pdaValue.seeds : null) || linkedPdaDef?.seeds || []
+    const { buffers, info } = await resolveCodamaSeedBuffers(
+      rawSeeds,
+      programId,
+      seedValues,
+      ix.arguments,
+    )
+    const [pdaBytes, bump] = await findProgramAddress(buffers, base58Decode(programId))
+    return { pda: base58Encode(pdaBytes), bump, programId, seeds: info }
+  }
+
+  throw new Error(`PDA "${pdaName}" not found in IDL (checked program.pdas and instruction pdaValueNode accounts)`)
 }

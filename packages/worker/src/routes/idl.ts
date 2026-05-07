@@ -7,6 +7,7 @@ import { validateIDLUpload } from '../services/validation'
 import { autoSeedCategory } from '../services/program-auto-detect'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
+import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
@@ -31,6 +32,7 @@ type Env = {
     CACHE: any // KV namespace
     AI: Ai
     API_BASE_URL: string
+    AI_ANALYSIS_MODEL?: string
   }
 }
 
@@ -162,6 +164,26 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
     const docs = generateDocumentation(body.idl, body.programId, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+
+    if (c.env?.AI && db) {
+      c.executionCtx.waitUntil(
+        generateAndStoreAIAnalysis({
+          db,
+          ai: c.env.AI,
+          id: generateId(),
+          projectId,
+          idlVersionId,
+          idl: body.idl,
+          docsText: docs.full,
+          programId: body.programId,
+          projectName: body.name,
+          model: c.env.AI_ANALYSIS_MODEL,
+          now,
+        }).catch((err) => {
+          console.error('[idl] Background AI analysis failed:', err)
+        }),
+      )
     }
 
     return c.json({
@@ -343,6 +365,26 @@ app.put('/:projectId', authMiddleware, async (c) => {
     const docs = generateDocumentation(body.idl, project.program_id as string, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+
+    if (c.env?.AI && db) {
+      c.executionCtx.waitUntil(
+        generateAndStoreAIAnalysis({
+          db,
+          ai: c.env.AI,
+          id: generateId(),
+          projectId,
+          idlVersionId,
+          idl: body.idl,
+          docsText: docs.full,
+          programId: project.program_id as string,
+          projectName: project.name as string,
+          model: c.env.AI_ANALYSIS_MODEL,
+          now,
+        }).catch((err) => {
+          console.error('[idl] Background AI analysis failed:', err)
+        }),
+      )
     }
 
     return c.json({

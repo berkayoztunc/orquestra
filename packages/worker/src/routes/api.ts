@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 import { buildRateLimit } from '../middleware/rate-limit'
 import { invalidateCache } from '../middleware/cache'
-import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL, detectIDLFormat, getCodamaInstruction, getCodamaUserArgs, resolveCodamaType } from '../services/idl-parser'
+import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL, detectIDLFormat, getCodamaInstruction, getCodamaUserArgs, resolveCodamaType, describeCodamaDiscriminator, resolveCodamaAccountFields } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
@@ -1106,7 +1106,8 @@ app.get('/:projectId/pda/fetch/:address', async (c) => {
       if (codamaAccDef) {
         accountTypeName = codamaAccDef.name
         try {
-          parsedData = deserializeCodamaAccountData(rawBytes, codamaAccDef.data, codamaIdl)
+          // Pass startOffset so size-discriminated accounts (offset=0) are decoded correctly
+          parsedData = deserializeCodamaAccountData(rawBytes, codamaAccDef.data, codamaIdl, codamaAccDef.startOffset)
         } catch (parseErr) {
           parseError = (parseErr as Error).message
         }
@@ -1156,18 +1157,20 @@ app.get('/:projectId/accounts', async (c) => {
     if (detectIDLFormat(data.idl as unknown) === 'codama') {
       const codamaIdl = data.idl as unknown as CodamaIDL
       const prog = codamaIdl.program
-      const accounts = prog.accounts.map((acc) => ({
-        name: acc.name,
-        kind: 'struct',
-        docs: acc.docs || [],
-        discriminator: acc.discriminators?.flatMap((d) => (d as any).bytes || []) || [],
-        fields: acc.data.kind === 'structTypeNode'
-          ? (acc.data as any).fields.map((f: any) => ({
-              name: f.name,
-              type: resolveCodamaType(f.type),
-            }))
-          : [],
-      }))
+      const accounts = prog.accounts.map((acc) => {
+        const discInfo = describeCodamaDiscriminator((acc.discriminators || []) as any[])
+        const accFields = resolveCodamaAccountFields(acc as any)
+        return {
+          name: acc.name,
+          kind: accFields.kind,
+          docs: acc.docs || [],
+          discriminator: (acc.discriminators || []).flatMap((d: any) => d.bytes || []),
+          discriminatorKind: discInfo.kind,
+          discriminatorValue: discInfo.value,
+          size: (acc as any).size ?? null,
+          fields: accFields.fields.map((f) => ({ name: f.name, type: f.typeStr, docs: f.docs })),
+        }
+      })
       return c.json({ projectId, programName: prog.name, accounts })
     }
 

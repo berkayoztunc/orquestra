@@ -43,6 +43,7 @@ type Env = {
     CORS_ORIGIN: string
     INGEST_API_KEY: string
     AI: Ai
+    AI_ANALYSIS_MODEL?: string
   }
 }
 

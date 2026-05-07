@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Calendar, CheckCircle2, Clipboard, Clock3, GitBranch, Globe2, LockKeyhole, Share2 } from 'lucide-react'
+import { Calendar, CheckCircle2, Clipboard, Clock3, GitBranch, Globe2, LockKeyhole, Share2, Sparkles } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore } from '../store/projects'
@@ -19,6 +19,8 @@ import {
   updateProject,
   updateDocs,
   resetDocs,
+  getAIAnalysis,
+  regenerateAIAnalysis,
   listKnownAddresses,
   addKnownAddress,
   deleteKnownAddress,
@@ -55,6 +57,9 @@ export default function ProjectDetail(): JSX.Element {
   const [isCustomDocs, setIsCustomDocs] = useState(false)
   const [isRegeneratingDocs, setIsRegeneratingDocs] = useState(false)
   const [docsViewMode, setDocsViewMode] = useState<'preview' | 'raw'>('preview')
+  const [aiAnalysis, setAIAnalysis] = useState<any>(null)
+  const [isLoadingAIAnalysis, setIsLoadingAIAnalysis] = useState(false)
+  const [aiAnalysisError, setAIAnalysisError] = useState('')
 
   // Known addresses state
   const [knownAddresses, setKnownAddresses] = useState<any[]>([])
@@ -168,10 +173,17 @@ export default function ProjectDetail(): JSX.Element {
             break
           case 'docs':
             if (!docs) {
-              const data = await getDocs(projectId, 'json')
+              const [data, analysisData] = await Promise.all([
+                getDocs(projectId, 'json'),
+                getAIAnalysis(projectId).catch((err) => {
+                  console.error('Failed to load AI analysis:', err)
+                  return { analysis: null }
+                }),
+              ])
               const docsText = typeof data === 'string' ? data : data.docs || ''
               setDocs(docsText)
               setIsCustomDocs(data.isCustom || false)
+              setAIAnalysis(analysisData.analysis)
             }
             break
           case 'addresses':
@@ -355,7 +367,17 @@ export default function ProjectDetail(): JSX.Element {
         setDocs(docsText)
         setIsCustomDocs(data.isCustom || false)
         setIsEditingDocs(false)
-        showToast('Documentation regenerated from latest IDL', 'success')
+        setIsLoadingAIAnalysis(true)
+        setAIAnalysisError('')
+        try {
+          const analysisData = await regenerateAIAnalysis(projectId)
+          setAIAnalysis(analysisData.analysis)
+          showToast('Documentation and AI analysis regenerated', 'success')
+        } catch (err: any) {
+          setAIAnalysisError(err.response?.data?.error || 'Failed to regenerate AI analysis')
+          showToast('Documentation regenerated, but AI analysis failed', 'error')
+        }
+        setIsLoadingAIAnalysis(false)
       } catch (err: any) {
         showToast(err.response?.data?.error || 'Failed to regenerate docs', 'error')
       }
@@ -905,6 +927,141 @@ export default function ProjectDetail(): JSX.Element {
                     )}
                   </div>
                 </div>
+                {!isEditingDocs && (
+                  <div className="mb-6 rounded-xl border border-white/10 bg-surface-elevated p-5">
+                    <div className="flex flex-col gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
+                            <Sparkles className="w-4 h-4 text-primary" />
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-white">AI Analysis</h4>
+                            <p className="text-sm text-gray-400 mt-1">
+                              {isLoadingAIAnalysis
+                                ? 'Generating analysis from the latest llms.txt...'
+                                : aiAnalysis?.shortDescription || 'No AI analysis has been generated yet.'}
+                            </p>
+                          </div>
+                        </div>
+                        {aiAnalysis?.modelUsed && (
+                          <div className="text-xs text-gray-500 sm:text-right">
+                            <div>{aiAnalysis.modelUsed}</div>
+                            {aiAnalysis.generatedAt && (
+                              <div>{new Date(aiAnalysis.generatedAt).toLocaleString()}</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {aiAnalysisError && (
+                        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                          {aiAnalysisError}
+                        </div>
+                      )}
+
+                      {isLoadingAIAnalysis && (
+                        <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                          <div className="h-full w-1/2 bg-primary animate-pulse" />
+                        </div>
+                      )}
+
+                      {aiAnalysis?.detailedAnalysis && (
+                        <div className="space-y-4">
+                          {aiAnalysis.detailedAnalysis.tags?.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {aiAnalysis.detailedAnalysis.tags.map((tag: string) => (
+                                <span key={tag} className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-full px-2.5 py-1">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {aiAnalysis.detailedAnalysis.summary && (
+                            <p className="text-sm text-gray-300 leading-relaxed">
+                              {aiAnalysis.detailedAnalysis.summary}
+                            </p>
+                          )}
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {[
+                              ['Instructions', aiAnalysis.detailedAnalysis.instructionCount],
+                              ['Accounts', aiAnalysis.detailedAnalysis.accountCount],
+                              ['Errors', aiAnalysis.detailedAnalysis.errorCount],
+                              ['Events', aiAnalysis.detailedAnalysis.eventCount],
+                            ].map(([label, value]) => (
+                              <div key={label as string} className="rounded-lg bg-dark-900/60 border border-white/10 px-3 py-2">
+                                <div className="text-xs text-gray-500">{label}</div>
+                                <div className="text-lg font-semibold text-white">{value ?? 0}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {aiAnalysis.detailedAnalysis.capabilities?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-semibold text-white mb-2">Capabilities</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {aiAnalysis.detailedAnalysis.capabilities.map((item: string) => (
+                                  <span key={item} className="text-xs text-gray-300 bg-white/5 rounded-md px-2.5 py-1">
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {aiAnalysis.detailedAnalysis.keyInstructions?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-semibold text-white mb-2">Key Instructions</h5>
+                              <div className="space-y-2">
+                                {aiAnalysis.detailedAnalysis.keyInstructions.map((item: { name: string; purpose: string }) => (
+                                  <div key={item.name} className="text-sm text-gray-300">
+                                    <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">{item.name}</code>
+                                    <span className="ml-2">{item.purpose}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {aiAnalysis.detailedAnalysis.integrationNotes?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-semibold text-white mb-2">Integration Notes</h5>
+                              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                                {aiAnalysis.detailedAnalysis.integrationNotes.map((item: string) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {aiAnalysis.detailedAnalysis.accountsOverview?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-semibold text-white mb-2">Accounts Overview</h5>
+                              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                                {aiAnalysis.detailedAnalysis.accountsOverview.map((item: string) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {aiAnalysis.detailedAnalysis.risks?.length > 0 && (
+                            <div>
+                              <h5 className="text-sm font-semibold text-white mb-2">Risks</h5>
+                              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                                {aiAnalysis.detailedAnalysis.risks.map((item: string) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {isEditingDocs ? (
                   <div>
                     <textarea

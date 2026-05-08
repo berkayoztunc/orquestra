@@ -8,6 +8,7 @@ import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData, detectCodamaAccountType, deserializeCodamaAccountData } from '../services/account-parser'
+import { queryProgramAccounts, normalizeProgramAccountsQuery } from '../services/program-accounts'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
 import { fetchAnchorIDLFromChain } from '../services/idl-fetcher'
@@ -1143,6 +1144,106 @@ app.get('/:projectId/pda/fetch/:address', async (c) => {
   }
 })
 
+// Query program-owned accounts with dataSize/memcmp filters and IDL decoding
+app.post('/:projectId/program-accounts/query', async (c) => {
+  const projectId = c.req.param('projectId')
+
+  try {
+    const body = await c.req.json<{
+      accountType?: string
+      network?: string
+      rpcUrl?: string
+      dataSize?: number
+      memcmp?: Array<{ offset: number; bytes: string }>
+      fieldFilters?: Array<{ field: string; bytes: string }>
+      limit?: number
+      includeRaw?: boolean
+    }>().catch(() => null)
+
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return c.json({ error: 'Request body must be a JSON object' }, 400)
+    }
+
+    const errors: Array<{ field: string; message: string }> = []
+    if (body.accountType !== undefined && (typeof body.accountType !== 'string' || body.accountType.trim().length === 0)) {
+      errors.push({ field: 'accountType', message: 'accountType must be a non-empty string' })
+    }
+    if (body.dataSize !== undefined && (!Number.isInteger(body.dataSize) || body.dataSize <= 0)) {
+      errors.push({ field: 'dataSize', message: 'dataSize must be a positive integer' })
+    }
+    if (body.limit !== undefined && (!Number.isInteger(body.limit) || body.limit <= 0 || body.limit > 100)) {
+      errors.push({ field: 'limit', message: 'limit must be an integer between 1 and 100' })
+    }
+    if (body.memcmp !== undefined) {
+      if (!Array.isArray(body.memcmp) || body.memcmp.length > 10) {
+        errors.push({ field: 'memcmp', message: 'memcmp must be an array with at most 10 filters' })
+      } else {
+        body.memcmp.forEach((filter, index) => {
+          if (!Number.isInteger(filter?.offset) || filter.offset < 0) {
+            errors.push({ field: `memcmp.${index}.offset`, message: 'offset must be a non-negative integer' })
+          }
+          if (typeof filter?.bytes !== 'string' || filter.bytes.length === 0) {
+            errors.push({ field: `memcmp.${index}.bytes`, message: 'bytes must be a non-empty string' })
+          }
+        })
+      }
+    }
+    if (body.fieldFilters !== undefined) {
+      if (!Array.isArray(body.fieldFilters) || body.fieldFilters.length > 10) {
+        errors.push({ field: 'fieldFilters', message: 'fieldFilters must be an array with at most 10 filters' })
+      } else {
+        body.fieldFilters.forEach((filter, index) => {
+          if (typeof filter?.field !== 'string' || filter.field.length === 0) {
+            errors.push({ field: `fieldFilters.${index}.field`, message: 'field must be a non-empty string' })
+          }
+          if (typeof filter?.bytes !== 'string' || filter.bytes.length === 0) {
+            errors.push({ field: `fieldFilters.${index}.bytes`, message: 'bytes must be a non-empty string' })
+          }
+        })
+      }
+    }
+    if (body.includeRaw !== undefined && typeof body.includeRaw !== 'boolean') {
+      errors.push({ field: 'includeRaw', message: 'includeRaw must be a boolean' })
+    }
+
+    if (errors.length > 0) {
+      return c.json({ error: 'Invalid program account query', details: errors }, 400)
+    }
+
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    if (!data) {
+      return c.json({ error: 'Project not found or not public' }, 404)
+    }
+
+    const normalized = normalizeProgramAccountsQuery(body)
+    const { rpcUrl, cluster } = resolveSolanaRpcUrl({
+      network: normalized.network ?? 'mainnet-beta',
+      rpcUrlOverride: normalized.rpcUrl,
+      env: c.env,
+    })
+
+    const result = await queryProgramAccounts({
+      idl: data.idl as AnchorIDL | CodamaIDL,
+      programId: data.programId,
+      rpcUrl,
+      cluster,
+      input: normalized,
+    })
+
+    return c.json({ projectId, ...result })
+  } catch (err) {
+    const message = (err as Error).message
+    const isClientError =
+      message.includes('not found in IDL') ||
+      message.includes('fieldFilters require accountType') ||
+      message.includes('not offset-resolvable')
+    return c.json(
+      { error: isClientError ? 'Invalid program account query' : 'Failed to query program accounts', details: message },
+      isClientError ? 400 : 500,
+    )
+  }
+})
+
 // Get accounts
 app.get('/:projectId/accounts', async (c) => {
   const projectId = c.req.param('projectId')
@@ -1411,6 +1512,7 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
         overview: docs.overview,
         instructions: docs.instructions,
         accounts: docs.accounts,
+        programAccounts: docs.programAccounts,
         types: docs.types,
         errors: docs.errors,
         events: docs.events,

@@ -84,6 +84,7 @@ Upload limits:
 | `GET` | `/api/:projectId/pda` | List PDA schemas |
 | `POST` | `/api/:projectId/pda/derive` | Derive a PDA |
 | `GET` | `/api/:projectId/pda/fetch/:address` | Fetch and decode account data |
+| `POST` | `/api/:projectId/program-accounts/query` | Query program accounts with dataSize and memcmp filters |
 | `GET` | `/api/:projectId/accounts` | List account types |
 | `GET` | `/api/:projectId/errors` | List custom errors |
 | `GET` | `/api/:projectId/events` | List events |
@@ -117,6 +118,30 @@ Notes:
 - If `recentBlockhash` is omitted, the worker fetches one from the selected RPC.
 - `encoding` defaults to `base58`; `base64` is recommended for modern Solana RPC usage.
 - `simulate: true` runs unsigned preflight and may return decoded Anchor errors.
+
+### Program Account Query Request
+
+```json
+{
+  "accountType": "Counter",
+  "network": "mainnet-beta",
+  "rpcUrl": "https://optional-rpc.example",
+  "dataSize": 48,
+  "memcmp": [{ "offset": 8, "bytes": "<base58-bytes>" }],
+  "fieldFilters": [{ "field": "authority", "bytes": "<pubkey>" }],
+  "limit": 25,
+  "includeRaw": false
+}
+```
+
+Notes:
+
+- `accountType` auto-applies the account discriminator filter and may infer fixed account size.
+- `dataSize` applies Solana's exact account data length filter.
+- `memcmp` is the raw Solana byte-offset filter for advanced queries.
+- `fieldFilters` require `accountType` and only work for fixed-offset IDL fields.
+- Dynamic fields such as `string`, `vec`, `bytes`, and variable arrays may require explicit `dataSize` or raw `memcmp` offsets.
+- Results are decoded with the IDL by default; raw base64 is included only when `includeRaw` is true or decoding is not possible.
 
 ## Known Addresses
 

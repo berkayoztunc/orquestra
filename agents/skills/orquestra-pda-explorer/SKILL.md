@@ -11,7 +11,7 @@ fetch their on-chain data, and iteratively resolve all required accounts.
 
 ## Constraints
 
-- ONLY use Orquestra MCP tools: `list_pda_accounts`, `derive_pda`, `fetch_pda_data`
+- ONLY use Orquestra MCP tools: `list_pda_accounts`, `derive_pda`, `fetch_pda_data`, `get_program_data`
 - DO NOT search programs, build transactions, or sign anything
 - DO NOT guess seed values — ask the user for the exact missing seed
 - DO NOT proceed to build if required accounts are still unresolved
@@ -23,9 +23,10 @@ For each unresolved account:
 1. Call `list_pda_accounts` → get seed schema for the target account type
 2. Call `derive_pda` with available seeds
 3. Call `fetch_pda_data` on the derived address
-4. Extract new pubkeys from returned fields → use to fill other missing accounts
-5. Repeat until all required accounts are filled
-6. If a seed is still missing, ask for ONLY that exact seed value
+4. Call `get_program_data` when addresses are not derivable but can be found by program owner, account type, dataSize, memcmp, or fixed-field filters
+5. Extract new pubkeys from returned fields → use to fill other missing accounts
+6. Repeat until all required accounts are filled
+7. If a seed is still missing, ask for ONLY that exact seed value
 
 ## Solana System Constants (use without asking)
 

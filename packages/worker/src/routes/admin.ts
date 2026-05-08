@@ -24,7 +24,8 @@ const app = new Hono<Env>()
  *
  * tool_id values: -1=api, 0=search_programs, 1=list_instructions,
  *   2=build_instruction, 3=list_pda_accounts, 4=derive_pda,
- *   5=read_llms_txt, 6=get_ai_analysis, 7=fetch_pda_data
+ *   5=read_llms_txt, 6=get_ai_analysis, 7=fetch_pda_data,
+ *   8=simulate_instruction, 9=get_program_data
  */
 app.get('/analytics', async (c) => {
   const db = c.env?.DB

@@ -73,6 +73,8 @@ describe('llms.txt external API section', () => {
     const text = await res.text()
     expect(res.status).toBe(200)
     expect(text).toContain('## External APIs')
+    expect(text).toContain('/program-accounts/query')
+    expect(text).toContain('accountType to auto-apply discriminator filters')
     expect(text).toContain('Orquestra does not execute or proxy them')
     expect(text).toContain('Indexer Account Lookup')
     expect(text).toContain('https://indexer.example.com/accounts/{address}')

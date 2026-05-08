@@ -16,6 +16,7 @@ export interface GeneratedDocs {
   types: string          // Types section only
   overview: string       // Overview/summary section
   pdaAccounts: string    // PDA-derivable accounts section
+  programAccounts: string // Program account query section
 }
 
 /**
@@ -50,15 +51,16 @@ function generateAnchorDocumentation(
   const events = generateEventsDocs(idl)
   const types = generateTypesDocs(idl)
   const pdaAccounts = generatePdaDocs(idl, normalizedApiBase, projectSlug)
+  const programAccounts = generateProgramAccountsDocs(idl.accounts?.map((a) => a.name) || [], normalizedApiBase, projectSlug)
 
-  let full = [overview, pdaAccounts, instructions, accounts, types, errors, events].join('\n\n---\n\n')
+  let full = [overview, pdaAccounts, programAccounts, instructions, accounts, types, errors, events].join('\n\n---\n\n')
 
   // Append CPI documentation if available
   if (cpiMd) {
     full += `\n\n---\n\n## CPI Integration\n\n${cpiMd}`
   }
 
-  return { full, instructions, accounts, errors, events, types, overview, pdaAccounts }
+  return { full, instructions, accounts, errors, events, types, overview, pdaAccounts, programAccounts }
 }
 
 function generateOverview(
@@ -97,6 +99,7 @@ function generateOverview(
 | POST | \`${base}/instructions/:name/build\` | Build a base58 transaction |
 | GET | \`${base}/pda\` | List all PDA-derivable accounts with seed schemas |
 | POST | \`${base}/pda/derive\` | Derive a PDA address from seed values |
+| POST | \`${base}/program-accounts/query\` | Query program-owned accounts with dataSize and memcmp filters |
 | GET | \`${base}/accounts\` | List all account types |
 | GET | \`${base}/errors\` | List all error codes |
 | GET | \`${base}/types\` | List all custom types |
@@ -134,6 +137,65 @@ curl -X POST ${base}/pda/derive \\
     "instruction": "instruction_name",
     "account": "account_name",
     "seeds": { "seed_arg_name": "value" }
+  }'
+\`\`\`
+
+### Query program accounts
+\`\`\`bash
+curl -X POST ${base}/program-accounts/query \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "accountType": "${idl.accounts?.[0]?.name || 'AccountType'}",
+    "fieldFilters": [
+      { "field": "authority", "bytes": "<base58-bytes-or-pubkey>" }
+    ],
+    "limit": 25
+  }'
+\`\`\``
+}
+
+function generateProgramAccountsDocs(
+  accountNames: string[],
+  apiBaseUrl: string,
+  projectSlug: string,
+): string {
+  const base = `${apiBaseUrl}/${projectSlug}`
+  const sampleAccount = accountNames[0] || 'AccountType'
+
+  return `## Query Program Accounts
+
+**Endpoint:** \`POST ${base}/program-accounts/query\`
+
+Use this endpoint to query on-chain accounts owned by this program through Solana \`getProgramAccounts\`. Orquestra builds the RPC filters, applies IDL metadata when available, and decodes matching accounts by default.
+
+### Filter options
+
+| Field | Purpose |
+|-------|---------|
+| \`accountType\` | IDL account type name. Adds the account discriminator filter and infers fixed account size when possible. |
+| \`dataSize\` | Exact Solana account data length in bytes. Useful for narrowing account layouts. |
+| \`memcmp\` | Raw Solana memcmp filters by byte offset. Use for advanced byte-level matching. |
+| \`fieldFilters\` | IDL field filters for fixed-offset fields. Requires \`accountType\`. |
+| \`limit\` | Returned account limit. Defaults to 25, max 100. |
+| \`includeRaw\` | Include raw base64 data. Defaults to false unless decoding fails or the account type is unknown. |
+
+Dynamic fields such as \`string\`, \`vec\`, \`bytes\`, and variable arrays may prevent automatic size or field-offset inference. In those cases, provide explicit \`dataSize\` and raw \`memcmp\` offsets.
+
+### Example
+
+\`\`\`bash
+curl -X POST ${base}/program-accounts/query \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "accountType": "${sampleAccount}",
+    "dataSize": 48,
+    "memcmp": [
+      { "offset": 8, "bytes": "<base58-bytes>" }
+    ],
+    "fieldFilters": [
+      { "field": "authority", "bytes": "<pubkey>" }
+    ],
+    "limit": 25
   }'
 \`\`\``
 }
@@ -428,13 +490,14 @@ function generateCodamaDocumentation(
   const errors = generateCodamaErrorsDocs(idl)
   const types = generateCodamaTypesDocs(idl)
   const pdaAccounts = generateCodamaPdaDocs(idl, normalizedApiBase, projectSlug)
+  const programAccounts = generateProgramAccountsDocs(prog.accounts?.map((a) => a.name) || [], normalizedApiBase, projectSlug)
 
-  let full = [overview, pdaAccounts, instructions, accounts, types, errors].join('\n\n---\n\n')
+  let full = [overview, pdaAccounts, programAccounts, instructions, accounts, types, errors].join('\n\n---\n\n')
   if (cpiMd) {
     full += `\n\n---\n\n## CPI Integration\n\n${cpiMd}`
   }
 
-  return { full, instructions, accounts, errors, events: '', types, overview, pdaAccounts }
+  return { full, instructions, accounts, errors, events: '', types, overview, pdaAccounts, programAccounts }
 }
 
 function generateCodamaOverview(
@@ -473,6 +536,7 @@ function generateCodamaOverview(
 | POST | \`${base}/instructions/:name/build\` | Build a base58 transaction |
 | GET | \`${base}/pda\` | List all PDA-derivable accounts with seed schemas |
 | POST | \`${base}/pda/derive\` | Derive a PDA address from seed values |
+| POST | \`${base}/program-accounts/query\` | Query program-owned accounts with dataSize and memcmp filters |
 | GET | \`${base}/accounts\` | List all account types |
 | GET | \`${base}/errors\` | List all error codes |
 | GET | \`${base}/types\` | List all custom types |
@@ -488,6 +552,16 @@ curl -X POST ${base}/instructions/{name}/build \\
     "accounts": { "account_name": "pubkey..." },
     "args": { "arg_name": "value" },
     "feePayer": "your_pubkey..."
+  }'
+\`\`\`
+
+### Query program accounts
+\`\`\`bash
+curl -X POST ${base}/program-accounts/query \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "accountType": "${prog.accounts?.[0]?.name || 'AccountType'}",
+    "limit": 25
   }'
 \`\`\``
 }

@@ -14,6 +14,7 @@
  *   6. read_llms_txt          — fetch the full AI-ready markdown docs for a project
  *   7. get_ai_analysis        — get AI analysis summary (tags, description, stats)
  *   8. simulate_instruction   — preflight an instruction against the RPC, no signing required
+ *   9. get_program_data       — query program-owned accounts with dataSize/memcmp filters
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -33,6 +34,7 @@ import { buildTransaction, simulateInstruction } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData } from '../services/account-parser'
+import { queryProgramAccounts } from '../services/program-accounts'
 import { generateDocumentation } from '../services/doc-generator'
 import { searchProjects } from '../services/search'
 import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
@@ -962,6 +964,124 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
         } else if (!parseError) {
           lines.push('', '_Account type not recognized — no IDL discriminator match._')
           lines.push(`Raw (base64): \`${rawInfo.data.slice(0, 64)}${rawInfo.data.length > 64 ? '…' : ''}\``)
+        }
+
+        return { content: [{ type: 'text', text: lines.join('\n') }] }
+      } catch (err: any) {
+        return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
+      }
+    },
+  )
+
+  // ── Tool 9: get_program_data ────────────────────────────────────────────────
+
+  server.tool(
+    'get_program_data',
+    'Query Solana program-owned accounts for a project using getProgramAccounts. Supports accountType discriminator filters, dataSize, raw memcmp filters, and IDL fieldFilters for fixed-offset fields. Decodes matching accounts with the project IDL by default.',
+    {
+      projectId: z.string().describe('The orquestra project ID'),
+      accountType: z
+        .string()
+        .optional()
+        .describe('Optional IDL account type name. Adds the account discriminator filter and infers dataSize when fixed.'),
+      network: z
+        .enum(['mainnet-beta', 'devnet', 'testnet'])
+        .optional()
+        .describe('Solana cluster to query. Defaults to mainnet-beta.'),
+      rpcUrl: z
+        .string()
+        .optional()
+        .describe('Optional full RPC URL override. Takes precedence over network.'),
+      dataSize: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Optional Solana getProgramAccounts dataSize filter.'),
+      memcmp: z
+        .array(z.object({ offset: z.number().int().min(0), bytes: z.string().min(1) }))
+        .max(10)
+        .optional()
+        .describe('Optional raw memcmp filters with byte offset and Solana RPC bytes string.'),
+      fieldFilters: z
+        .array(z.object({ field: z.string().min(1), bytes: z.string().min(1) }))
+        .max(10)
+        .optional()
+        .describe('Optional IDL field filters. Requires accountType; only fixed-offset fields can be used.'),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .default(25)
+        .describe('Maximum returned accounts after RPC response limiting. Defaults to 25, max 100.'),
+      includeRaw: z
+        .boolean()
+        .optional()
+        .describe('If true, include raw base64 account data in each result. Raw is also included for unknown or parse-failed accounts.'),
+    },
+    async ({ projectId, accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, limit, includeRaw }) => {
+      try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.get_program_data, projectId })
+        const data = await fetchIDL(projectId, env)
+        if (!data) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: `Project "${projectId}" not found or is private.` }],
+          }
+        }
+
+        const { rpcUrl: resolvedRpc, cluster } = resolveSolanaRpcUrl({
+          network: network ?? 'mainnet-beta',
+          rpcUrlOverride: rpcUrl,
+          env,
+        })
+
+        const result = await queryProgramAccounts({
+          idl: data.idl as AnchorIDL | CodamaIDL,
+          programId: data.programId,
+          rpcUrl: resolvedRpc,
+          cluster,
+          input: { accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, limit, includeRaw },
+        })
+
+        const lines: string[] = [
+          `# Program Data Query: ${data.projectName}`,
+          `Program ID: \`${data.programId}\``,
+          `Cluster: \`${result.cluster}\` | Slot: \`${result.slot}\``,
+          `Returned accounts: \`${result.count}\``,
+          '',
+          '**Filters applied:**',
+        ]
+
+        if (result.filtersApplied.length === 0) {
+          lines.push('  - none')
+        } else {
+          for (const filter of result.filtersApplied) {
+            if (filter.type === 'dataSize') {
+              lines.push(`  - dataSize: \`${filter.dataSize}\``)
+            } else {
+              lines.push(`  - memcmp @ \`${filter.offset}\` from ${filter.source}: \`${filter.bytes}\``)
+            }
+          }
+        }
+
+        for (const account of result.accounts) {
+          lines.push(
+            '',
+            `## \`${account.address}\``,
+            `Type: ${account.accountType ? `\`${account.accountType}\`` : '_Unknown_'}`,
+            `Owner: \`${account.owner}\``,
+            `Lamports: \`${account.lamports}\` | Executable: \`${account.executable}\` | Rent epoch: \`${account.rentEpoch}\``,
+          )
+          if (account.parseError) {
+            lines.push(`Parse error: ${account.parseError}`)
+          }
+          if (account.data) {
+            lines.push('', 'Decoded data:', '```json', JSON.stringify(account.data, null, 2), '```')
+          } else if (account.raw) {
+            lines.push(`Raw (base64 preview): \`${account.raw.slice(0, 96)}${account.raw.length > 96 ? '...' : ''}\``)
+          }
         }
 
         return { content: [{ type: 'text', text: lines.join('\n') }] }

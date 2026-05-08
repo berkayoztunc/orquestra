@@ -47,6 +47,7 @@ Orquestra exposes these tools over Streamable HTTP MCP:
 - `read_llms_txt`
 - `get_ai_analysis`
 - `fetch_pda_data`
+- `get_program_data`
 
 Example Claude Code config:
 

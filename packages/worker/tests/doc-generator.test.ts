@@ -64,6 +64,8 @@ describe('Doc Generator', () => {
     expect(docs.full).toContain('test_program')
     expect(docs.full).toContain('initialize')
     expect(docs.full).toContain('transfer')
+    expect(docs.full).toContain('Query Program Accounts')
+    expect(docs.full).toContain('/program-accounts/query')
   })
 
   test('generates instruction docs', () => {
@@ -79,6 +81,8 @@ describe('Doc Generator', () => {
     expect(docs.accounts).toContain('StateAccount')
     expect(docs.accounts).toContain('authority')
     expect(docs.accounts).toContain('balance')
+    expect(docs.programAccounts).toContain('accountType')
+    expect(docs.programAccounts).toContain('fieldFilters')
   })
 
   test('generates error docs', () => {

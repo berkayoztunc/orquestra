@@ -29,7 +29,8 @@
       "allowed_tools": [
         "list_pda_accounts",
         "derive_pda",
-        "fetch_pda_data"
+        "fetch_pda_data",
+        "get_program_data"
       ],
       "must_never": [
         "Search programs",

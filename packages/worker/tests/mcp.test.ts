@@ -18,6 +18,7 @@ import { describe, test, expect, mock } from 'bun:test'
 import { parseIDL, expandInstructionArgs, normalizeAccountMeta } from '../src/services/idl-parser'
 import { listPdaAccounts } from '../src/services/pda'
 import { generateDocumentation } from '../src/services/doc-generator'
+import { MCP_TOOL } from '../src/services/analytics'
 import type { AnchorIDL } from '../src/services/idl-parser'
 
 // ── Shared test IDL ──────────────────────────────────────────────────────────
@@ -209,6 +210,18 @@ describe('MCP tool: read_llms_txt', () => {
   test('docs contain error codes section', () => {
     const docs = generateDocumentation(testIDL, 'PROG', 'http://localhost:8787', 'proj_test', null)
     expect(docs.errors).toContain('Unauthorized')
+  })
+
+  test('docs expose get_program_data REST guidance', () => {
+    const docs = generateDocumentation(testIDL, 'PROG', 'http://localhost:8787', 'proj_test', null)
+    expect(docs.full).toContain('Query Program Accounts')
+    expect(docs.full).toContain('/program-accounts/query')
+  })
+})
+
+describe('MCP tool: get_program_data', () => {
+  test('analytics enum includes the tool after existing tools', () => {
+    expect(MCP_TOOL.get_program_data).toBe(9)
   })
 })
 

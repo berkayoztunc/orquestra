@@ -49,11 +49,12 @@ Hands off to: `orquestra-pda-explorer` (if PDAs must be derived) or `orquestra-t
 ## Skill 2 — orquestra-pda-explorer
 
 **MCP**: Orquestra only
-**Allowed tools**: `list_pda_accounts`, `derive_pda`, `fetch_pda_data`
+**Allowed tools**: `list_pda_accounts`, `derive_pda`, `fetch_pda_data`, `get_program_data`
 
 ### Responsibilities
 - Derive PDA addresses from known seeds + program ID
 - Fetch and decode on-chain PDA account data
+- Query program-owned accounts with account type, dataSize, memcmp, or fixed-field filters
 - Iteratively resolve missing accounts by extracting pubkeys from PDA fields
 - Report exactly which seeds or pubkeys the user must still provide
 
@@ -67,8 +68,9 @@ Hands off to: `orquestra-pda-explorer` (if PDAs must be derived) or `orquestra-t
 1. Call `list_pda_accounts` → get seed schema for the target account type
 2. Call `derive_pda` with available seeds
 3. Call `fetch_pda_data` → extract new pubkeys for dependent accounts
-4. Repeat until all required accounts are filled or a specific seed is still missing
-5. Ask the user for ONLY the exact missing seed value
+4. Call `get_program_data` when account addresses are not derivable but can be searched by program ownership, account type, dataSize, memcmp, or fixed-field filters
+5. Repeat until all required accounts are filled or a specific seed is still missing
+6. Ask the user for ONLY the exact missing seed value
 
 ### Output Contract
 Returns: table of (account role → derived address → on-chain fields).

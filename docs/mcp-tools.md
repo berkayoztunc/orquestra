@@ -241,6 +241,32 @@ Returns:
 - Decoded fields when the account discriminator matches
 - Raw base64 preview when the account type is unknown
 
+### `get_program_data`
+
+Query program-owned accounts with Solana `getProgramAccounts`.
+
+Inputs:
+
+- `projectId`
+- `accountType` - optional IDL account type name
+- `network` - optional `mainnet-beta`, `devnet`, or `testnet`
+- `rpcUrl` - optional RPC URL override
+- `dataSize` - optional exact account data length
+- `memcmp` - optional raw byte-offset filters
+- `fieldFilters` - optional fixed-offset IDL field filters; requires `accountType`
+- `limit` - 1 to 100, default 25
+- `includeRaw` - optional boolean
+
+Returns:
+
+- Program ID, cluster, slot, filters applied, and count
+- Account address, owner, lamports, executable flag, and rent epoch
+- Detected account type
+- Decoded fields when the IDL matches
+- Raw base64 only when requested, unknown, or parse-failed
+
+Use `accountType` to auto-apply discriminator filters. Use `dataSize` for exact layout size, raw `memcmp` for advanced byte offsets, and `fieldFilters` only for fixed-offset fields. Dynamic account fields may require manual `dataSize` or raw offsets.
+
 ## Recommended Agent Flow
 
 1. `search_programs`
@@ -248,7 +274,7 @@ Returns:
 3. `list_instructions`
 4. `list_pda_accounts`
 5. `derive_pda`
-6. `fetch_pda_data`
+6. `fetch_pda_data` or `get_program_data`
 7. `simulate_instruction`
 8. `build_instruction`
 9. Sign with a separate wallet or signer MCP after explicit user approval

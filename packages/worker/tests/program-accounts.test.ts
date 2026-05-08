@@ -241,6 +241,8 @@ describe('queryProgramAccounts', () => {
     expect(rpcBody.params[1].filters).toContainEqual({ dataSize: 48 })
     expect(rpcBody.params[1].filters).toContainEqual({ memcmp: { offset: 8, bytes: AUTHORITY } })
     expect(result.slot).toBe(123)
+    expect(result.rpcMethod).toBe('getProgramAccounts')
+    expect(result.paginationKey).toBeNull()
     expect(result.count).toBe(1)
     expect(result.accounts[0].accountType).toBe('Counter')
     expect(result.accounts[0].data).toEqual({ authority: AUTHORITY, count: 42 })
@@ -258,6 +260,105 @@ describe('queryProgramAccounts', () => {
         fieldFilters: [{ field: 'label', bytes: 'abc' }],
       },
     })).rejects.toThrow('Field "label"')
+  })
+
+  test('uses getProgramAccountsV2 with pagination for Helius RPC URLs', async () => {
+    const raw = await counterAccountBase64(9n)
+    let rpcBody: any
+
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      rpcBody = JSON.parse(init?.body as string)
+      return new Response(JSON.stringify({
+        result: {
+          context: { slot: 321 },
+          value: {
+            accounts: [
+              {
+                pubkey: 'Counter1111111111111111111111111111111111',
+                account: {
+                  data: [raw, 'base64'],
+                  executable: false,
+                  lamports: 10,
+                  owner: PROGRAM_ID,
+                  rentEpoch: 99,
+                },
+              },
+            ],
+            paginationKey: 'next_cursor',
+          },
+        },
+      }))
+    }) as any
+
+    const result = await queryProgramAccounts({
+      idl: anchorIdl,
+      programId: PROGRAM_ID,
+      rpcUrl: 'https://mainnet.helius-rpc.com/?api-key=test',
+      cluster: 'mainnet-beta',
+      input: {
+        accountType: 'Counter',
+        limit: 10,
+        paginationKey: 'cursor',
+        changedSinceSlot: 123,
+      },
+    })
+
+    expect(rpcBody.method).toBe('getProgramAccountsV2')
+    expect(rpcBody.params[1].limit).toBe(10)
+    expect(rpcBody.params[1].paginationKey).toBe('cursor')
+    expect(rpcBody.params[1].changedSinceSlot).toBe(123)
+    expect(result.rpcMethod).toBe('getProgramAccountsV2')
+    expect(result.paginationKey).toBe('next_cursor')
+    expect(result.accounts[0].data).toEqual({ authority: AUTHORITY, count: 9 })
+  })
+
+  test('retries with getProgramAccountsV2 when legacy RPC asks for pagination', async () => {
+    const raw = await counterAccountBase64(11n)
+    const methods: string[] = []
+
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string)
+      methods.push(body.method)
+      if (body.method === 'getProgramAccounts') {
+        return new Response(JSON.stringify({
+          error: {
+            message: 'account index service overloaded, please try again. Please use getProgramAccountsV2 with pagination to handle large datasets.',
+          },
+        }))
+      }
+      return new Response(JSON.stringify({
+        result: {
+          context: { slot: 456 },
+          value: {
+            accounts: [
+              {
+                pubkey: 'Counter1111111111111111111111111111111111',
+                account: {
+                  data: [raw, 'base64'],
+                  executable: false,
+                  lamports: 10,
+                  owner: PROGRAM_ID,
+                  rentEpoch: 99,
+                },
+              },
+            ],
+            paginationKey: null,
+          },
+        },
+      }))
+    }) as any
+
+    const result = await queryProgramAccounts({
+      idl: anchorIdl,
+      programId: PROGRAM_ID,
+      rpcUrl: 'https://rpc.example.com',
+      cluster: 'mainnet-beta',
+      input: { accountType: 'Counter', limit: 10 },
+    })
+
+    expect(methods).toEqual(['getProgramAccounts', 'getProgramAccountsV2'])
+    expect(result.rpcMethod).toBe('getProgramAccountsV2')
+    expect(result.slot).toBe(456)
   })
 })
 

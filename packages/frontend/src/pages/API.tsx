@@ -96,7 +96,7 @@ const endpoints = [
     method: 'POST',
     path: '/api/{projectId}/program-accounts/query',
     summary: 'Query program-owned accounts with dataSize and memcmp filters.',
-    detail: 'Wraps Solana getProgramAccounts with accountType discriminator filters, exact dataSize, raw memcmp, fixed IDL field filters, decoded results, and optional raw base64.',
+    detail: 'Wraps Solana getProgramAccounts with accountType discriminator filters, exact dataSize, raw memcmp, fixed IDL field filters, decoded results, optional raw base64, and Helius getProgramAccountsV2 pagination for large account sets.',
     network: true,
   },
   {

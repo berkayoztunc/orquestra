@@ -446,6 +446,8 @@ export interface ProgramAccountQueryRequest {
   memcmp?: Array<{ offset: number; bytes: string }>
   fieldFilters?: Array<{ field: string; bytes: string }>
   limit?: number
+  paginationKey?: string
+  changedSinceSlot?: number
   includeRaw?: boolean
 }
 
@@ -454,6 +456,8 @@ export interface ProgramAccountQueryResponse {
   programId: string
   cluster: string
   slot: number
+  paginationKey: string | null
+  rpcMethod: 'getProgramAccounts' | 'getProgramAccountsV2'
   filtersApplied: Array<
     | { type: 'dataSize'; dataSize: number }
     | { type: 'memcmp'; offset: number; bytes: string; source: string }

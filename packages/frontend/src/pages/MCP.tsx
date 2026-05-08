@@ -161,7 +161,7 @@ const TOOLS = [
   {
     icon: DatabaseIcon,
     name: 'get_program_data',
-    desc: 'Query getProgramAccounts for a project program ID. Supports accountType discriminator filters, dataSize, raw memcmp filters, fixed-field IDL filters, decoded results, and optional raw base64.',
+    desc: 'Query getProgramAccounts for a project program ID. Supports accountType discriminator filters, dataSize, raw memcmp filters, fixed-field IDL filters, decoded results, Helius V2 pagination, and optional raw base64.',
   },
   {
     icon: ShieldCheckIcon,

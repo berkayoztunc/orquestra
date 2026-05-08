@@ -49,7 +49,7 @@ Orquestra exposes these tools over Streamable HTTP MCP:
 - `fetch_pda_data`
 - `get_program_data`
 
-`get_program_data` wraps Solana `getProgramAccounts` for a project program ID. It supports `accountType` discriminator filters, exact `dataSize`, raw byte-offset `memcmp`, fixed-offset IDL `fieldFilters`, decoded results, and optional raw base64 output.
+`get_program_data` wraps Solana `getProgramAccounts` for a project program ID. It supports `accountType` discriminator filters, exact `dataSize`, raw byte-offset `memcmp`, fixed-offset IDL `fieldFilters`, decoded results, and optional raw base64 output. Helius RPC URLs use `getProgramAccountsV2` automatically and return `paginationKey` for large account sets.
 
 Example Claude Code config:
 

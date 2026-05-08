@@ -30,6 +30,8 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
   const [fieldName, setFieldName] = useState('')
   const [fieldBytes, setFieldBytes] = useState('')
   const [limit, setLimit] = useState('25')
+  const [paginationKey, setPaginationKey] = useState('')
+  const [changedSinceSlot, setChangedSinceSlot] = useState('')
   const [includeRaw, setIncludeRaw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ProgramAccountQueryResponse | null>(null)
@@ -39,7 +41,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
   const selectedAccount = accounts.find((acc) => acc.name === accountType)
   const fields = selectedAccount?.fields || []
 
-  const runQuery = async () => {
+  const runQuery = async (nextPaginationKey = paginationKey) => {
     setLoading(true)
     setError(null)
     setResult(null)
@@ -54,6 +56,8 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           : undefined,
         fieldFilters: fieldName && fieldBytes ? [{ field: fieldName, bytes: fieldBytes }] : undefined,
         limit: limit ? Number(limit) : 25,
+        paginationKey: nextPaginationKey || undefined,
+        changedSinceSlot: changedSinceSlot ? Number(changedSinceSlot) : undefined,
         includeRaw,
       }
       const data = await queryProgramAccounts(projectId, payload)
@@ -143,6 +147,32 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-xs font-medium text-gray-400">Pagination key</label>
+            <input
+              type="text"
+              value={paginationKey}
+              onChange={(e) => setPaginationKey(e.target.value)}
+              placeholder="Helius V2 cursor"
+              className="input w-full font-mono text-sm"
+              spellCheck={false}
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-medium text-gray-400">Changed since slot</label>
+            <input
+              type="number"
+              min="0"
+              value={changedSinceSlot}
+              onChange={(e) => setChangedSinceSlot(e.target.value)}
+              placeholder="Optional V2 incremental slot"
+              className="input w-full text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
             <div className="mb-3 flex items-center gap-2">
               <Filter className="h-4 w-4 text-secondary" />
@@ -212,7 +242,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           </label>
 
           <button
-            onClick={runQuery}
+            onClick={() => runQuery()}
             disabled={loading}
             className="btn-primary inline-flex min-h-10 items-center justify-center gap-2 px-5 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -241,6 +271,9 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
               <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-gray-400">
                 slot {result.slot.toLocaleString()}
               </span>
+              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-gray-400">
+                {result.rpcMethod}
+              </span>
             </div>
             {result.filtersApplied.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -251,6 +284,22 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
                       : `${filter.source}@${filter.offset}`}
                   </span>
                 ))}
+              </div>
+            )}
+            {result.paginationKey && (
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <code className="min-w-0 break-all rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-gray-400">
+                  next: {result.paginationKey}
+                </code>
+                <button
+                  onClick={() => {
+                    setPaginationKey(result.paginationKey || '')
+                    runQuery(result.paginationKey || '')
+                  }}
+                  className="btn-secondary min-h-9 px-4 text-sm"
+                >
+                  Next page
+                </button>
               </div>
             )}
           </div>

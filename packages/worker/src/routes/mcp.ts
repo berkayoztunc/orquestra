@@ -1008,6 +1008,16 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
         .max(10)
         .optional()
         .describe('Optional IDL field filters. Requires accountType; only fixed-offset fields can be used.'),
+      paginationKey: z
+        .string()
+        .optional()
+        .describe('Optional Helius getProgramAccountsV2 pagination cursor returned by a previous get_program_data call.'),
+      changedSinceSlot: z
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .describe('Optional Helius getProgramAccountsV2 incremental update slot.'),
       limit: z
         .number()
         .int()
@@ -1020,7 +1030,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
         .optional()
         .describe('If true, include raw base64 account data in each result. Raw is also included for unknown or parse-failed accounts.'),
     },
-    async ({ projectId, accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, limit, includeRaw }) => {
+    async ({ projectId, accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, paginationKey, changedSinceSlot, limit, includeRaw }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.get_program_data, projectId })
         const data = await fetchIDL(projectId, env)
@@ -1042,14 +1052,15 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           programId: data.programId,
           rpcUrl: resolvedRpc,
           cluster,
-          input: { accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, limit, includeRaw },
+          input: { accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, paginationKey, changedSinceSlot, limit, includeRaw },
         })
 
         const lines: string[] = [
           `# Program Data Query: ${data.projectName}`,
           `Program ID: \`${data.programId}\``,
-          `Cluster: \`${result.cluster}\` | Slot: \`${result.slot}\``,
+          `Cluster: \`${result.cluster}\` | Slot: \`${result.slot}\` | RPC: \`${result.rpcMethod}\``,
           `Returned accounts: \`${result.count}\``,
+          ...(result.paginationKey ? [`Next paginationKey: \`${result.paginationKey}\``] : []),
           '',
           '**Filters applied:**',
         ]

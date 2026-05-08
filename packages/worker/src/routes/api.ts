@@ -1157,6 +1157,8 @@ app.post('/:projectId/program-accounts/query', async (c) => {
       memcmp?: Array<{ offset: number; bytes: string }>
       fieldFilters?: Array<{ field: string; bytes: string }>
       limit?: number
+      paginationKey?: string
+      changedSinceSlot?: number
       includeRaw?: boolean
     }>().catch(() => null)
 
@@ -1173,6 +1175,12 @@ app.post('/:projectId/program-accounts/query', async (c) => {
     }
     if (body.limit !== undefined && (!Number.isInteger(body.limit) || body.limit <= 0 || body.limit > 100)) {
       errors.push({ field: 'limit', message: 'limit must be an integer between 1 and 100' })
+    }
+    if (body.paginationKey !== undefined && (typeof body.paginationKey !== 'string' || body.paginationKey.length === 0)) {
+      errors.push({ field: 'paginationKey', message: 'paginationKey must be a non-empty string' })
+    }
+    if (body.changedSinceSlot !== undefined && (!Number.isInteger(body.changedSinceSlot) || body.changedSinceSlot < 0)) {
+      errors.push({ field: 'changedSinceSlot', message: 'changedSinceSlot must be a non-negative integer' })
     }
     if (body.memcmp !== undefined) {
       if (!Array.isArray(body.memcmp) || body.memcmp.length > 10) {

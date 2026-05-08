@@ -33,6 +33,8 @@ export interface ProgramAccountsQuery {
   memcmp?: ProgramAccountMemcmpFilter[]
   fieldFilters?: ProgramAccountFieldFilter[]
   limit?: number
+  paginationKey?: string
+  changedSinceSlot?: number
   includeRaw?: boolean
 }
 
@@ -40,6 +42,8 @@ export interface ProgramAccountsQueryResult {
   programId: string
   cluster: ResolvedCluster
   slot: number
+  paginationKey: string | null
+  rpcMethod: 'getProgramAccounts' | 'getProgramAccountsV2'
   filtersApplied: Array<{ type: 'dataSize'; dataSize: number } | { type: 'memcmp'; offset: number; bytes: string; source: string }>
   count: number
   accounts: Array<{
@@ -66,12 +70,31 @@ type RpcProgramAccount = {
   }
 }
 
+type ProgramAccountsRpcResult = {
+  slot: number
+  accounts: RpcProgramAccount[]
+  paginationKey: string | null
+  method: 'getProgramAccounts' | 'getProgramAccountsV2'
+}
+
 const DEFAULT_LIMIT = 25
 const MAX_LIMIT = 100
 
 export function normalizeProgramAccountsQuery(input: ProgramAccountsQuery): Required<Pick<ProgramAccountsQuery, 'limit' | 'includeRaw'>> & ProgramAccountsQuery {
   const limit = input.limit == null ? DEFAULT_LIMIT : Math.min(Math.max(Math.trunc(input.limit), 1), MAX_LIMIT)
   return { ...input, limit, includeRaw: input.includeRaw === true }
+}
+
+function isHeliusRpcUrl(rpcUrl: string): boolean {
+  try {
+    return new URL(rpcUrl).hostname.endsWith('helius-rpc.com')
+  } catch {
+    return false
+  }
+}
+
+function shouldRetryWithV2(message: string): boolean {
+  return /getProgramAccountsV2|account index service overloaded|pagination/i.test(message)
 }
 
 export function getFixedAnchorTypeSize(type: any, idl: AnchorIDL, depth = 0): number | null {
@@ -429,43 +452,87 @@ export async function queryProgramAccounts(opts: {
   const input = normalizeProgramAccountsQuery(opts.input)
   const { rpcFilters, filtersApplied, anchorLayout, codamaLayout } = await buildProgramAccountFilters(opts.idl, input)
 
-  const body = JSON.stringify({
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'getProgramAccounts',
-    params: [
-      opts.programId,
-      {
-        encoding: 'base64',
-        withContext: true,
-        commitment: 'confirmed',
-        filters: rpcFilters,
-      },
-    ],
-  })
+  const fetchPage = async (method: 'getProgramAccounts' | 'getProgramAccountsV2'): Promise<ProgramAccountsRpcResult> => {
+    const config: Record<string, unknown> = {
+      encoding: 'base64',
+      withContext: true,
+      commitment: 'confirmed',
+      filters: rpcFilters,
+    }
 
-  const response = await fetch(opts.rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  })
+    if (method === 'getProgramAccountsV2') {
+      config.limit = input.limit
+      if (input.paginationKey) config.paginationKey = input.paginationKey
+      if (input.changedSinceSlot != null) config.changedSinceSlot = input.changedSinceSlot
+    }
 
-  if (!response.ok) {
-    throw new Error(`RPC request failed: HTTP ${response.status}`)
+    const response = await fetch(opts.rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params: [opts.programId, config],
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`RPC request failed: HTTP ${response.status}`)
+    }
+
+    const json = (await response.json()) as {
+      result?:
+        | { context?: { slot?: number }; value?: RpcProgramAccount[] }
+        | { context?: { slot?: number }; value?: { accounts?: RpcProgramAccount[]; paginationKey?: string | null } }
+        | { accounts?: RpcProgramAccount[]; paginationKey?: string | null }
+        | RpcProgramAccount[]
+      error?: { message?: string }
+    }
+
+    if (json.error) {
+      throw new Error(`RPC error: ${json.error.message ?? JSON.stringify(json.error)}`)
+    }
+
+    if (Array.isArray(json.result)) {
+      return { slot: 0, accounts: json.result, paginationKey: null, method }
+    }
+
+    const result = json.result as any
+    const slot = result?.context?.slot ?? 0
+    if (Array.isArray(result?.value)) {
+      return { slot, accounts: result.value, paginationKey: null, method }
+    }
+    if (result?.value && typeof result.value === 'object') {
+      return {
+        slot,
+        accounts: result.value.accounts ?? [],
+        paginationKey: result.value.paginationKey ?? null,
+        method,
+      }
+    }
+    return {
+      slot,
+      accounts: result?.accounts ?? [],
+      paginationKey: result?.paginationKey ?? null,
+      method,
+    }
   }
 
-  const json = (await response.json()) as {
-    result?: { context?: { slot?: number }; value?: RpcProgramAccount[] } | RpcProgramAccount[]
-    error?: { message?: string }
+  let rpcResult: ProgramAccountsRpcResult
+  if (isHeliusRpcUrl(opts.rpcUrl) || input.paginationKey || input.changedSinceSlot != null) {
+    rpcResult = await fetchPage('getProgramAccountsV2')
+  } else {
+    try {
+      rpcResult = await fetchPage('getProgramAccounts')
+    } catch (err) {
+      const message = (err as Error).message
+      if (!shouldRetryWithV2(message)) throw err
+      rpcResult = await fetchPage('getProgramAccountsV2')
+    }
   }
 
-  if (json.error) {
-    throw new Error(`RPC error: ${json.error.message ?? JSON.stringify(json.error)}`)
-  }
-
-  const slot = Array.isArray(json.result) ? 0 : json.result?.context?.slot ?? 0
-  const value = Array.isArray(json.result) ? json.result : json.result?.value ?? []
-  const limited = value.slice(0, input.limit)
+  const limited = rpcResult.accounts.slice(0, input.limit)
 
   const accounts = []
   for (const item of limited) {
@@ -491,7 +558,9 @@ export async function queryProgramAccounts(opts: {
   return {
     programId: opts.programId,
     cluster: opts.cluster,
-    slot,
+    slot: rpcResult.slot,
+    paginationKey: rpcResult.paginationKey,
+    rpcMethod: rpcResult.method,
     filtersApplied,
     count: accounts.length,
     accounts,

@@ -177,9 +177,11 @@ Use this endpoint to query on-chain accounts owned by this program through Solan
 | \`memcmp\` | Raw Solana memcmp filters by byte offset. Use for advanced byte-level matching. |
 | \`fieldFilters\` | IDL field filters for fixed-offset fields. Requires \`accountType\`. |
 | \`limit\` | Returned account limit. Defaults to 25, max 100. |
+| \`paginationKey\` | Cursor for Helius \`getProgramAccountsV2\` when paging large account sets. |
+| \`changedSinceSlot\` | Optional Helius V2 incremental update slot. |
 | \`includeRaw\` | Include raw base64 data. Defaults to false unless decoding fails or the account type is unknown. |
 
-Dynamic fields such as \`string\`, \`vec\`, \`bytes\`, and variable arrays may prevent automatic size or field-offset inference. In those cases, provide explicit \`dataSize\` and raw \`memcmp\` offsets.
+Helius RPC URLs use \`getProgramAccountsV2\` automatically, and Orquestra retries V2 if legacy \`getProgramAccounts\` reports an account index overload. Dynamic fields such as \`string\`, \`vec\`, \`bytes\`, and variable arrays may prevent automatic size or field-offset inference. In those cases, provide explicit \`dataSize\` and raw \`memcmp\` offsets.
 
 ### Example
 

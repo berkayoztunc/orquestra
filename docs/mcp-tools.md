@@ -255,17 +255,20 @@ Inputs:
 - `memcmp` - optional raw byte-offset filters
 - `fieldFilters` - optional fixed-offset IDL field filters; requires `accountType`
 - `limit` - 1 to 100, default 25
+- `paginationKey` - optional Helius V2 cursor for the next page
+- `changedSinceSlot` - optional Helius V2 incremental update slot
 - `includeRaw` - optional boolean
 
 Returns:
 
 - Program ID, cluster, slot, filters applied, and count
+- RPC method used and next `paginationKey` when available
 - Account address, owner, lamports, executable flag, and rent epoch
 - Detected account type
 - Decoded fields when the IDL matches
 - Raw base64 only when requested, unknown, or parse-failed
 
-Use `accountType` to auto-apply discriminator filters. Use `dataSize` for exact layout size, raw `memcmp` for advanced byte offsets, and `fieldFilters` only for fixed-offset fields. Dynamic account fields may require manual `dataSize` or raw offsets.
+Use `accountType` to auto-apply discriminator filters. Use `dataSize` for exact layout size, raw `memcmp` for advanced byte offsets, and `fieldFilters` only for fixed-offset fields. Helius RPC URLs use `getProgramAccountsV2` automatically and can be paged with `paginationKey`. Dynamic account fields may require manual `dataSize` or raw offsets.
 
 ## Recommended Agent Flow
 

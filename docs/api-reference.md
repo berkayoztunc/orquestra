@@ -130,6 +130,8 @@ Notes:
   "memcmp": [{ "offset": 8, "bytes": "<base58-bytes>" }],
   "fieldFilters": [{ "field": "authority", "bytes": "<pubkey>" }],
   "limit": 25,
+  "paginationKey": "<optional-helius-v2-cursor>",
+  "changedSinceSlot": 250000000,
   "includeRaw": false
 }
 ```
@@ -141,6 +143,8 @@ Notes:
 - `memcmp` is the raw Solana byte-offset filter for advanced queries.
 - `fieldFilters` require `accountType` and only work for fixed-offset IDL fields.
 - Dynamic fields such as `string`, `vec`, `bytes`, and variable arrays may require explicit `dataSize` or raw `memcmp` offsets.
+- Helius RPC URLs use `getProgramAccountsV2` automatically, and overload responses from legacy `getProgramAccounts` are retried with V2 pagination.
+- `paginationKey` fetches the next Helius V2 page; responses include `paginationKey` when another page is available.
 - Results are decoded with the IDL by default; raw base64 is included only when `includeRaw` is true or decoding is not possible.
 
 ## Known Addresses

@@ -45,7 +45,7 @@ const workflow = [
   {
     icon: ListIcon,
     title: 'Inspect the IDL surface',
-    description: 'List instructions, accounts, and PDA derivation schemas before building a request.',
+    description: 'List instructions, accounts, PDA derivation schemas, and program account query filters before building a request.',
   },
   {
     icon: ZapIcon,
@@ -90,6 +90,13 @@ const endpoints = [
     path: '/api/{projectId}/pda/fetch/{address}',
     summary: 'Fetch on-chain account data and decode it against the project IDL.',
     detail: 'Fetches raw account bytes from the Solana RPC, detects the account type via discriminator, and deserializes all fields as JSON. Accepts a ?network= query parameter (mainnet-beta · devnet · testnet). Returns data: null with a raw base64 field when the account type is not recognized in the IDL.',
+    network: true,
+  },
+  {
+    method: 'POST',
+    path: '/api/{projectId}/program-accounts/query',
+    summary: 'Query program-owned accounts with dataSize and memcmp filters.',
+    detail: 'Wraps Solana getProgramAccounts with accountType discriminator filters, exact dataSize, raw memcmp, fixed IDL field filters, decoded results, and optional raw base64.',
     network: true,
   },
   {

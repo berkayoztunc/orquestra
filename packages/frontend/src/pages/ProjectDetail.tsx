@@ -30,9 +30,10 @@ import {
 import InstructionExplorer from '../components/InstructionExplorer'
 import PDAExplorer from '../components/PDAExplorer'
 import AccountDataViewer from '../components/AccountDataViewer'
+import ProgramDataQuery from '../components/ProgramDataQuery'
 import ExternalApisPanel from '../components/ExternalApisPanel'
 
-type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'live' | 'docs' | 'addresses' | 'externalApis' | 'settings'
+type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'live' | 'programData' | 'docs' | 'addresses' | 'externalApis' | 'settings'
 
 export default function ProjectDetail(): JSX.Element {
   const { programId } = useParams<{ programId: string }>()
@@ -154,6 +155,7 @@ export default function ProjectDetail(): JSX.Element {
             }
             break
           case 'accounts':
+          case 'programData':
             if (!accounts) {
               const data = await getAccounts(projectId)
               setAccounts(data)
@@ -258,6 +260,7 @@ export default function ProjectDetail(): JSX.Element {
     { id: 'events', label: 'Events' },
     { id: 'pda', label: 'PDA Finder' },
     { id: 'live', label: 'Live Data' },
+    { id: 'programData', label: 'Program Data' },
     { id: 'docs', label: 'Docs' },
     { id: 'addresses', label: 'Addresses' },
     { id: 'externalApis', label: 'External APIs' },
@@ -1239,6 +1242,11 @@ export default function ProjectDetail(): JSX.Element {
             {/* Live Data Tab */}
             {activeTab === 'live' && (
               <AccountDataViewer projectId={projectId!} />
+            )}
+
+            {/* Program Data Tab */}
+            {activeTab === 'programData' && accounts && (
+              <ProgramDataQuery projectId={projectId!} accounts={accounts.accounts || []} />
             )}
 
             {/* Settings Tab */}

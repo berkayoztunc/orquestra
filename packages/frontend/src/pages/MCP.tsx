@@ -110,6 +110,11 @@ const STEPS = [
     title: 'Build Transactions',
     desc: 'Use build_instruction to get a base58 unsigned transaction your app or wallet can sign.',
   },
+  {
+    icon: <DatabaseIcon className="w-5 h-5 text-secondary" />,
+    title: 'Query Program Data',
+    desc: 'Call get_program_data to search program-owned accounts with accountType, dataSize, memcmp, and fixed IDL field filters.',
+  },
 ]
 
 const TOOLS = [
@@ -152,6 +157,11 @@ const TOOLS = [
     icon: DatabaseIcon,
     name: 'fetch_pda_data',
     desc: 'Fetch a Solana account by address and decode its fields using the project IDL. Accepts an optional cluster param (mainnet-beta · devnet · testnet).',
+  },
+  {
+    icon: DatabaseIcon,
+    name: 'get_program_data',
+    desc: 'Query getProgramAccounts for a project program ID. Supports accountType discriminator filters, dataSize, raw memcmp filters, fixed-field IDL filters, decoded results, and optional raw base64.',
   },
   {
     icon: ShieldCheckIcon,

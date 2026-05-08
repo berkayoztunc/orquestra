@@ -436,6 +436,50 @@ export async function fetchAccountData(
   return res.data
 }
 
+// ─── Program Account Query ───────────────────────────
+
+export interface ProgramAccountQueryRequest {
+  accountType?: string
+  network?: string
+  rpcUrl?: string
+  dataSize?: number
+  memcmp?: Array<{ offset: number; bytes: string }>
+  fieldFilters?: Array<{ field: string; bytes: string }>
+  limit?: number
+  includeRaw?: boolean
+}
+
+export interface ProgramAccountQueryResponse {
+  projectId: string
+  programId: string
+  cluster: string
+  slot: number
+  filtersApplied: Array<
+    | { type: 'dataSize'; dataSize: number }
+    | { type: 'memcmp'; offset: number; bytes: string; source: string }
+  >
+  count: number
+  accounts: Array<{
+    address: string
+    lamports: number
+    owner: string
+    executable: boolean
+    rentEpoch: number
+    accountType: string | null
+    data: Record<string, unknown> | null
+    raw?: string
+    parseError?: string
+  }>
+}
+
+export async function queryProgramAccounts(
+  projectId: string,
+  data: ProgramAccountQueryRequest,
+): Promise<ProgramAccountQueryResponse> {
+  const res = await api.post(`/${projectId}/program-accounts/query`, data)
+  return res.data
+}
+
 // ─── Analytics ───────────────────────────────────────
 
 export interface PublicStats {

@@ -22,10 +22,10 @@ bun run dev
 ## Features
 
 - IDL upload and versioning for Anchor and Codama programs
-- Auto-generated REST endpoints for instructions, accounts, errors, events, types, and docs
+- Auto-generated REST endpoints for instructions, accounts, program account queries, errors, events, types, and docs
 - Unsigned transaction builder with cluster-aware blockhash lookup
 - Optional preflight simulation with decoded Anchor errors
-- PDA discovery, derivation, and on-chain account decoding
+- PDA discovery, derivation, single-account decoding, and program-owned account queries with `dataSize` and `memcmp` filters
 - AI-ready `llms.txt` documentation for each public project
 - Public MCP server for agent tools
 - Companion Rust CLI for local IDL and API-backed workflows
@@ -48,6 +48,8 @@ Orquestra exposes these tools over Streamable HTTP MCP:
 - `get_ai_analysis`
 - `fetch_pda_data`
 - `get_program_data`
+
+`get_program_data` wraps Solana `getProgramAccounts` for a project program ID. It supports `accountType` discriminator filters, exact `dataSize`, raw byte-offset `memcmp`, fixed-offset IDL `fieldFilters`, decoded results, and optional raw base64 output.
 
 Example Claude Code config:
 

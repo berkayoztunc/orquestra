@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { Calendar, CheckCircle2, Clipboard, Clock3, GitBranch, Globe2, LockKeyhole, Share2, Sparkles } from 'lucide-react'
+import { Calendar, CheckCircle2, Clipboard, Clock3, FileJson, GitBranch, Globe2, Loader2, LockKeyhole, Share2, Sparkles, UploadCloud } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore } from '../store/projects'
@@ -17,6 +17,7 @@ import {
   createAPIKey,
   deleteAPIKey,
   updateProject,
+  updateIDL,
   updateDocs,
   resetDocs,
   getAIAnalysis,
@@ -70,6 +71,12 @@ export default function ProjectDetail(): JSX.Element {
   // Socials editing state
   const [socialsForm, setSocialsForm] = useState<Record<string, string>>({})
   const [isSavingSocials, setIsSavingSocials] = useState(false)
+
+  // IDL reupload state
+  const [reuploadIdl, setReuploadIdl] = useState<any | null>(null)
+  const [reuploadIdlFileName, setReuploadIdlFileName] = useState('')
+  const [reuploadIdlLoading, setReuploadIdlLoading] = useState(false)
+  const [reuploadIdlPreview, setReuploadIdlPreview] = useState<{ name: string; instructions: number; accounts: number } | null>(null)
 
   // Delete confirmation state
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -451,6 +458,47 @@ export default function ProjectDetail(): JSX.Element {
       showToast(err.response?.data?.error || 'Failed to update social links', 'error')
     }
     setIsSavingSocials(false)
+  }
+
+  // ── IDL reupload handlers ──
+  const handleReuploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setReuploadIdlFileName(file.name)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string)
+        setReuploadIdl(json)
+        setReuploadIdlPreview({
+          name: json.name || json.metadata?.name || file.name,
+          instructions: Array.isArray(json.instructions) ? json.instructions.length : 0,
+          accounts: Array.isArray(json.accounts) ? json.accounts.length : 0,
+        })
+      } catch {
+        showToast('Invalid JSON file. Please upload a valid Anchor IDL.', 'error')
+        setReuploadIdl(null)
+        setReuploadIdlFileName('')
+        setReuploadIdlPreview(null)
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const handleReuploadIDLSubmit = async () => {
+    if (!reuploadIdl || !projectId) return
+    setReuploadIdlLoading(true)
+    try {
+      await updateIDL(projectId, { idl: reuploadIdl })
+      showToast('IDL updated successfully. New version created.', 'success')
+      setReuploadIdl(null)
+      setReuploadIdlFileName('')
+      setReuploadIdlPreview(null)
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Failed to update IDL', 'error')
+    } finally {
+      setReuploadIdlLoading(false)
+    }
   }
 
   // ── Delete project handler ──
@@ -1461,6 +1509,68 @@ export default function ProjectDetail(): JSX.Element {
                       className="btn-primary w-full md:w-auto text-sm px-6 py-2"
                     >
                       {isSavingSocials ? 'Saving...' : 'Save Social Links'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Update IDL */}
+                <div className="card-static p-6">
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 flex-shrink-0">
+                      <UploadCloud className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-bold text-white mb-1">Update IDL</h3>
+                      <p className="text-gray-400 text-sm">Replace the IDL for this project. A new version will be created and all endpoints will be regenerated.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label
+                      htmlFor="idl-reupload"
+                      className="flex items-center gap-3 cursor-pointer w-full rounded-xl border border-dashed border-white/10 hover:border-primary/40 bg-surface-elevated hover:bg-primary/5 transition p-4"
+                    >
+                      <FileJson className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                      <span className="text-sm text-gray-400 truncate flex-1">
+                        {reuploadIdlFileName || 'Click to select an IDL JSON file'}
+                      </span>
+                      <span className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1 flex-shrink-0">Browse</span>
+                    </label>
+                    <input
+                      type="file"
+                      id="idl-reupload"
+                      accept=".json"
+                      className="hidden"
+                      onChange={handleReuploadFileChange}
+                    />
+
+                    {reuploadIdlPreview && (
+                      <div className="bg-surface-elevated rounded-xl p-4 flex flex-wrap gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500 mb-0.5">Program</p>
+                          <p className="text-sm font-medium text-white">{reuploadIdlPreview.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-0.5">Instructions</p>
+                          <p className="text-sm font-medium text-white">{reuploadIdlPreview.instructions}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500 mb-0.5">Accounts</p>
+                          <p className="text-sm font-medium text-white">{reuploadIdlPreview.accounts}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleReuploadIDLSubmit}
+                      disabled={!reuploadIdl || reuploadIdlLoading}
+                      className="btn-primary text-sm px-5 py-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {reuploadIdlLoading ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</>
+                      ) : (
+                        <><UploadCloud className="w-4 h-4" /> Update IDL</>
+                      )}
                     </button>
                   </div>
                 </div>

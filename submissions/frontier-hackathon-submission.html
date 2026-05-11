@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orquestra - Frontier Hackathon Submission</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --border: #d9dee7;
+        --accent: #2563eb;
+        --accent-soft: #eff6ff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.55;
+      }
+
+      main {
+        width: min(960px, calc(100vw - 32px));
+        margin: 32px auto;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 32px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 34px;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin-top: 36px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border);
+        font-size: 22px;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #374151;
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .intro {
+        margin-top: 10px;
+        color: var(--muted);
+      }
+
+      .field {
+        margin-top: 18px;
+        padding: 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fbfcfe;
+      }
+
+      .value {
+        white-space: pre-wrap;
+      }
+
+      .value + .value {
+        margin-top: 12px;
+      }
+
+      .link-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        max-width: 100%;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: var(--accent-soft);
+        color: #1e40af;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", monospace;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+
+      .dash {
+        color: var(--muted);
+      }
+
+      @media (max-width: 640px) {
+        main {
+          width: min(100vw - 20px, 960px);
+          margin: 10px auto;
+          padding: 20px;
+        }
+
+        h1 {
+          font-size: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Orquestra</h1>
+      <p class="intro">Frontier Hackathon submission draft</p>
+
+      <h2>Step 1: Project Info</h2>
+
+      <section class="field">
+        <h3>Project name</h3>
+        <p class="value">Orquestra</p>
+      </section>
+
+      <section class="field">
+        <h3>Category</h3>
+        <p class="value">Developer Infrastructure</p>
+      </section>
+
+      <section class="field">
+        <h3>Brief description</h3>
+        <p class="value">Orquestra is the API and AI access MCP layer for Solana.</p>
+        <p class="value">Orquestra transforms any Solana program into instant APIs and AI-native tools, enabling developers, apps, and autonomous agents to interact with on-chain programs without SDK complexity or custom backend infrastructure.</p>
+      </section>
+
+      <section class="field">
+        <h3>Project website</h3>
+        <p class="value">
+          <a href="https://orquestra.dev">https://orquestra.dev</a>
+        </p>
+      </section>
+
+      <section class="field">
+        <h3>Mobile-focused dApp</h3>
+        <p class="value">No</p>
+      </section>
+
+      <section class="field">
+        <h3>What are you building, and who is it for?</h3>
+        <p class="value">Orquestra turns Solana program IDLs into instant APIs and AI-native MCP tools. Upload an Anchor or Codama IDL and automatically get hosted REST APIs, generated docs, transaction builders, PDA derivation, account decoding, simulation tools, and structured MCP access for AI agents.</p>
+        <p class="value">It is built for Solana protocol teams that want easier integrations, backend and fintech developers who prefer REST APIs over SDK complexity, and AI agents that need structured, safe access to on-chain programs.</p>
+        <p class="value">The goal is simple: make Solana programs accessible from any programming language, application, automation workflow, or AI system without requiring custom backend infra</p>
+        <p class="value">It’s for developers: integrate any Solana program from any language without SDK complexity.
+It’s for AI agents: structured MCP tools for safe on-chain interactions.
+It’s for protocols: instant API and 
+It’s for users: everything becomes easier to access and use.
+It’s for protocols: instant API and AI compatibility for their programs.</p>
+      </section>
+
+      <section class="field">
+        <h3>Why did you decide to build this, and why build it now?</h3>
+        <p class="value">After four years of building and deploying Solana programs, the same problem kept appearing: every integration required repetitive backend work. SDK setup, transaction wrappers, discriminator handling, and outdated documentation. Solana scaled fast, but accessibility did not.</p>
+        <p class="value">We scanned more than 52,000 on-chain programs. Only 4K+ had accessible IDLs . Thousands of programs exist today that developers and AI agents still cannot interact with programmatically.</p>
+        <p class="value">At the same time, AI agents are becoming a real developer interface through MCP standards introduced by Anthropic and adopted across the industry. Agents need structured access to Solana programs, not raw RPC complexity.</p>
+        <p class="value">Orquestra solves this by transforming any Solana IDL into instant APIs and AI-native MCP tools, making programs understandable, callable, and automatable for developers, applications, and AI agents.</p>
+        <p class="value">The AI age is here. Solana needs a better interface layer.</p>
+      </section>
+
+      <section class="field">
+        <h3>What technologies are you using or integrating with to build your product?</h3>
+        <p class="value">Cloudflare Workers, Cloudflare Pages, Cloudflare D1 (SQLite), Cloudflare KV, Cloudflare AI geteway, Hono, React 18, TypeScript, Vite, Tailwind CSS, Zustand, Bun, Wrangler, Zod, Web Crypto API, GitHub OAuth 2.0, JWT, Solana Web3.js, Anchor IDL, Borsh, Rust, Cargo, Solana JSON-RPC, GitHub Actions, Axios, React Router v6, Github copilot</p>
+      </section>
+
+      <h2>Step 2: Media and Code</h2>
+
+      <section class="field">
+        <h3>Project logo</h3>
+        <p class="value">Project logo or graphic</p>
+        <p class="value"><span class="chip">logo.png</span></p>
+      </section>
+
+      <section class="field">
+        <h3>GitHub link</h3>
+        <p class="value">
+          <a href="https://github.com/berkayoztunc/orquestra">https://github.com/berkayoztunc/orquestra</a>
+        </p>
+      </section>
+
+      <section class="field">
+        <h3>Product demo video</h3>
+        <p class="value">
+          <a href="https://www.youtube.com/watch?v=vkDXY6pAL0E">https://www.youtube.com/watch?v=vkDXY6pAL0E</a>
+        </p>
+      </section>
+
+      <section class="field">
+        <h3>Demo video visibility</h3>
+        <p class="value">Public</p>
+      </section>
+
+      <section class="field">
+        <h3>Pitch video</h3>
+        <p class="value">
+          <a href="https://www.youtube.com/watch?v=TqOwUqVb0dA&amp;t=6s">https://www.youtube.com/watch?v=TqOwUqVb0dA&amp;t=6s</a>
+        </p>
+      </section>
+
+      <section class="field">
+        <h3>Live product link</h3>
+        <p class="value">
+          <a href="https://orquestra.dev">https://orquestra.dev</a>
+        </p>
+      </section>
+
+      <section class="field">
+        <h3>Access instructions</h3>
+        <p class="value">Judges can access the platform directly using GitHub authentication. They can either upload a Solana program IDL manually or import it automatically from a program URL.</p>
+      </section>
+
+      <section class="field">
+        <h3>Important GitHub repo context</h3>
+        <p class="value">The main product consists of multiple repositories and services working together as the Orquestra ecosystem.</p>
+        <p class="value"><a href="https://github.com/berkayoztunc/orquestra-cli">https://github.com/berkayoztunc/orquestra-cli</a>  contains the CLI tool used for transaction building, signing flows, and local developer integration.
+<a href="https://github.com/berkayoztunc/orquestra-signer-mcp">https://github.com/berkayoztunc/orquestra-signer-mcp</a> contains the MCP-based signer implementation built on top of Solana Keychain concepts for AI agent signing workflows.</p>
+      </section>
+
+      <h2>Step 3: Team</h2>
+
+      <section class="field">
+        <h3>Where is your team primarily based?</h3>
+        <p class="value">Turkey</p>
+      </section>
+
+      <section class="field">
+        <h3>Team members</h3>
+        <p class="value">whitemoondev</p>
+      </section>
+
+      <section class="field">
+        <h3>Team Telegram contact</h3>
+        <p class="value">whitemoondev</p>
+      </section>
+
+      <section class="field">
+        <h3>X profile</h3>
+        <p class="value">orquestradev</p>
+      </section>
+
+      <section class="field">
+        <h3>Accelerator application</h3>
+        <p class="value">Applying</p>
+      </section>
+
+      <section class="field">
+        <h3>Did anyone not listed on the team do meaningful work on this project?</h3>
+        <p class="value dash">—</p>
+      </section>
+
+      <section class="field">
+        <h3>Anything else judges should know about your project?</h3>
+        <p class="value">During the hackathon process, I had multiple sessions and discussions with developers from the Solana Foundation and the broader Solana ecosystem. Many of them agreed that this is a real infrastructure problem and considered Orquestra a valuable public good for improving Solana accessibility, developer experience, and AI interoperability.</p>
+      </section>
+    </main>
+  </body>
+</html>

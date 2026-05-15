@@ -15,6 +15,7 @@
  *   7. get_ai_analysis        — get AI analysis summary (tags, description, stats)
  *   8. simulate_instruction   — preflight an instruction against the RPC, no signing required
  *   9. get_program_data       — query program-owned accounts with dataSize/memcmp filters
+ *  10. simulate_transaction   — simulate a raw base64/base58 wire transaction (no IDL required)
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -30,7 +31,7 @@ import {
   resolveCodamaType,
 } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
-import { buildTransaction, simulateInstruction } from '../services/tx-builder'
+import { buildTransaction, simulateInstruction, simulateRawTransaction } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData } from '../services/account-parser'
@@ -1093,6 +1094,72 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           } else if (account.raw) {
             lines.push(`Raw (base64 preview): \`${account.raw.slice(0, 96)}${account.raw.length > 96 ? '...' : ''}\``)
           }
+        }
+
+        return { content: [{ type: 'text', text: lines.join('\n') }] }
+      } catch (err: any) {
+        return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
+      }
+    },
+  )
+
+  // ── Tool 10: simulate_transaction ──────────────────────────────────────────
+
+  server.tool(
+    'simulate_transaction',
+    'Simulate a raw pre-built Solana transaction against the RPC without signing. ' +
+    'Pass the wire transaction bytes as base64 (recommended) or base58. ' +
+    'No IDL or projectId is required — useful when the transaction was built externally ' +
+    '(e.g. with a custom 1-byte discriminator) and you need preflight validation. ' +
+    'Returns success/failure, compute units consumed, and the raw RPC logs.',
+    {
+      serializedTransaction: z
+        .string()
+        .describe(
+          'The serialized Solana wire transaction (legacy format). ' +
+          'Accepts base64 (modern standard, recommended) or base58 encoding.',
+        ),
+      encoding: z
+        .enum(['base64', 'base58'])
+        .default('base64')
+        .describe('Encoding of serializedTransaction. Defaults to base64.'),
+      network: z
+        .enum(['mainnet-beta', 'devnet', 'testnet'])
+        .optional()
+        .describe('Solana cluster for the simulation RPC. Defaults to mainnet-beta.'),
+      rpcUrl: z
+        .string()
+        .optional()
+        .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over network.'),
+    },
+    async ({ serializedTransaction, encoding, network, rpcUrl }) => {
+      try {
+        incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_transaction })
+
+        const { rpcUrl: resolvedRpc, cluster } = resolveSolanaRpcUrl({
+          network: network ?? 'mainnet-beta',
+          rpcUrlOverride: rpcUrl,
+          env,
+        })
+
+        const result = await simulateRawTransaction(serializedTransaction, encoding, resolvedRpc)
+
+        const lines = [
+          `**Raw Transaction Simulation**`,
+          '',
+          `Result: ${result.success ? '\u2705 success' : '\u274c failure'}`,
+          ...(result.computeUnits != null ? [`Compute units consumed: \`${result.computeUnits}\``] : []),
+          `Cluster: \`${cluster}\` — \`${rpcUrlHost(resolvedRpc)}\``,
+          '',
+        ]
+        if (!result.success) {
+          lines.push('**Error:**', `Raw: ${JSON.stringify(result.err)}`)
+        }
+        if (result.logs.length > 0) {
+          lines.push('', '**RPC logs:**', ...result.logs.map((l) => `  ${l}`))
+        }
+        if (result.success) {
+          lines.push('', 'Simulation passed — transaction can be signed and sent.')
         }
 
         return { content: [{ type: 'text', text: lines.join('\n') }] }

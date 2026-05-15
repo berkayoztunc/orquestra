@@ -4,7 +4,7 @@ import { buildRateLimit } from '../middleware/rate-limit'
 import { invalidateCache } from '../middleware/cache'
 import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL, detectIDLFormat, getCodamaInstruction, getCodamaUserArgs, resolveCodamaType, describeCodamaDiscriminator, resolveCodamaAccountFields } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
-import { buildTransaction, validateBuildRequest } from '../services/tx-builder'
+import { buildTransaction, validateBuildRequest, simulateRawTransaction } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData, detectCodamaAccountType, deserializeCodamaAccountData } from '../services/account-parser'
@@ -1955,6 +1955,45 @@ app.get('/:projectId/idl', async (c) => {
     })
   } catch (err) {
     return c.json({ error: 'Failed to get IDL' }, 500)
+  }
+})
+
+/**
+ * POST /tx/simulate
+ * Simulate a raw pre-built Solana transaction (base64 or base58 wire bytes).
+ * Useful for programs with custom discriminators that Orquestra cannot rebuild internally.
+ * sigVerify is always false — no wallet or signature required.
+ *
+ * Body: { serializedTransaction: string, encoding?: 'base64'|'base58', network?: string, rpcUrl?: string }
+ */
+app.post('/tx/simulate', buildRateLimit, async (c) => {
+  let body: { serializedTransaction?: string; encoding?: string; network?: string; rpcUrl?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const { serializedTransaction, encoding = 'base64', network, rpcUrl: rpcUrlOverride } = body
+
+  if (!serializedTransaction || typeof serializedTransaction !== 'string') {
+    return c.json({ error: 'serializedTransaction (string) is required' }, 400)
+  }
+  if (encoding !== 'base64' && encoding !== 'base58') {
+    return c.json({ error: 'encoding must be "base64" or "base58"' }, 400)
+  }
+
+  try {
+    const { rpcUrl: resolvedRpc } = resolveSolanaRpcUrl({
+      network: (network as any) ?? 'mainnet-beta',
+      rpcUrlOverride,
+      env: c.env,
+    })
+
+    const result = await simulateRawTransaction(serializedTransaction, encoding, resolvedRpc)
+    return c.json(result)
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
   }
 })
 

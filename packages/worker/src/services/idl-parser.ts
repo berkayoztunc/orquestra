@@ -308,7 +308,13 @@ interface AnchorInstruction {
   name: string
   accounts: AnchorAccountMeta[]
   args: AnchorArg[]
-  discriminator?: number[]
+  /**
+   * Discriminator can be:
+   * - `number[]` — raw bytes of any length (Anchor standard 8-byte, or custom)
+   * - `{ type: string; value: number | number[] }` — custom 1-byte (or N-byte) discriminator
+   *   e.g. `{ "type": "u8", "value": 6 }` for programs that use a single byte instead of the 8-byte Anchor hash
+   */
+  discriminator?: number[] | { type: string; value: number | number[] }
   docs?: string[]
 }
 

@@ -97,15 +97,42 @@ export interface InstructionInfo {
 }
 
 // Anchor instruction discriminator: first 8 bytes of SHA-256("global:<instruction_name>")
+// Also supports custom formats:
+//   - number[] of any length (e.g. 1-byte programs that use a u8 discriminator)
+//   - { type: "u8" | "u16" | "u32", value: number | number[] } object format
 function getExplicitInstructionDiscriminator(instruction: AnchorInstruction): Uint8Array | null {
-  if (!Array.isArray(instruction.discriminator) || instruction.discriminator.length !== 8) {
+  const disc = instruction.discriminator as any
+  if (!disc) return null
+
+  // Object format: { type: "u8", value: 6 } or { type: "u16", value: 300 } or { type: "u8", value: [6] }
+  if (typeof disc === 'object' && !Array.isArray(disc)) {
+    if (Array.isArray(disc.value)) {
+      // { type: "u8", value: [6, 0, ...] } — explicit byte array
+      const all = (disc.value as any[]).every((b) => typeof b === 'number' && b >= 0 && b <= 255)
+      if (!all) return null
+      return new Uint8Array(disc.value as number[])
+    }
+    if (typeof disc.value === 'number') {
+      const sizes: Record<string, number> = { u8: 1, i8: 1, u16: 2, i16: 2, u32: 4, i32: 4, u64: 8, i64: 8 }
+      const size = sizes[disc.type as string] ?? 1
+      const v = disc.value as number
+      const buf = new Uint8Array(size)
+      for (let i = 0; i < size; i++) buf[i] = (v >> (i * 8)) & 0xff
+      return buf
+    }
     return null
   }
-  const allBytes = instruction.discriminator.every(
-    (value) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255,
-  )
-  if (!allBytes) return null
-  return new Uint8Array(instruction.discriminator)
+
+  // Array format: any length (1-byte, 8-byte Anchor standard, or custom)
+  if (Array.isArray(disc) && disc.length > 0) {
+    const allBytes = (disc as any[]).every(
+      (value) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255,
+    )
+    if (!allBytes) return null
+    return new Uint8Array(disc as number[])
+  }
+
+  return null
 }
 
 async function getInstructionDiscriminator(instruction: AnchorInstruction): Promise<Uint8Array> {
@@ -782,6 +809,35 @@ export async function simulateInstruction(
     err: build.simulationError,
     decodedError: build.decodedError,
     build,
+  }
+}
+
+/**
+ * Simulate a raw pre-built Solana transaction (base64 or base58 wire bytes).
+ * Useful when the transaction was built externally — e.g. with a custom discriminator
+ * that Orquestra cannot reproduce — and you still want preflight RPC validation.
+ *
+ * `sigVerify` is always false so no wallet or signature is required.
+ */
+export async function simulateRawTransaction(
+  serializedTx: string,
+  encoding: 'base64' | 'base58',
+  rpcUrl: string,
+): Promise<{ success: boolean; computeUnits: number | null; logs: string[]; err: unknown | null }> {
+  let wireBytes: Uint8Array
+  if (encoding === 'base64') {
+    const binary = atob(serializedTx)
+    wireBytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) wireBytes[i] = binary.charCodeAt(i)
+  } else {
+    wireBytes = base58Decode(serializedTx)
+  }
+  const { err, logs } = await simulateTransactionRpc(rpcUrl, wireBytes)
+  return {
+    success: err === null,
+    computeUnits: extractComputeUnits(logs),
+    logs,
+    err,
   }
 }
 

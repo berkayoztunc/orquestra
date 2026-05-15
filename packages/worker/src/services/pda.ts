@@ -251,6 +251,11 @@ export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
         if (s.kind === 'account') {
           return { kind: 'account' as const, name: seedName(s) }
         }
+        if (s.kind === 'account_field') {
+          const name = seedName(s)
+          const type = (s as any).type
+          return { kind: 'account_field' as const, name, type }
+        }
         return { kind: s.kind }
       })
 
@@ -351,6 +356,22 @@ export async function derivePda(
       const bytes = base58Decode(val)
       seedBuffers.push(bytes)
       seedInfo.push({ kind: 'account', name, value: val, hex: toHex(bytes) })
+      continue
+    }
+
+    // account_field: a field inside an account used as a seed (e.g. board.round_id as u64 LE).
+    // Callers pass the field value directly; the `type` on the seed tells us how to encode it.
+    if (s.kind === 'account_field') {
+      const name = seedName(s)
+      const val = seedValues[name]
+      if (val === undefined || val === null || val === '') {
+        throw new Error(`Missing seed value for account_field "${name}"`)
+      }
+      // `type` may live on the seed itself (new IDL) or be inferred from arg defs
+      const seedType = (s as any).type ?? undefined
+      const bytes = encodeSeedValue(val, seedType)
+      seedBuffers.push(bytes)
+      seedInfo.push({ kind: 'account_field', name, value: val, hex: toHex(bytes) })
       continue
     }
 

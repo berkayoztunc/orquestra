@@ -285,12 +285,6 @@ function PDACard({
                             ? `${s.type} value...`
                             : 'Value...'
                         }
-                            : s.type === 'string'
-                            ? 'Text value...'
-                            : s.type
-                            ? `${s.type} value...`
-                            : 'Value...'
-                        }
                         className="input w-full text-sm font-mono"
                       />
                     </div>

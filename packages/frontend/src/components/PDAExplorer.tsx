@@ -9,6 +9,20 @@ interface SeedInfo {
   type?: string
 }
 
+const NUMERIC_SEED_TYPES = ['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'u128', 'i128']
+
+/** True when the seed value is a number, not a base58 public key. */
+function isNumericSeed(s: SeedInfo): boolean {
+  return s.kind === 'account_field' || (s.kind === 'account' && !!s.type && NUMERIC_SEED_TYPES.includes(s.type))
+}
+
+/** Display label shown in the type badge. */
+function seedTypeLabel(s: SeedInfo): string {
+  if (s.kind === 'arg') return s.type || 'arg'
+  if (isNumericSeed(s)) return s.type || s.kind
+  return 'pubkey'
+}
+
 interface PdaAccountInfo {
   instruction: string
   account: string
@@ -191,9 +205,11 @@ function PDACard({
                       <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded border ${
                         s.kind === 'arg'
                           ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
+                          : isNumericSeed(s)
+                          ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
                           : 'text-purple-400 bg-purple-500/10 border-purple-500/20'
                       }`}>
-                        {s.kind === 'arg' ? s.type || 'arg' : 'pubkey'}
+                        {seedTypeLabel(s)}
                       </span>
                       <span className="text-[11px] text-gray-600 font-mono bg-white/5 px-1.5 py-0.5 rounded">{s.kind}</span>
                     </div>
@@ -247,9 +263,11 @@ function PDACard({
                         <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                           s.kind === 'arg'
                             ? 'text-blue-400 bg-blue-400/10'
+                            : isNumericSeed(s)
+                            ? 'text-amber-400 bg-amber-400/10'
                             : 'text-purple-400 bg-purple-400/10'
                         }`}>
-                          {s.kind === 'arg' ? s.type || 'arg' : 'pubkey'}
+                          {seedTypeLabel(s)}
                         </span>
                       </label>
                       <input
@@ -257,8 +275,16 @@ function PDACard({
                         value={seedValues[s.name || ''] || ''}
                         onChange={(e) => setSeedValues({ ...seedValues, [s.name || '']: e.target.value })}
                         placeholder={
-                          s.kind === 'account'
+                          isNumericSeed(s)
+                            ? `${s.type || 'number'} value (e.g. 42)...`
+                            : s.kind === 'account'
                             ? 'Public key (base58)...'
+                            : s.type === 'string'
+                            ? 'Text value...'
+                            : s.type
+                            ? `${s.type} value...`
+                            : 'Value...'
+                        }
                             : s.type === 'string'
                             ? 'Text value...'
                             : s.type

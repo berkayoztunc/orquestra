@@ -249,7 +249,8 @@ export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
           return { kind: 'arg' as const, name, type }
         }
         if (s.kind === 'account') {
-          return { kind: 'account' as const, name: seedName(s) }
+          const type = (s as any).type
+          return { kind: 'account' as const, name: seedName(s), type }
         }
         if (s.kind === 'account_field') {
           const name = seedName(s)
@@ -347,15 +348,28 @@ export async function derivePda(
     if (s.kind === 'account') {
       const name = seedName(s)
       const val = seedValues[name]
-      if (!val || typeof val !== 'string') {
-        throw new Error(`Missing seed value for account "${name}" (expected base58 public key)`)
+      const seedType = (s as any).type
+      const NUMERIC_TYPES = ['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'u128', 'i128']
+      if (seedType && NUMERIC_TYPES.includes(seedType)) {
+        // Numeric account seed (e.g. { kind: 'account', path: 'round_id', type: 'u64' })
+        if (val === undefined || val === null || val === '') {
+          throw new Error(`Missing seed value for account "${name}" (expected ${seedType})`)
+        }
+        const bytes = encodeSeedValue(val, seedType)
+        seedBuffers.push(bytes)
+        seedInfo.push({ kind: 'account', name, value: val, hex: toHex(bytes) })
+      } else {
+        // Standard pubkey account seed
+        if (!val || typeof val !== 'string') {
+          throw new Error(`Missing seed value for account "${name}" (expected base58 public key)`)
+        }
+        if (!isValidBase58Pubkey(val)) {
+          throw new Error(`Invalid public key for account seed "${name}": ${val}`)
+        }
+        const bytes = base58Decode(val)
+        seedBuffers.push(bytes)
+        seedInfo.push({ kind: 'account', name, value: val, hex: toHex(bytes) })
       }
-      if (!isValidBase58Pubkey(val)) {
-        throw new Error(`Invalid public key for account seed "${name}": ${val}`)
-      }
-      const bytes = base58Decode(val)
-      seedBuffers.push(bytes)
-      seedInfo.push({ kind: 'account', name, value: val, hex: toHex(bytes) })
       continue
     }
 

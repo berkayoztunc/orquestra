@@ -643,10 +643,14 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
       seedValues: z
         .record(z.unknown())
         .describe(
-          'Map of seed name → value. For pubkey seeds, pass a base58 string. For string/bytes seeds, pass the plain string. Check list_pda_accounts for required seed names.',
+          'Map of seed name → value. For pubkey seeds, pass a base58 string. For string/bytes seeds, pass the plain string. For account_field seeds (dot-notation like "board.round_id"), provide the resolved address of the parent account (e.g. "board": "<base58>"). Check list_pda_accounts for required seed names.',
         ),
+      network: z
+        .enum(['mainnet-beta', 'devnet', 'testnet'])
+        .optional()
+        .describe('Solana cluster to query when a seed requires fetching on-chain data (account_field seeds). Defaults to mainnet-beta.'),
     },
-    async ({ projectId, instruction, account, seedValues }) => {
+    async ({ projectId, instruction, account, seedValues, network }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.derive_pda, projectId })
         const data = await fetchIDL(projectId, env)
@@ -656,6 +660,8 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             content: [{ type: 'text', text: `Project "${projectId}" not found or is private.` }],
           }
         }
+
+        const { rpcUrl } = resolveSolanaRpcUrl({ network: network ?? 'mainnet-beta', env })
 
         let result
         if (detectIDLFormat(data.idl as unknown) === 'codama') {
@@ -673,6 +679,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             instruction,
             account,
             seedValues as Record<string, any>,
+            rpcUrl,
           )
         }
 

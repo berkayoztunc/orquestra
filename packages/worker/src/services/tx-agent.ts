@@ -248,7 +248,8 @@ export async function runTxAgent(env: TxAgentBindings, request: TxAgentRequest):
   const schema = buildInstructionSchema(project.idl, instruction)
   autofillStaticAccounts(instruction, state)
   autofillSignerAccounts(instruction, state)
-  await deriveAvailablePdas(project, instruction, state)
+  const { rpcUrl } = resolveSolanaRpcUrl({ network: state.network ?? DEFAULT_NETWORK, env })
+  await deriveAvailablePdas(project, instruction, state, rpcUrl)
   const missingFields = findMissingFields(project.idl, instruction, state)
   if (missingFields.length > 0) {
     return {
@@ -738,6 +739,7 @@ async function deriveAvailablePdas(
   project: ProjectData,
   instruction: AnchorInstruction,
   state: TxAgentState,
+  rpcUrl?: string,
 ): Promise<void> {
   for (const account of instruction.accounts as any[]) {
     const normalized = normalizeAccountMeta(account)
@@ -755,6 +757,7 @@ async function deriveAvailablePdas(
         instruction.name,
         normalized.name,
         seedValues,
+        rpcUrl,
       )
       state.accounts = {
         ...(state.accounts ?? {}),

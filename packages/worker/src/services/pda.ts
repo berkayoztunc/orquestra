@@ -6,6 +6,7 @@
 
 import type { AnchorIDL, AnchorInstruction, CodamaIDL, CodamaTypeNode } from './idl-parser'
 import { getInstruction, resolveCodamaType } from './idl-parser'
+import { fetchAccountInfo } from '../utils/solana-rpc'
 
 // ────────────────────────────────────────────────────────
 // Ed25519 curve check  (GF(2^255 − 19))
@@ -213,6 +214,96 @@ function encodeSeedValue(value: any, argType: any): Uint8Array {
 }
 
 // ────────────────────────────────────────────────────────
+// On-chain account field helpers (for dot-notation seeds)
+// ────────────────────────────────────────────────────────
+
+/**
+ * Return the byte size of a primitive borsh type, or null for variable/complex types.
+ * Used to advance the field offset while scanning an account to reach the target field.
+ */
+function primitiveByteSize(type: unknown): number | null {
+  if (typeof type !== 'string') return null
+  const table: Record<string, number> = {
+    bool: 1, u8: 1, i8: 1,
+    u16: 2, i16: 2,
+    u32: 4, i32: 4, f32: 4,
+    u64: 8, i64: 8, f64: 8,
+    u128: 16, i128: 16,
+    publicKey: 32, pubkey: 32,
+  }
+  return table[type as string] ?? null
+}
+
+/**
+ * Find an IDL account definition whose explicit discriminator array matches the
+ * first 8 bytes of rawData. Handles Steel-style numeric discriminators and
+ * new Anchor-format discriminator arrays.
+ */
+function matchAccountDefByDiscriminator(rawData: Uint8Array, idl: AnchorIDL): { name: string; type?: { kind: string; fields?: Array<{ name: string; type: any }> }; discriminator?: number[] } | null {
+  if (rawData.length < 8 || !idl.accounts?.length) return null
+  for (const account of idl.accounts) {
+    const disc = account.discriminator
+    if (!Array.isArray(disc) || disc.length < 8) continue
+    let match = true
+    for (let i = 0; i < 8; i++) {
+      if (disc[i] !== rawData[i]) { match = false; break }
+    }
+    if (match) return account
+  }
+  return null
+}
+
+/**
+ * Fetch a specific field from an on-chain account, returning raw bytes for use as a PDA seed.
+ *
+ * Only fixed-size primitive field types are supported:
+ *   u8/i8, u16/i16, u32/i32, u64/i64, u128/i128, publicKey/pubkey
+ *
+ * Fields are scanned sequentially (after the 8-byte discriminator) so all fields
+ * preceding the target must also be primitive.
+ */
+async function fetchAccountFieldBytes(
+  parentAddress: string,
+  rpcUrl: string,
+  idl: AnchorIDL,
+  fieldName: string,
+): Promise<{ bytes: Uint8Array; type: string }> {
+  const info = await fetchAccountInfo(parentAddress, rpcUrl)
+  if (!info) throw new Error(`Account ${parentAddress} not found on-chain`)
+
+  const rawData = Uint8Array.from(atob(info.data), (c) => c.charCodeAt(0))
+  const accountDef = matchAccountDefByDiscriminator(rawData, idl)
+  if (!accountDef) {
+    throw new Error(
+      `Could not match on-chain discriminator [${Array.from(rawData.slice(0, 8)).join(', ')}] to any IDL account type for ${parentAddress}`,
+    )
+  }
+
+  const fields: Array<{ name: string; type: any }> = accountDef.type?.fields ?? []
+  let offset = 8 // skip 8-byte discriminator
+
+  for (const field of fields) {
+    const size = primitiveByteSize(field.type)
+    if (size === null) {
+      throw new Error(
+        `Field "${field.name}" in account "${accountDef.name}" has a non-primitive type — cannot scan past it to reach "${fieldName}". Only fixed-size primitive fields are supported before the target field.`,
+      )
+    }
+    if (field.name === fieldName) {
+      return {
+        bytes: rawData.slice(offset, offset + size),
+        type: typeof field.type === 'string' ? field.type : '',
+      }
+    }
+    offset += size
+  }
+
+  throw new Error(
+    `Field "${fieldName}" not found in IDL account type "${accountDef.name}" (available: ${fields.map((f) => f.name).join(', ')})`,
+  )
+}
+
+// ────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────
 
@@ -249,8 +340,22 @@ export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
           return { kind: 'arg' as const, name, type }
         }
         if (s.kind === 'account') {
+          const name = seedName(s)
+          const dotIdx = name.indexOf('.')
+          if (dotIdx !== -1) {
+            // Dot-notation: "board.round_id" means read `round_id` field from `board` account on-chain.
+            // Try to resolve the field type from the IDL account definition for richer metadata.
+            const parentAccountName = name.slice(0, dotIdx)
+            const fieldName = name.slice(dotIdx + 1)
+            const idlAccount = idl.accounts?.find(
+              (a) => a.name.toLowerCase() === parentAccountName.toLowerCase(),
+            )
+            const field = idlAccount?.type?.fields?.find((f: any) => f.name === fieldName)
+            const type = field ? (typeof field.type === 'string' ? field.type : JSON.stringify(field.type)) : undefined
+            return { kind: 'account_field' as const, name, type }
+          }
           const type = (s as any).type
-          return { kind: 'account' as const, name: seedName(s), type }
+          return { kind: 'account' as const, name, type }
         }
         if (s.kind === 'account_field') {
           const name = seedName(s)
@@ -312,6 +417,7 @@ export async function derivePda(
   instruction: string,
   accountName: string,
   seedValues: Record<string, any>,
+  rpcUrl?: string,
 ): Promise<PdaDerivationResult> {
   const ix = getInstruction(idl, instruction)
   if (!ix) throw new Error(`Instruction "${instruction}" not found in IDL`)
@@ -347,6 +453,28 @@ export async function derivePda(
 
     if (s.kind === 'account') {
       const name = seedName(s)
+      const dotIdx = name.indexOf('.')
+      if (dotIdx !== -1) {
+        // Dot-notation: e.g. "board.round_id" — fetch `board` account from chain and read `round_id`.
+        const parentName = name.slice(0, dotIdx)
+        const fieldName = name.slice(dotIdx + 1)
+        const parentAddress = seedValues[parentName]
+        if (!parentAddress || typeof parentAddress !== 'string') {
+          throw new Error(
+            `Seed "${name}" requires the on-chain address of account "${parentName}" — provide it in seedValues as "${parentName}".`,
+          )
+        }
+        if (!rpcUrl) {
+          throw new Error(
+            `Seed "${name}" requires fetching on-chain data from account "${parentName}" but no RPC URL was configured.`,
+          )
+        }
+        const { bytes, type } = await fetchAccountFieldBytes(parentAddress, rpcUrl, idl, fieldName)
+        seedBuffers.push(bytes)
+        seedInfo.push({ kind: 'account', name, value: `on-chain ${parentName}.${fieldName} (${type})`, hex: toHex(bytes) })
+        continue
+      }
+
       const val = seedValues[name]
       const seedType = (s as any).type
       const NUMERIC_TYPES = ['u8', 'i8', 'u16', 'i16', 'u32', 'i32', 'u64', 'i64', 'u128', 'i128']

@@ -44,3 +44,8 @@ logs
 .wrangler
 /scripts
 /next
+
+.claude
+.codex
+.cursor
+/output

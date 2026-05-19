@@ -21,33 +21,17 @@ export default function Explorer(): JSX.Element {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white">Program Explorer</h1>
           <p className="text-gray-400 mt-1">Browse and search public Solana programs indexed by Orquestra</p>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <p className="text-2xl font-bold text-white">{pagination.total.toLocaleString()}</p>
-            <p className="text-xs text-gray-500">Programs</p>
-          </div>
-          <div className="w-px h-10 bg-white/10" />
-          <div className="text-right">
-            <p className="text-2xl font-bold text-white">9</p>
-            <p className="text-xs text-gray-500">MCP Tools</p>
-          </div>
-          <div className="w-px h-10 bg-white/10" />
-          <div className="text-right">
-            <p className="text-2xl font-bold gradient-text">FTS</p>
-            <p className="text-xs text-gray-500">Full-Text Search</p>
-          </div>
-        </div>
       </div>
 
       {/* Search Bar - Modern */}
-      <div className="relative max-w-2xl">
+      <div className="relative ">
         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
           <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -71,7 +55,7 @@ export default function Explorer(): JSX.Element {
           </button>
         )}
         {/* Glow effect */}
-        <div className="absolute -inset-1 bg-primary/5 rounded-xl blur-lg -z-10" />
+        <div className="absolute -inset-1 bg-primary/5 blur-lg -z-10" />
       </div>
 
       {/* Results */}
@@ -80,8 +64,8 @@ export default function Explorer(): JSX.Element {
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="card-static p-5 space-y-3 animate-pulse">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex-shrink-0" />
-                <div className="h-5 w-36 rounded-lg bg-white/10" />
+                <div className="w-10 h-10 bg-white/10 flex-shrink-0" />
+                <div className="h-5 w-36 bg-white/10" />
               </div>
               <div className="h-3.5 w-full rounded bg-white/10" />
               <div className="h-3.5 w-2/3 rounded bg-white/10" />
@@ -94,7 +78,7 @@ export default function Explorer(): JSX.Element {
         </div>
       ) : projects.length === 0 ? (
         <div className="card-static p-12 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 mx-auto mb-4">
+          <div className="w-16 h-16 bg-primary/10 flex items-center justify-center border border-primary/20 mx-auto mb-4">
             <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>

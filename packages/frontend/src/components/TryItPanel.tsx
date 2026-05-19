@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ZapIcon, CheckIcon, AlertCircleIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react'
-import api, { listProjects, listInstructions, buildTransaction } from '../api/client'
+import { listProjects, listInstructions, buildTransaction } from '../api/client'
 import CodeBlock from './CodeBlock'
 
 type Stage = 'idle' | 'fetching' | 'building' | 'done' | 'error'
@@ -71,9 +71,6 @@ export default function TryItPanel(): JSX.Element {
   const [elapsedMs, setElapsedMs] = useState<number | null>(null)
   const [autoTriggered, setAutoTriggered] = useState(false)
 
-  // On mount, try to resolve a real demo from the live registry so the preset
-  // never 404s. If discovery fails, we keep the hardcoded preset and let the
-  // build call surface the real error to the judge.
   useEffect(() => {
     let cancelled = false
     async function pickDemo() {
@@ -88,8 +85,6 @@ export default function TryItPanel(): JSX.Element {
         }
         const projectId = candidate.id as string
         if (cancelled) return
-        // If the discovered project matches our preset, use the preset's
-        // already-resolved accounts/args (PDAs and ATAs) instead of placeholders.
         const preset = PRESET_DEMOS.find((d) => d.projectId === projectId)
         if (preset) {
           setDemo(preset)
@@ -132,7 +127,6 @@ export default function TryItPanel(): JSX.Element {
     }
   }, [])
 
-  // Auto-run once after the demo is resolved so judges land on motion, not a static screenshot.
   useEffect(() => {
     if (autoTriggered) return
     if (!demo) return
@@ -142,7 +136,6 @@ export default function TryItPanel(): JSX.Element {
       handleRun()
     }, 1800)
     return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo, stage])
 
   async function handleRun() {
@@ -200,178 +193,184 @@ export default function TryItPanel(): JSX.Element {
   )
 
   return (
-    <section className="max-w-6xl mx-auto px-6">
-      <div className="rounded-2xl border border-white/10 bg-surface-elevated overflow-hidden shadow-2xl">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-6 py-5 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center">
-              <ZapIcon className="w-4 h-4 text-primary" />
-            </span>
-            <div>
-              <p className="text-xs uppercase tracking-[0.15em] text-primary font-bold inline-flex items-center gap-2">
-                Live demo
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 normal-case tracking-normal">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                  LIVE
-                </span>
-              </p>
-              <h3 className="text-white font-semibold text-base">
-                Build a real Solana transaction from{' '}
-                <span className="text-primary">{demo.programName}</span>
-                <span className="text-gray-500 font-normal"> · </span>
-                <code className="text-secondary font-mono text-sm">{demo.instruction}</code>
-              </h3>
-            </div>
-          </div>
-          <button
-            onClick={handleRun}
-            disabled={stage === 'building' || stage === 'fetching'}
-            className="btn-primary text-sm px-5 py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center border border-border-low bg-sand-50"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgb(var(--rgb-border-low) / 0.7) 4px, rgb(var(--rgb-border-low) / 0.7) 5px)',
+            }}
           >
-            {stage === 'building' ? 'Building…' : stage === 'done' ? 'Run Again' : 'Run Live'}
-          </button>
-        </div>
-
-        {/* Body — request / response columns */}
-        <div className="grid md:grid-cols-2 gap-px bg-white/5">
-          {/* Request */}
-          <div className="bg-surface-elevated p-6">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-500 font-mono uppercase tracking-wider">request</p>
-              <button
-                onClick={() => copy('curl')}
-                className="text-xs text-gray-400 hover:text-primary inline-flex items-center gap-1.5 transition-colors"
-              >
-                {copied === 'curl' ? (
-                  <>
-                    <CheckIcon className="w-3 h-3" /> copied
-                  </>
-                ) : (
-                  <>
-                    <CopyIcon className="w-3 h-3" /> copy as curl
-                  </>
-                )}
-              </button>
-            </div>
-            <CodeBlock language="json" code={requestBlock} copyable={false} />
-            <p className="text-[11px] text-gray-600 mt-3 font-mono">
-              POST /api/{demo.projectId}/instructions/{demo.instruction}/build
+            <ZapIcon className="h-4 w-4 text-sand-1600" aria-hidden="true" />
+          </span>
+          <div>
+            <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">
+              Live demo
+              <span className="inline-flex items-center gap-1 border border-[#b75000]/30 bg-[#b75000]/10 px-1.5 py-0.5 text-[10px] normal-case tracking-normal text-[#b75000]">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#b75000]" />
+                LIVE
+              </span>
+            </p>
+            <p className="mt-1 text-base font-semibold text-sand-1600">
+              Build a real Solana transaction from{' '}
+              <span className="text-sand-1400">{demo.programName}</span>
+              <span className="font-normal text-sand-1100"> · </span>
+              <code className="font-mono text-sm text-sand-1200">{demo.instruction}</code>
             </p>
           </div>
+        </div>
+        <button
+          onClick={handleRun}
+          disabled={stage === 'building' || stage === 'fetching'}
+          className="btn-primary self-start disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+        >
+          {stage === 'building' ? 'Building…' : stage === 'done' ? 'Run Again' : 'Run Live'}
+        </button>
+      </div>
 
-          {/* Response */}
-          <div className="bg-surface-elevated p-6">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-500 font-mono uppercase tracking-wider">response</p>
-              {elapsedMs !== null && (
-                <span className="text-[11px] text-gray-500 font-mono">{elapsedMs}ms</span>
+      {/* Request / Response columns */}
+      <div className="grid gap-px overflow-hidden border border-border-low bg-border-low md:grid-cols-2">
+        {/* Request */}
+        <div className="bg-sand-50 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">request</p>
+            <button
+              onClick={() => copy('curl')}
+              className="inline-flex items-center gap-1.5 font-mono text-[11px] text-sand-1200 transition-colors hover:text-sand-1600"
+            >
+              {copied === 'curl' ? (
+                <>
+                  <CheckIcon className="h-3 w-3" /> copied
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="h-3 w-3" /> copy as curl
+                </>
               )}
-            </div>
-
-            {stage === 'idle' && !result && (
-              <div className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center">
-                <p className="text-sm text-gray-500">
-                  Click <span className="text-primary font-medium">Run Live</span> to call the public Orquestra
-                  API. No signup, no API key.
-                </p>
-              </div>
-            )}
-
-            {stage === 'fetching' && (
-              <div className="rounded-xl border border-white/5 px-4 py-8 text-center">
-                <p className="text-sm text-gray-500 animate-pulse">Discovering live program…</p>
-              </div>
-            )}
-
-            {stage === 'building' && (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-8 text-center">
-                <p className="text-sm text-primary animate-pulse">Building transaction at the edge…</p>
-              </div>
-            )}
-
-            {stage === 'error' && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircleIcon className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm">
-                    <p className="text-red-300 font-medium mb-1">Build failed</p>
-                    <p className="text-red-400/80 text-xs font-mono leading-relaxed break-all">
-                      {error}
-                    </p>
-                    <p className="text-gray-500 text-xs mt-2">
-                      The error itself proves the API is live — the demo accounts may be stale.{' '}
-                      <Link to="/explorer" className="text-primary hover:underline">
-                        Try a real one →
-                      </Link>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {stage === 'done' && result && (
-              <div className="space-y-3">
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckIcon className="w-4 h-4 text-primary" />
-                    <p className="text-sm text-primary font-semibold">Base58 transaction ready</p>
-                  </div>
-                  <p className="font-mono text-xs text-gray-300 break-all leading-relaxed">
-                    {shortenBase58(result.transaction, 36)}
-                  </p>
-                  <button
-                    onClick={() => copy('tx')}
-                    className="mt-2 text-[11px] text-gray-400 hover:text-primary inline-flex items-center gap-1.5 transition-colors"
-                  >
-                    {copied === 'tx' ? (
-                      <>
-                        <CheckIcon className="w-3 h-3" /> copied
-                      </>
-                    ) : (
-                      <>
-                        <CopyIcon className="w-3 h-3" /> copy full transaction
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="rounded-lg bg-surface px-3 py-2 border border-white/5">
-                    <p className="text-gray-500 uppercase tracking-wider mb-0.5">est. fee</p>
-                    <p className="text-white font-mono">{result.estimatedFee.toLocaleString()} lamports</p>
-                  </div>
-                  <div className="rounded-lg bg-surface px-3 py-2 border border-white/5">
-                    <p className="text-gray-500 uppercase tracking-wider mb-0.5">network</p>
-                    <p className="text-white font-mono">{result.network ?? 'mainnet-beta'}</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            </button>
           </div>
+          <CodeBlock language="json" code={requestBlock} copyable={false} />
+          <p className="mt-3 font-mono text-[11px] text-sand-1100">
+            POST /api/{demo.projectId}/instructions/{demo.instruction}/build
+          </p>
         </div>
 
-        {/* Footer CTA strip */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 px-6 py-4 border-t border-white/5 bg-surface/30">
-          <p className="text-xs text-gray-500">
-            Want this from your AI agent? Same call works as an MCP tool —{' '}
-            <code className="text-secondary font-mono">build_instruction</code>.
-          </p>
-          <div className="flex items-center gap-3">
-            <Link
-              to="/docs/mcp"
-              className="text-xs text-secondary hover:text-secondary/80 inline-flex items-center gap-1 transition-colors"
-            >
-              Open in MCP <ExternalLinkIcon className="w-3 h-3" />
-            </Link>
-            <Link
-              to="/explorer"
-              className="text-xs text-primary hover:text-primary/80 inline-flex items-center gap-1 transition-colors"
-            >
-              Browse 1,000+ programs →
-            </Link>
+        {/* Response */}
+        <div className="bg-sand-50 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">response</p>
+            {elapsedMs !== null && (
+              <span className="font-mono text-[11px] text-sand-1200">{elapsedMs}ms</span>
+            )}
           </div>
+
+          {stage === 'idle' && !result && (
+            <div className=" border border-dashed border-border-medium px-4 py-8 text-center">
+              <p className="text-sm text-sand-1200">
+                Click <span className="font-medium text-sand-1600">Run Live</span> to call the public
+                Orquestra API. No signup, no API key.
+              </p>
+            </div>
+          )}
+
+          {stage === 'fetching' && (
+            <div className=" border border-border-low px-4 py-8 text-center">
+              <p className="animate-pulse text-sm text-sand-1200">Discovering live program…</p>
+            </div>
+          )}
+
+          {stage === 'building' && (
+            <div className=" border border-border-medium bg-sand-100 px-4 py-8 text-center">
+              <p className="animate-pulse text-sm text-sand-1600">Building transaction at the edge…</p>
+            </div>
+          )}
+
+          {stage === 'error' && (
+            <div className=" border border-[#b75000]/30 bg-[#b75000]/5 p-4">
+              <div className="flex items-start gap-2">
+                <AlertCircleIcon className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#b75000]" />
+                <div className="text-sm">
+                  <p className="mb-1 font-medium text-[#b75000]">Build failed</p>
+                  <p className="break-all font-mono text-xs leading-relaxed text-[#b75000]/70">
+                    {error}
+                  </p>
+                  <p className="mt-2 text-xs text-sand-1200">
+                    The error itself proves the API is live — the demo accounts may be stale.{' '}
+                    <Link to="/explorer" className="text-sand-1600 underline hover:no-underline">
+                      Try a real one →
+                    </Link>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {stage === 'done' && result && (
+            <div className="space-y-3">
+              <div className=" border border-border-medium bg-sand-100 p-4">
+                <div className="mb-2 flex items-center gap-2">
+                  <CheckIcon className="h-4 w-4 text-sand-1500" />
+                  <p className="text-sm font-medium text-sand-1600">Base58 transaction ready</p>
+                </div>
+                <p className="break-all font-mono text-xs leading-relaxed text-sand-1200">
+                  {shortenBase58(result.transaction, 36)}
+                </p>
+                <button
+                  onClick={() => copy('tx')}
+                  className="mt-2 inline-flex items-center gap-1.5 font-mono text-[11px] text-sand-1200 transition-colors hover:text-sand-1600"
+                >
+                  {copied === 'tx' ? (
+                    <>
+                      <CheckIcon className="h-3 w-3" /> copied
+                    </>
+                  ) : (
+                    <>
+                      <CopyIcon className="h-3 w-3" /> copy full transaction
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className=" border border-border-low bg-bg1 px-3 py-2">
+                  <p className="mb-0.5 font-mono uppercase tracking-[0.12em] text-sand-1100">est. fee</p>
+                  <p className="font-mono text-sand-1600">
+                    {result.estimatedFee.toLocaleString()} lamports
+                  </p>
+                </div>
+                <div className=" border border-border-low bg-bg1 px-3 py-2">
+                  <p className="mb-0.5 font-mono uppercase tracking-[0.12em] text-sand-1100">network</p>
+                  <p className="font-mono text-sand-1600">{result.network ?? 'mainnet-beta'}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </section>
+
+      {/* Footer CTA */}
+      <div className="flex flex-col gap-3 border-t border-border-low pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-sand-1200">
+          Want this from your AI agent? Same call works as an MCP tool —{' '}
+          <code className="font-mono text-sand-1600">build_instruction</code>.
+        </p>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/docs/mcp"
+            className="inline-flex items-center gap-1 text-xs text-sand-1200 transition-colors hover:text-sand-1600"
+          >
+            Open in MCP <ExternalLinkIcon className="h-3 w-3" />
+          </Link>
+          <Link
+            to="/explorer"
+            className="inline-flex items-center gap-1 text-xs font-medium text-sand-1600 transition-colors hover:text-sand-1200"
+          >
+            Browse 1,000+ programs →
+          </Link>
+        </div>
+      </div>
+    </div>
   )
 }

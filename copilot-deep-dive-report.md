@@ -6,7 +6,7 @@
 
 ## WHAT IT IS
 
-Orquestra converts any Solana Anchor IDL into a hosted production REST API. Upload an IDL → get HTTP endpoints for every instruction, account query, and error — plus Borsh-serialized base58 transaction building, API key management, and AI-ready Markdown documentation. Runs on Cloudflare Workers + D1 (zero cold-start, global edge).
+Orquestra converts any Solana Anchor IDL into a hosted production API. Upload an IDL → get HTTP endpoints for every instruction, account query, and error — plus Borsh-serialized base58 transaction building, API key management, and AI-ready Markdown documentation. Runs on Cloudflare Workers + D1 (zero cold-start, global edge).
 
 ---
 
@@ -45,16 +45,16 @@ These are targeting different users. Codama is for Solana-native devs who want t
 
 **Helius Constellation** (confirmed April 2026): This is the Solana consensus protocol proposal (Multiple Concurrent Proposers), NOT the AI Model Context Protocol. No direct relevance to Orquestra's positioning — confirmed not a competitor or partner signal.
 
-**No accelerator company** on Colosseum's portfolio does IDL-to-REST API generation. Zero overlap in the Grid's 315 developer_tooling products.
+**No accelerator company** on Colosseum's portfolio does IDL-to-API generation. Zero overlap in the Grid's 315 developer_tooling products.
 
 ### Adjacent Web3 Analogies
 
 | Product | Model | Orquestra Delta |
 |---|---|---|
 | The Graph | User writes GraphQL subgraph → indexed query API | Schema-based, user-authored, EVM-centric |
-| Moralis | Indexing + parsed event APIs for EVM | Chain-generic, no IDL concept |
+| Moralis | Indexing + parsed event API for EVM | Chain-generic, no IDL concept |
 | Codama | IDL → local SDK codegen | No hosted API, Solana-native devs only |
-| Shyft (2022-2024) | Decoded program APIs + gRPC | Pivoted away; validated and abandoned |
+| Shyft (2022-2024) | Decoded program API + gRPC | Pivoted away; validated and abandoned |
 | Arrow API | Generic base58 tx builder | Not IDL-driven, hackathon stage |
 
 ---
@@ -84,7 +84,7 @@ This is the strongest non-obvious angle. The ecosystem is in a land grab for "wh
 
 The workspace already has an MCP implementation (webmcp.ts, routes) and a SKILL.md, which confirms this angle is being actively explored. The timing is right — the AI agent tooling ecosystem (Claude Code, Cursor, etc.) is standardizing on MCP as the tool interface in 2025-2026.
 
-**Why this is high-leverage:** Helius has one MCP server for Helius-specific APIs. Orquestra could be the MCP server for *all programs ever deployed with Anchor*. That's a different scale of utility.
+**Why this is high-leverage:** Helius has one MCP server for Helius-specific API. Orquestra could be the MCP server for *all programs ever deployed with Anchor*. That's a different scale of utility.
 
 ### Opportunity 3 — Documentation as a Network Effect
 
@@ -98,7 +98,7 @@ This is the Stripe documentation play for Solana programs — except it auto-gen
 
 ### The Verdict
 
-**Orquestra is building in a real gap.** The IDL-to-hosted-REST niche is unoccupied in production. The closest player (Codama) solves a different problem for a different user. The previous closest player (Shyft's program APIs) explicitly abandoned the space. No accelerator company, no Grid product, no hackathon winner owns this.
+**Orquestra is building in a real gap.** The IDL-to-hosted-REST niche is unoccupied in production. The closest player (Codama) solves a different problem for a different user. The previous closest player (Shyft's program API) explicitly abandoned the space. No accelerator company, no Grid product, no hackathon winner owns this.
 
 That's the good news. Here's the complete picture:
 
@@ -130,7 +130,7 @@ Helius, Quicknode, or Shyft could add IDL-to-REST as a feature of their existing
 
 
 **Risk 2: The cold-start problem.**
-A REST API for Anchor programs is only valuable if there are programs worth calling. Until the top 20-30 Anchor programs (Drift, Meteora, Orca, Kamino, etc.) are indexed and available, Orquestra is a tool without a catalog. The path through this is either self-service upload (wait for teams to discover it) or proactive outreach to top program teams with a free tier.
+A API for Anchor programs is only valuable if there are programs worth calling. Until the top 20-30 Anchor programs (Drift, Meteora, Orca, Kamino, etc.) are indexed and available, Orquestra is a tool without a catalog. The path through this is either self-service upload (wait for teams to discover it) or proactive outreach to top program teams with a free tier.
 
 ---
 
@@ -177,4 +177,4 @@ This is weeks of real work that would take a big player months to replicate at f
 
 ### One-Paragraph Summary
 
-Orquestra fills a real gap: the production REST API layer for Solana Anchor programs that no one has shipped. Codama (the closest existing tool, 443 stars) generates local typed SDK code — it's a code generator for Solana developers. Orquestra generates a live hosted API server callable by any web2 team, AI agent, or low-code tool. The hackathon circuit has produced visual IDL explorers (IDL Space, AnchorSight) and a generic transaction builder (Arrow API), but no IDL-driven REST API platform. The Grid's 315 developer tooling products include zero products in this space. The highest-leverage move right now is the MCP angle: position Orquestra as the MCP registry for Anchor programs before anyone else does. That's a network effect moat Helius can't easily replicate by adding a checkbox to their dashboard.
+Orquestra fills a real gap: the production API layer for Solana Anchor programs that no one has shipped. Codama (the closest existing tool, 443 stars) generates local typed SDK code — it's a code generator for Solana developers. Orquestra generates a live hosted API server callable by any web2 team, AI agent, or low-code tool. The hackathon circuit has produced visual IDL explorers (IDL Space, AnchorSight) and a generic transaction builder (Arrow API), but no IDL-driven API platform. The Grid's 315 developer tooling products include zero products in this space. The highest-leverage move right now is the MCP angle: position Orquestra as the MCP registry for Anchor programs before anyone else does. That's a network effect moat Helius can't easily replicate by adding a checkbox to their dashboard.

@@ -133,8 +133,8 @@ app.get('/project/:projectId/llms.txt', async (c) => {
 
     const externalApisSection: string[] = []
     if (externalApis?.results?.length) {
-      externalApisSection.push('## External APIs', '')
-      externalApisSection.push('These are third-party/external APIs documented by the project owner. Orquestra does not execute or proxy them.', '')
+      externalApisSection.push('## External API', '')
+      externalApisSection.push('These are third-party/external API documented by the project owner. Orquestra does not execute or proxy them.', '')
 
       for (const row of externalApis.results as CustomApiRow[]) {
         externalApisSection.push(`### ${row.name}`, '')

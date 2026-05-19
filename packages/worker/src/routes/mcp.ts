@@ -39,6 +39,7 @@ import { queryProgramAccounts } from '../services/program-accounts'
 import { generateDocumentation } from '../services/doc-generator'
 import { searchProjects } from '../services/search'
 import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
+import { PROGRAM_ACCOUNTS_SELECTOR_ERROR, hasProgramAccountsSelector } from '../services/validation'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
 
@@ -985,7 +986,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
 
   server.tool(
     'get_program_data',
-    'Query Solana program-owned accounts for a project using getProgramAccounts. Supports accountType discriminator filters, dataSize, raw memcmp filters, and IDL fieldFilters for fixed-offset fields. Decodes matching accounts with the project IDL by default.',
+    'Query Solana program-owned accounts for a project using getProgramAccounts. Requires at least one selector: accountType, dataSize, memcmp, fieldFilters, paginationKey, or changedSinceSlot. Decodes matching accounts with the project IDL by default.',
     {
       projectId: z.string().describe('The orquestra project ID'),
       accountType: z
@@ -1041,6 +1042,13 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
     async ({ projectId, accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, paginationKey, changedSinceSlot, limit, includeRaw }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.get_program_data, projectId })
+        if (!hasProgramAccountsSelector({ accountType, dataSize, memcmp, fieldFilters, paginationKey, changedSinceSlot })) {
+          return {
+            isError: true,
+            content: [{ type: 'text', text: PROGRAM_ACCOUNTS_SELECTOR_ERROR }],
+          }
+        }
+
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {

@@ -83,7 +83,7 @@ function TweetCard({ tweet }: { tweet: Tweet }) {
       href={tweet.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex-shrink-0 w-80 bg-surface-elevated border border-white/[0.07] rounded-2xl p-5 flex flex-col gap-4 hover:border-primary/25 hover:bg-surface-card transition-all duration-300"
+      className="group flex w-80 flex-shrink-0 flex-col gap-4 border border-border-low bg-bg1 p-5 transition-colors duration-200 hover:border-border-medium hover:bg-sand-100"
     >
       {/* Author row */}
       <div className="flex items-center justify-between">
@@ -95,22 +95,22 @@ function TweetCard({ tweet }: { tweet: Tweet }) {
             height={40}
             className="w-10 h-10 rounded-full object-cover bg-surface flex-shrink-0"
             onError={(e) => {
-              ;(e.currentTarget as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${tweet.handle}&backgroundColor=14F195&textColor=0a0f0d`
+              e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${tweet.handle}&backgroundColor=F4EFE6&textColor=1F1E1C`
             }}
           />
           <div className="min-w-0">
-            <p className="text-white text-sm font-semibold leading-tight truncate">{tweet.author}</p>
-            <p className="text-gray-500 text-xs truncate">@{tweet.handle}</p>
+            <p className="truncate text-sm font-semibold leading-tight text-sand-1600">{tweet.author}</p>
+            <p className="truncate font-mono text-xs text-sand-1100">@{tweet.handle}</p>
           </div>
         </div>
-        <XLogo className="w-[18px] h-[18px] text-gray-600 group-hover:text-[#1d9bf0] transition-colors flex-shrink-0 ml-2" />
+        <XLogo className="ml-2 h-[18px] w-[18px] flex-shrink-0 text-sand-1100 transition-colors group-hover:text-sand-1500" />
       </div>
 
       {/* Tweet text */}
-      <p className="text-gray-300 text-sm leading-relaxed flex-1">{truncate(tweet.text)}</p>
+      <p className="flex-1 text-sm leading-relaxed text-sand-1300">{truncate(tweet.text)}</p>
 
       {/* Date */}
-      <p className="text-gray-600 text-xs">{tweet.date}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-sand-1100">{tweet.date}</p>
     </a>
   )
 }
@@ -179,12 +179,12 @@ export default function TwitterWall() {
       {/* Left fade */}
       <div
         className="absolute left-0 top-0 bottom-0 w-32 pointer-events-none z-10"
-        style={{ background: 'linear-gradient(to right, #0d1411, transparent)' }}
+        style={{ background: 'linear-gradient(to right, rgb(var(--rgb-bg1)), transparent)' }}
       />
       {/* Right fade */}
       <div
         className="absolute right-0 top-0 bottom-0 w-32 pointer-events-none z-10"
-        style={{ background: 'linear-gradient(to left, #0d1411, transparent)' }}
+        style={{ background: 'linear-gradient(to left, rgb(var(--rgb-bg1)), transparent)' }}
       />
 
       {/* Scrollable track */}

@@ -3,10 +3,7 @@ import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 import { generateDocumentation } from '../services/doc-generator'
 import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import type { AnchorIDL } from '../services/idl-parser'
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-}
+import { generateId } from '../utils/id'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()

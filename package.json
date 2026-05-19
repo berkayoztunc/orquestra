@@ -2,7 +2,7 @@
   "name": "orquestra",
   "version": "1.0.0",
   "private": true,
-  "description": "Solana IDL to REST API Converter - Upload an IDL, get a REST API instantly",
+  "description": "Solana IDL to API Converter - Upload an IDL, get a API instantly",
   "license": "MIT",
   "author": "orquestra contributors",
   "workspaces": [

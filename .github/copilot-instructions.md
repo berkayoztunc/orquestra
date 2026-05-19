@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-orquestra converts Solana Anchor IDLs into production-ready REST APIs. Users upload an IDL, and the platform auto-generates endpoints for every instruction, account type, and error — plus base58 transaction building and AI-ready Markdown docs.
+orquestra converts Solana Anchor IDLs into production-ready API. Users upload an IDL, and the platform auto-generates endpoints for every instruction, account type, and error — plus base58 transaction building and AI-ready Markdown docs.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ orquestra converts Solana Anchor IDLs into production-ready REST APIs. Users upl
 
 | Package | Stack | Runs on | Purpose |
 |---------|-------|---------|---------|
-| `packages/worker/` | Hono + TypeScript | Cloudflare Workers | REST API backend — auth, IDL parsing, tx building, doc generation |
+| `packages/worker/` | Hono + TypeScript | Cloudflare Workers | API backend — auth, IDL parsing, tx building, doc generation |
 | `packages/frontend/` | React 18 + Tailwind + Vite | Cloudflare Pages | SPA dashboard — project management, explorer, API key mgmt |
 | `packages/cli/` | TypeScript + Bun | Local CLI | Program discovery and on-chain IDL availability checks |
 | `packages/shared/` | TypeScript | Shared | Canonical types (`AnchorIDL`, `User`, `Project`, etc.) and utilities |

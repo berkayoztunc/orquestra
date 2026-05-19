@@ -102,31 +102,31 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   }
 
   const colors = {
-    success: 'bg-green-500/20 border-green-500/30 text-green-400',
-    error: 'bg-red-500/20 border-red-500/30 text-red-400',
-    info: 'bg-primary/20 border-primary/30 text-primary',
+    success: 'bg-sand-100 border-border-low text-sand-1600',
+    error: 'bg-[#b75000]/10 border-[#b75000]/30 text-[#b75000]',
+    info: 'bg-sand-100 border-border-low text-sand-1600',
   }
 
   return (
     <div
       className={`
-        flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-xl
+        flex items-center gap-3 px-4 py-3 border backdrop-blur-xl
         ${colors[toast.type]}
         transition-all duration-300
         ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'}
         ${isLeaving ? 'translate-x-8 opacity-0' : ''}
         min-w-[280px] max-w-[400px]
-        shadow-lg shadow-black/30
+        shadow-lg
       `}
     >
-      <span className={toast.type === 'success' ? 'text-green-400' : toast.type === 'error' ? 'text-red-400' : 'text-primary'}>
+      <span className={toast.type === 'error' ? 'text-[#b75000]' : 'text-sand-1600'}>
         {icons[toast.type]}
       </span>
-      <p className="text-sm text-gray-200 flex-1">{toast.message}</p>
+      <p className="text-sm text-sand-1600 flex-1">{toast.message}</p>
       <button
         onClick={handleClose}
         aria-label="Dismiss notification"
-        className="text-gray-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-1 rounded"
+        className="text-sand-1100 hover:text-sand-1600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 focus-visible:ring-offset-1"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

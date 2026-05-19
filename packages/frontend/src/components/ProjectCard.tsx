@@ -52,13 +52,11 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
   return (
     <Link
       to={`/project/${project.program_id}`}
-      className="group relative flex min-h-[260px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-5 transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:bg-white/[0.04] hover:shadow-[0_18px_50px_rgba(0,0,0,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+      className="group relative flex min-h-[260px] flex-col overflow-hidden border border-border-low bg-bg1 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-border-medium hover:bg-sand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400"
     >
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-
       <div className="mb-5 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-primary/20 bg-primary/10 text-sm font-semibold text-primary">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden border border-border-low bg-sand-100 text-sm font-semibold text-sand-1500">
             {project.avatar_url ? (
               <img src={project.avatar_url} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -66,11 +64,11 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
             )}
           </div>
           <div className="min-w-0">
-            <h3 className="truncate text-lg font-semibold text-white transition-colors group-hover:text-primary">
+            <h3 className="truncate text-lg font-semibold text-sand-1600 transition-colors group-hover:text-sand-1600">
               {project.name}
             </h3>
             {!isOwner && project.username && (
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-sand-1100">
                 <UserRound className="h-3.5 w-3.5" />
                 <span className="truncate">{project.username}</span>
               </div>
@@ -85,10 +83,10 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+          className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-medium ${
             isPublic
-              ? 'border-primary/20 bg-primary/10 text-primary'
-              : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-300'
+              ? 'border-border-low bg-sand-100 text-sand-1500'
+              : 'border-[#b75000]/20 bg-[#b75000]/10 text-[#b75000]'
           }`}
         >
           {isPublic ? <CheckCircle2 className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
@@ -96,7 +94,7 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
         </span>
 
         {categoryLabel && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-secondary/20 bg-secondary/10 px-2.5 py-1 text-xs font-medium text-secondary">
+          <span className="inline-flex items-center gap-1.5 border border-border-low bg-sand-100 px-2.5 py-1 text-xs font-medium text-sand-1200">
             <Layers className="h-3.5 w-3.5" />
             {categoryLabel}
           </span>
@@ -104,25 +102,25 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
       </div>
 
       {project.description ? (
-        <p className="mb-5 line-clamp-3 text-sm leading-6 text-gray-400">{project.description}</p>
+        <p className="mb-5 line-clamp-3 text-sm leading-6 text-sand-1200">{project.description}</p>
       ) : (
-        <p className="mb-5 line-clamp-3 text-sm leading-6 text-gray-500">No description provided.</p>
+        <p className="mb-5 line-clamp-3 text-sm leading-6 text-sand-1100">No description provided.</p>
       )}
 
-      <div className="mt-auto space-y-3 border-t border-white/5 pt-4">
-        <div className="flex min-w-0 items-center gap-2 rounded-lg bg-dark-950/40 px-3 py-2">
-          <Code2 className="h-3.5 w-3.5 shrink-0 text-gray-600" />
-          <code className="min-w-0 truncate font-mono text-xs text-gray-300" title={project.program_id}>
+      <div className="mt-auto space-y-3 border-t border-border-low pt-4">
+        <div className="flex min-w-0 items-center gap-2 bg-sand-100 px-3 py-2">
+          <Code2 className="h-3.5 w-3.5 shrink-0 text-sand-1100" />
+          <code className="min-w-0 truncate font-mono text-xs text-sand-1500" title={project.program_id}>
             {project.program_id}
           </code>
         </div>
 
-        <div className="flex items-center justify-between gap-3 text-xs text-gray-500">
+        <div className="flex items-center justify-between gap-3 text-xs text-sand-1100">
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            <CalendarDays className="h-3.5 w-3.5 shrink-0 text-gray-600" />
+            <CalendarDays className="h-3.5 w-3.5 shrink-0 text-sand-1100" />
             <span className="truncate">Updated {updatedDate}</span>
           </span>
-          <span className="text-gray-600 transition-colors group-hover:text-primary">Open</span>
+          <span className="text-sand-1100 transition-colors group-hover:text-sand-1600">Open</span>
         </div>
       </div>
     </Link>

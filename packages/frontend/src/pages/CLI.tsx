@@ -1,4 +1,5 @@
 import CodeBlock from '../components/CodeBlock'
+import { DocsLayout } from '@/ui/DocsLayout'
 
 const FEATURES = [
   {
@@ -83,21 +84,26 @@ const FEATURES = [
 
 export default function CLI(): JSX.Element {
   return (
-    <div className="animate-fade-in space-y-12">
+    <DocsLayout
+      title="CLI Reference"
+      description="Install and operate the Orquestra CLI for local IDL workflows, hosted project API, PDA derivation, and transaction execution."
+      toc={['Features', 'Installation', 'Setup', 'Commands']}
+    >
+      <div className="animate-fade-in space-y-12">
       {/* Header */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="badge badge-primary text-xs">Docs</span>
-          <span className="text-gray-600 text-xs">/</span>
-          <span className="text-gray-400 text-xs font-mono">cli</span>
+          <span className="text-sand-1100 text-xs">/</span>
+          <span className="text-sand-1100 text-xs font-mono">cli</span>
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-bold">
-          <span className="gradient-text">CLI</span>{' '}
-          <span className="text-white">Reference</span>
+          <span className="text-sand-1600">CLI</span>{' '}
+          <span className="text-sand-1600">Reference</span>
         </h1>
 
-        <p className="text-gray-400 max-w-2xl leading-relaxed">
+        <p className="text-sand-1200 max-w-2xl leading-relaxed">
           A fast Rust CLI for interacting with Solana programs via IDL. Upload your Anchor IDL to
           Orquestra once — or point the CLI at a local IDL file — and turn every instruction into an
           interactive prompt that builds, signs, and sends transactions to Solana.
@@ -125,18 +131,18 @@ export default function CLI(): JSX.Element {
 
       {/* Features */}
       <div className="card p-5 sm:p-6 space-y-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-white">Features</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-sand-1600">Features</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {FEATURES.map(({ icon, title, desc, bullets }) => (
-            <div key={title} className="bg-surface-elevated border border-white/5 rounded-xl p-4">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 mb-3">
+            <div key={title} className="bg-sand-100 border border-border-low p-4">
+              <div className="w-9 h-9 bg-sand-100 flex items-center justify-center border border-border-low mb-3">
                 <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {icon}
                 </svg>
               </div>
-              <p className="text-white font-semibold text-sm mb-1">{title}</p>
-              <p className="text-gray-500 text-xs leading-relaxed mb-2">{desc}</p>
-              <ul className="text-xs text-gray-600 space-y-0.5">
+              <p className="text-sand-1600 font-semibold text-sm mb-1">{title}</p>
+              <p className="text-sand-1200 text-xs leading-relaxed mb-2">{desc}</p>
+              <ul className="text-xs text-sand-1100 space-y-0.5">
                 {bullets.map((b) => (
                   <li key={b}>• {b}</li>
                 ))}
@@ -148,16 +154,16 @@ export default function CLI(): JSX.Element {
 
       {/* Installation */}
       <div className="card p-5 sm:p-6 space-y-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-white">Installation</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-sand-1600">Installation</h2>
 
         {/* Homebrew */}
-        <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
+        <div className="bg-sand-100 border border-border-low p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+            <div className="w-7 h-7 bg-sand-100 border border-border-low flex items-center justify-center text-primary font-bold text-xs">
               1
             </div>
-            <p className="text-white font-semibold text-sm">
-              Homebrew <span className="text-gray-500 font-normal">(macOS — recommended)</span>
+            <p className="text-sand-1600 font-semibold text-sm">
+              Homebrew <span className="text-sand-1200 font-normal">(macOS — recommended)</span>
             </p>
           </div>
           <CodeBlock
@@ -170,16 +176,16 @@ brew install orquestra-cli`}
         </div>
 
         {/* Binary */}
-        <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
+        <div className="bg-sand-100 border border-border-low p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+            <div className="w-7 h-7 bg-sand-100 border border-border-low flex items-center justify-center text-primary font-bold text-xs">
               2
             </div>
-            <p className="text-white font-semibold text-sm">
-              Download binary <span className="text-gray-500 font-normal">(all platforms)</span>
+            <p className="text-sand-1600 font-semibold text-sm">
+              Download binary <span className="text-sand-1200 font-normal">(all platforms)</span>
             </p>
           </div>
-          <p className="text-gray-500 text-xs">
+          <p className="text-sand-1200 text-xs">
             Grab the latest binary from the{' '}
             <a
               href="https://github.com/berkayoztunc/orquestra-cli/releases"
@@ -194,20 +200,20 @@ brew install orquestra-cli`}
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
-                <tr className="border-b border-white/5">
-                  <th className="text-gray-500 font-medium py-2 pr-6">Platform</th>
-                  <th className="text-gray-500 font-medium py-2">Archive</th>
+                <tr className="border-b border-border-low">
+                  <th className="text-sand-1200 font-medium py-2 pr-6">Platform</th>
+                  <th className="text-sand-1200 font-medium py-2">Archive</th>
                 </tr>
               </thead>
-              <tbody className="font-mono text-gray-400">
+              <tbody className="font-mono text-sand-1200">
                 {[
                   ['macOS arm64', 'orquestra-vX.X.X-aarch64-apple-darwin.tar.gz'],
                   ['macOS x86_64', 'orquestra-vX.X.X-x86_64-apple-darwin.tar.gz'],
                   ['Linux x86_64', 'orquestra-vX.X.X-x86_64-unknown-linux-gnu.tar.gz'],
                   ['Linux arm64', 'orquestra-vX.X.X-aarch64-unknown-linux-gnu.tar.gz'],
                 ].map(([platform, archive]) => (
-                  <tr key={platform} className="border-b border-white/5">
-                    <td className="text-gray-500 font-sans py-2 pr-6">{platform}</td>
+                  <tr key={platform} className="border-b border-border-low">
+                    <td className="text-sand-1200 font-sans py-2 pr-6">{platform}</td>
                     <td className="py-2">{archive}</td>
                   </tr>
                 ))}
@@ -222,13 +228,13 @@ mv orquestra /usr/local/bin/`}
         </div>
 
         {/* Build from source */}
-        <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
+        <div className="bg-sand-100 border border-border-low p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+            <div className="w-7 h-7 bg-sand-100 border border-border-low flex items-center justify-center text-primary font-bold text-xs">
               3
             </div>
-            <p className="text-white font-semibold text-sm">
-              Build from source <span className="text-gray-500 font-normal">(Rust 1.75+)</span>
+            <p className="text-sand-1600 font-semibold text-sm">
+              Build from source <span className="text-sand-1200 font-normal">(Rust 1.75+)</span>
             </p>
           </div>
           <CodeBlock
@@ -244,40 +250,40 @@ cargo build --release
       {/* Setup */}
       <div className="card p-5 sm:p-6 space-y-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-white mb-1">Setup</h2>
-          <p className="text-sm text-gray-400">Two operating modes — pick the one that fits your workflow.</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-sand-1600 mb-1">Setup</h2>
+          <p className="text-sm text-sand-1200">Two operating modes — pick the one that fits your workflow.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-surface-elevated border border-primary/20 rounded-xl p-4">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3">
+          <div className="bg-sand-100 border border-border-low p-4">
+            <div className="w-9 h-9 bg-sand-100 border border-border-low flex items-center justify-center mb-3">
               <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
               </svg>
             </div>
-            <p className="text-white font-semibold text-sm mb-1">
+            <p className="text-sand-1600 font-semibold text-sm mb-1">
               API mode <span className="text-primary text-xs font-normal">(default)</span>
             </p>
-            <p className="text-gray-500 text-xs leading-relaxed">
+            <p className="text-sand-1200 text-xs leading-relaxed">
               You have an Orquestra account and API key. All instruction metadata is fetched from the cloud.
             </p>
           </div>
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4">
-            <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-3">
+          <div className="bg-sand-100 border border-border-low p-4">
+            <div className="w-9 h-9 bg-sand-100 border border-border-low flex items-center justify-center mb-3">
               <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
               </svg>
             </div>
-            <p className="text-white font-semibold text-sm mb-1">Local IDL file mode</p>
-            <p className="text-gray-500 text-xs leading-relaxed">
+            <p className="text-sand-1600 font-semibold text-sm mb-1">Local IDL file mode</p>
+            <p className="text-sand-1200 text-xs leading-relaxed">
               You have an Anchor IDL JSON file locally. Works fully offline — no Orquestra account needed.
             </p>
           </div>
         </div>
 
         <div className="space-y-3">
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
-            <p className="text-white font-semibold text-sm">API mode config</p>
+          <div className="bg-sand-100 border border-border-low p-4 space-y-3">
+            <p className="text-sand-1600 font-semibold text-sm">API mode config</p>
             <CodeBlock
               language="bash"
               code={`orquestra config set \\
@@ -286,7 +292,7 @@ cargo build --release
   --rpc        https://api.mainnet-beta.solana.com \\
   --keypair    ~/.config/solana/id.json`}
             />
-            <p className="text-gray-500 text-xs">
+            <p className="text-sand-1200 text-xs">
               Sign in at{' '}
               <a href="/" className="text-primary hover:underline">
                 orquestra.dev
@@ -295,8 +301,8 @@ cargo build --release
             </p>
           </div>
 
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-3">
-            <p className="text-white font-semibold text-sm">Local IDL file mode config</p>
+          <div className="bg-sand-100 border border-border-low p-4 space-y-3">
+            <p className="text-sand-1600 font-semibold text-sm">Local IDL file mode config</p>
             <CodeBlock
               language="bash"
               code={`orquestra config set \\
@@ -304,10 +310,10 @@ cargo build --release
   --rpc     https://api.mainnet-beta.solana.com \\
   --keypair ~/.config/solana/id.json`}
             />
-            <p className="text-gray-500 text-xs">
-              When <code className="text-gray-300 bg-white/5 px-1 rounded">idl_path</code> is set the CLI
+            <p className="text-sand-1200 text-xs">
+              When <code className="text-sand-1500 bg-sand-100 px-1">idl_path</code> is set the CLI
               operates in file mode. To switch back:{' '}
-              <code className="text-gray-300 bg-white/5 px-1 rounded">orquestra config set --idl ""</code>
+              <code className="text-sand-1500 bg-sand-100 px-1">orquestra config set --idl ""</code>
             </p>
           </div>
         </div>
@@ -315,11 +321,11 @@ cargo build --release
 
       {/* Usage */}
       <div className="card p-5 sm:p-6 space-y-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-white">Usage examples</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-sand-1600">Usage examples</h2>
 
         <div className="space-y-4">
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
-            <p className="text-white font-semibold text-sm">List instructions</p>
+          <div className="bg-sand-100 border border-border-low p-4 space-y-2">
+            <p className="text-sand-1600 font-semibold text-sm">List instructions</p>
             <CodeBlock
               language="bash"
               code={`orquestra list
@@ -333,8 +339,8 @@ cargo build --release
             />
           </div>
 
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
-            <p className="text-white font-semibold text-sm">Run an instruction (interactive)</p>
+          <div className="bg-sand-100 border border-border-low p-4 space-y-2">
+            <p className="text-sand-1600 font-semibold text-sm">Run an instruction (interactive)</p>
             <CodeBlock
               language="bash"
               code={`orquestra run
@@ -370,8 +376,8 @@ Transaction confirmed!
             />
           </div>
 
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
-            <p className="text-white font-semibold text-sm">Derive a PDA</p>
+          <div className="bg-sand-100 border border-border-low p-4 space-y-2">
+            <p className="text-sand-1600 font-semibold text-sm">Derive a PDA</p>
             <CodeBlock
               language="bash"
               code={`orquestra pda
@@ -395,9 +401,9 @@ Seeds:
             />
           </div>
 
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4 space-y-2">
-            <p className="text-white font-semibold text-sm">Without a keypair</p>
-            <p className="text-gray-500 text-xs">
+          <div className="bg-sand-100 border border-border-low p-4 space-y-2">
+            <p className="text-sand-1600 font-semibold text-sm">Without a keypair</p>
+            <p className="text-sand-1200 text-xs">
               If no keypair is configured, the CLI prints an unsigned base58 transaction for manual wallet signing.
             </p>
             <CodeBlock
@@ -414,7 +420,7 @@ Seeds:
 
       {/* Command reference */}
       <div className="card p-5 sm:p-6 space-y-4" id="commands">
-        <h2 className="text-xl sm:text-2xl font-bold text-white">Command reference</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-sand-1600">Command reference</h2>
         <CodeBlock
           language="bash"
           code={`# Interactive top-level menu
@@ -439,16 +445,16 @@ orquestra --help`}
       </div>
 
       {/* Security note */}
-      <div className="card-static p-5 border border-yellow-500/20 bg-yellow-500/5">
-        <p className="text-sm text-gray-300 leading-relaxed">
-          <span className="text-yellow-300 font-semibold">This project has not been audited.</span>{' '}
-          Use a <strong className="text-yellow-300">test wallet</strong> with minimal funds when signing
+      <div className="card-static p-5 border border-[#b75000]/20 bg-[#b75000]/5">
+        <p className="text-sm text-sand-1500 leading-relaxed">
+          <span className="text-[#b75000] font-semibold">This project has not been audited.</span>{' '}
+          Use a <strong className="text-[#b75000]">test wallet</strong> with minimal funds when signing
           and sending transactions. Do <em>not</em> use a wallet that holds significant assets until a
           full security audit has been completed. You are responsible for any transactions you sign and
           broadcast to the network.
         </p>
       </div>
-    </div>
+      </div>
+    </DocsLayout>
   )
 }
-

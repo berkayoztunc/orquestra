@@ -4,10 +4,8 @@ import { detectIDLFormat } from '../services/idl-parser'
 import { autoSeedCategory } from '../services/program-auto-detect'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-}
+import { writeIdlSummaryCache } from '../services/idl-summary'
+import { generateId } from '../utils/id'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -178,6 +176,17 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       if (kv) {
         await kv.put(`idl:${projectId}:latest`, idlStr, { expirationTtl: 604800 })
         await kv.put(`idl:${projectId}:${nextVersion}`, idlStr, { expirationTtl: 604800 })
+      }
+      try {
+        await writeIdlSummaryCache({
+          kv,
+          projectId,
+          programId: body.programId,
+          version: nextVersion,
+          idl: body.idl as any,
+        })
+      } catch (err) {
+        console.error('[ingest] Failed to cache IDL summary:', err)
       }
 
       // Invalidate docs cache on IDL change

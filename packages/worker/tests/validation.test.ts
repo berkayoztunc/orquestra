@@ -4,12 +4,14 @@ import {
   validateIDLUpload,
   validateBuildRequest,
   validateAPIKeyRequest,
+  hasProgramAccountsSelector,
   isNonEmptyString,
   isNumber,
   isBoolean,
   isObject,
   isArray,
 } from '../src/services/validation'
+import { generateId } from '../src/utils/id'
 
 describe('Primitive validators', () => {
   test('isNonEmptyString', () => {
@@ -47,6 +49,29 @@ describe('Primitive validators', () => {
     expect(isArray([1, 2])).toBe(true)
     expect(isArray({})).toBe(false)
     expect(isArray('arr')).toBe(false)
+  })
+})
+
+describe('generateId', () => {
+  test('generates UUID strings without changing old IDs', () => {
+    const first = generateId()
+    const second = generateId()
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(second).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(first).not.toBe(second)
+  })
+})
+
+describe('program account selector validation', () => {
+  test('requires a real selector and does not count limit alone', () => {
+    expect(hasProgramAccountsSelector({})).toBe(false)
+    expect(hasProgramAccountsSelector({ limit: 25 } as any)).toBe(false)
+    expect(hasProgramAccountsSelector({ accountType: 'Counter' })).toBe(true)
+    expect(hasProgramAccountsSelector({ dataSize: 48 })).toBe(true)
+    expect(hasProgramAccountsSelector({ memcmp: [{ offset: 0, bytes: 'abc' }] })).toBe(true)
+    expect(hasProgramAccountsSelector({ fieldFilters: [{ field: 'authority', bytes: 'abc' }] })).toBe(true)
+    expect(hasProgramAccountsSelector({ paginationKey: 'cursor' })).toBe(true)
+    expect(hasProgramAccountsSelector({ changedSinceSlot: 0 })).toBe(true)
   })
 })
 

@@ -128,36 +128,36 @@ function InstructionCard({
   const docs = ensureDocs(ix.docs)
 
   return (
-    <div className={`rounded-xl transition-all duration-200 overflow-hidden bg-surface-card ${open ? 'ring-1 ring-primary/30 shadow-lg shadow-primary/5' : 'ring-1 ring-white/5 hover:ring-white/10'}`}>
+    <div className={`transition-colors duration-200 overflow-hidden bg-bg1 ${open ? 'border border-border-medium' : 'border border-border-low hover:border-border-medium'}`}>
       {/* ── Accordion Header ── */}
       <button
         onClick={handleToggle}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left bg-surface-card hover:bg-surface-elevated transition-colors"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left bg-bg1 hover:bg-sand-100 transition-colors"
       >
         {/* POST badge */}
-        <span className="flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-mono tracking-wide">
+        <span className="flex-shrink-0 font-mono text-[11px] font-bold px-2.5 py-1 bg-[#b75000]/10 text-[#b75000] border border-[#b75000]/20 tracking-wide">
           POST
         </span>
 
         {/* Endpoint path */}
-        <span className="flex-shrink-0 text-xs font-mono text-gray-500 hidden sm:block truncate max-w-[220px]">
+        <span className="flex-shrink-0 text-xs font-mono text-sand-1100 hidden sm:block truncate max-w-[220px]">
           {shortEndpoint}
         </span>
 
         {/* Instruction name */}
-        <span className="font-mono font-semibold text-sm text-white truncate flex-1">
+        <span className="font-mono font-semibold text-sm text-sand-1600 truncate flex-1">
           {ix.name}
         </span>
 
         {/* Badges: accounts & args */}
         <div className="flex items-center gap-2 flex-shrink-0">
           {ix.accountCount > 0 && (
-            <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-md font-mono">
+            <span className="text-[11px] text-sand-1100 bg-sand-100 px-2 py-0.5 font-mono">
               {ix.accountCount} acct
             </span>
           )}
           {ix.argCount > 0 && (
-            <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-md font-mono">
+            <span className="text-[11px] text-sand-1100 bg-sand-100 px-2 py-0.5 font-mono">
               {ix.argCount} args
             </span>
           )}
@@ -165,14 +165,14 @@ function InstructionCard({
 
         {/* Short doc */}
         {docs[0] && (
-          <span className="hidden lg:block text-xs text-gray-500 flex-shrink-0 max-w-[200px] truncate">
+          <span className="hidden lg:block text-xs text-sand-1100 flex-shrink-0 max-w-[200px] truncate">
             {docs[0]}
           </span>
         )}
 
         {/* Chevron */}
         <svg
-          className={`w-4 h-4 text-gray-500 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-sand-1100 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -181,27 +181,27 @@ function InstructionCard({
 
       {/* ── Expanded Body ── */}
       {open && (
-        <div className="border-t border-black/30">
+        <div className="border-t border-border-low">
           {docs.length > 0 && (
-            <div className="px-5 py-3 bg-primary/5">
-              <p className="text-sm text-gray-400">{docs.join(' ')}</p>
+            <div className="px-5 py-3 bg-sand-50">
+              <p className="text-sm text-sand-1200">{docs.join(' ')}</p>
             </div>
           )}
 
           <div className="flex flex-col lg:flex-row">
 
             {/* ── LEFT: Parameter Schema ── */}
-            <div className="lg:w-[45%] p-5 space-y-5 bg-surface-card border-r border-black/30">
+            <div className="lg:w-[45%] p-5 space-y-5 bg-sand-50 border-r border-border-low">
               {/* Endpoint + copy */}
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-black/20">
-                <span className="text-[11px] font-bold text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded flex-shrink-0">POST</span>
-                <code className="text-xs font-mono text-gray-300 truncate flex-1">{apiBase}{endpoint}</code>
+              <div className="flex items-center gap-2 p-2.5 bg-sand-100 border border-border-low">
+                <span className="text-[11px] font-bold text-[#b75000] font-mono bg-[#b75000]/10 px-2 py-0.5 flex-shrink-0">POST</span>
+                <code className="text-xs font-mono text-sand-1500 truncate flex-1">{apiBase}{endpoint}</code>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(`${apiBase}${endpoint}`)
                     showToast('Endpoint copied', 'success')
                   }}
-                  className="flex-shrink-0 text-gray-500 hover:text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 rounded"
+                  className="flex-shrink-0 text-sand-1100 hover:text-sand-1600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                   aria-label="Copy endpoint URL"
                   title="Copy endpoint"
                 >
@@ -211,33 +211,33 @@ function InstructionCard({
                 </button>
               </div>
 
-              <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Parameters</h4>
+              <h4 className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">Parameters</h4>
 
               {/* Accounts schema */}
               {ix.accounts.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />
+                  <p className="text-xs font-semibold text-sand-1100 mb-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sand-400 inline-block" />
                     Accounts
                   </p>
-                  <div className="rounded-lg overflow-hidden bg-black/20">
+                  <div className="overflow-hidden bg-bg1 border border-border-low">
                     {ix.accounts.map((acc) => (
-                      <div key={acc.name} className="flex items-center justify-between px-3 py-2.5 border-b border-black/20 last:border-0">
+                      <div key={acc.name} className="flex items-center justify-between px-3 py-2.5 border-b border-border-low last:border-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-sm text-white truncate">{acc.name}</span>
+                          <span className="font-mono text-sm text-sand-1600 truncate">{acc.name}</span>
                           {acc.isOptional && (
-                            <span className="text-[10px] text-gray-600 bg-white/5 px-1.5 rounded">optional</span>
+                            <span className="text-[10px] text-sand-1100 bg-sand-100 border border-border-low px-1.5">optional</span>
                           )}
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <span className="text-[11px] text-gray-500 font-mono bg-white/5 px-1.5 py-0.5 rounded">pubkey</span>
+                          <span className="font-mono text-[11px] text-sand-1100 bg-sand-100 border border-border-low px-1.5 py-0.5">pubkey</span>
                           {acc.isSigner && (
-                            <span className="text-[11px] font-semibold text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 px-1.5 py-0.5 rounded" title="Signer required">
+                            <span className="text-[11px] font-semibold text-[#b75000] bg-[#b75000]/10 border border-[#b75000]/20 px-1.5 py-0.5" title="Signer required">
                               signer
                             </span>
                           )}
                           {acc.isMut && (
-                            <span className="text-[11px] font-semibold text-blue-400 bg-blue-400/10 border border-blue-400/20 px-1.5 py-0.5 rounded" title="Writable">
+                            <span className="text-[11px] font-semibold text-sand-1500 bg-sand-100 border border-border-low px-1.5 py-0.5" title="Writable">
                               mut
                             </span>
                           )}
@@ -251,25 +251,25 @@ function InstructionCard({
               {/* Args schema */}
               {ix.args.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                  <p className="text-xs font-semibold text-sand-1100 mb-2 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sand-1600 inline-block" />
                     Arguments
                   </p>
-                  <div className="rounded-lg overflow-hidden bg-black/20">
+                  <div className="overflow-hidden bg-bg1 border border-border-low">
                     {ix.args.map((arg) => (
                       <div key={arg.name}>
-                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-black/20">
-                          <span className="font-mono text-sm text-white">{arg.name}</span>
-                          <span className="text-[11px] font-mono text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
+                        <div className="flex items-center justify-between px-3 py-2.5 border-b border-border-low">
+                          <span className="font-mono text-sm text-sand-1600">{arg.name}</span>
+                          <span className="font-mono text-[11px] text-sand-1600 bg-sand-100 border border-border-low px-2 py-0.5">
                             {arg.definedTypeName || arg.type}
                           </span>
                         </div>
                         {arg.isDefinedType && arg.fields && arg.fields.length > 0 && (
-                          <div className="bg-black/30">
+                          <div className="bg-sand-50">
                             {arg.fields.map((field) => (
-                              <div key={field.name} className="flex items-center justify-between px-5 py-2 border-b border-black/20 last:border-0">
-                                <span className="font-mono text-xs text-gray-400">↳ {field.name}</span>
-                                <span className="text-[11px] font-mono text-gray-500 bg-white/5 px-1.5 py-0.5 rounded">
+                              <div key={field.name} className="flex items-center justify-between px-5 py-2 border-b border-border-low last:border-0">
+                                <span className="font-mono text-xs text-sand-1200">↳ {field.name}</span>
+                                <span className="text-[11px] font-mono text-sand-1100 bg-sand-100 px-1.5 py-0.5">
                                   {field.type}
                                 </span>
                               </div>
@@ -283,19 +283,19 @@ function InstructionCard({
               )}
 
               {ix.accounts.length === 0 && ix.args.length === 0 && (
-                <p className="text-xs text-gray-600 italic">No parameters required</p>
+                <p className="text-xs text-sand-1100 italic">No parameters required</p>
               )}
 
               {/* cURL example */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-500">cURL Example</p>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">cURL Example</p>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(generateCurlSnippet())
                       showToast('cURL copied to clipboard', 'success')
                     }}
-                    className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-primary transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] text-sand-1100 hover:text-sand-1600 transition-colors"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -303,28 +303,28 @@ function InstructionCard({
                     Copy
                   </button>
                 </div>
-                <pre className="text-[11px] font-mono text-gray-400 bg-black/30 rounded-lg p-3 whitespace-pre-wrap leading-relaxed overflow-x-auto">{generateCurlSnippet()}</pre>
+                <pre className="text-[11px] font-mono text-sand-1200 bg-sand-50 border border-border-low p-3 whitespace-pre-wrap leading-relaxed overflow-x-auto">{generateCurlSnippet()}</pre>
               </div>
             </div>
 
             {/* ── RIGHT: Try It Out ── */}
             <div className="lg:flex-1 p-5 space-y-5">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Try it out</h4>
+              <h4 className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">Try it out</h4>
 
               {/* Account inputs */}
               {ix.accounts.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-gray-400 mb-2">Accounts</p>
+                  <p className="text-xs font-semibold text-sand-1200 mb-2">Accounts</p>
                   {ix.accounts.map((acc) => (
                     <div key={acc.name} className="space-y-1">
-                      <label className="flex items-center gap-2 text-xs font-mono text-gray-400">
+                      <label className="flex items-center gap-2 text-xs font-mono text-sand-1200">
                         {acc.name}
-                        {!acc.isOptional && <span className="text-red-400">*</span>}
+                        {!acc.isOptional && <span className="text-[#b75000]">*</span>}
                         {acc.isSigner && (
-                          <span className="text-[10px] text-yellow-400 bg-yellow-400/10 px-1.5 rounded">signer</span>
+                          <span className="text-[10px] text-[#b75000] bg-[#b75000]/10 px-1.5">signer</span>
                         )}
                         {acc.isMut && (
-                          <span className="text-[10px] text-blue-400 bg-blue-400/10 px-1.5 rounded">mut</span>
+                          <span className="text-[10px] text-sand-1500 bg-sand-100 px-1.5">mut</span>
                         )}
                       </label>
                       <input
@@ -342,23 +342,23 @@ function InstructionCard({
               {/* Arg inputs */}
               {ix.args.length > 0 && (
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold text-gray-400 mb-2">Arguments</p>
+                  <p className="text-xs font-semibold text-sand-1200 mb-2">Arguments</p>
                   {ix.args.map((arg) => {
                     if (arg.isDefinedType && arg.fields && arg.fields.length > 0) {
                       return (
-                        <div key={arg.name} className="rounded-lg overflow-hidden bg-black/20">
-                          <div className="px-3 py-2 bg-primary/5 border-b border-black/20">
-                            <span className="text-xs font-mono text-primary font-semibold">{arg.name}</span>
-                            <span className="text-[11px] text-gray-500 ml-2">({arg.definedTypeName || arg.type})</span>
+                        <div key={arg.name} className="overflow-hidden bg-sand-50 border border-border-low">
+                          <div className="px-3 py-2 bg-sand-100 border-b border-border-low">
+                            <span className="text-xs font-mono text-sand-1600 font-semibold">{arg.name}</span>
+                            <span className="text-[11px] text-sand-1100 ml-2">({arg.definedTypeName || arg.type})</span>
                           </div>
                           <div className="p-3 space-y-2">
                             {arg.fields.map((field) => {
                               const fieldKey = `${arg.name}.${field.name}`
                               return (
                                 <div key={fieldKey} className="space-y-1">
-                                  <label className="text-xs font-mono text-gray-500">
+                                  <label className="text-xs font-mono text-sand-1200">
                                     {field.name}
-                                    <span className="text-gray-600 ml-1">({field.type})</span>
+                                    <span className="text-sand-1100 ml-1">({field.type})</span>
                                   </label>
                                   <input
                                     type="text"
@@ -376,10 +376,10 @@ function InstructionCard({
                     }
                     return (
                       <div key={arg.name} className="space-y-1">
-                        <label className="text-xs font-mono text-gray-400">
+                        <label className="text-xs font-mono text-sand-1200">
                           {arg.name}
-                          <span className="text-gray-600 ml-1">({arg.type})</span>
-                          <span className="text-red-400 ml-0.5">*</span>
+                          <span className="text-sand-1100 ml-1">({arg.type})</span>
+                          <span className="text-[#b75000] ml-0.5">*</span>
                         </label>
                         <input
                           type="text"
@@ -396,9 +396,9 @@ function InstructionCard({
 
               {/* Fee payer */}
               <div className="space-y-1">
-                <label className="text-xs font-mono text-gray-400">
+                <label className="text-xs font-mono text-sand-1200">
                   feePayer
-                  <span className="text-red-400 ml-0.5">*</span>
+                  <span className="text-[#b75000] ml-0.5">*</span>
                 </label>
                 <input
                   type="text"
@@ -445,25 +445,25 @@ function InstructionCard({
 
               {/* Result */}
               {result && (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-emerald-500/15">
+                <div className="border border-border-medium bg-sand-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-low">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md">
+                      <span className="font-mono text-[11px] font-bold text-sand-1600 bg-sand-100 border border-border-medium px-2 py-0.5">
                         200 OK
                       </span>
-                      <span className="text-xs text-gray-500">Transaction built</span>
+                      <span className="text-xs text-sand-1100">Transaction built</span>
                     </div>
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(JSON.stringify(result, null, 2))
                         showToast('Copied to clipboard', 'success')
                       }}
-                      className="text-xs text-primary hover:text-secondary transition-colors"
+                      className="text-xs text-sand-1200 hover:text-sand-1600 transition-colors"
                     >
                       Copy JSON
                     </button>
                   </div>
-                  <pre className="p-4 text-xs font-mono text-gray-300 whitespace-pre-wrap max-h-[300px] overflow-y-auto w-full">
+                  <pre className="p-4 text-xs font-mono text-sand-1500 whitespace-pre-wrap max-h-[300px] overflow-y-auto w-full">
                     {JSON.stringify(result, null, 2)}
                   </pre>
                 </div>
@@ -484,7 +484,7 @@ export default function InstructionExplorer({
   if (instructions.length === 0) {
     return (
       <div className="card-static p-8 text-center">
-        <p className="text-gray-400">No instructions defined in this IDL</p>
+        <p className="text-sand-1200">No instructions defined in this IDL</p>
       </div>
     )
   }

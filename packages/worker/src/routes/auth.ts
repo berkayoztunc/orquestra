@@ -2,10 +2,7 @@ import { Hono } from 'hono'
 import { generateJWT, verifyJWT } from '../services/jwt'
 import { authMiddleware } from '../middleware/auth'
 import { authRateLimit } from '../middleware/rate-limit'
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-}
+import { generateId } from '../utils/id'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()

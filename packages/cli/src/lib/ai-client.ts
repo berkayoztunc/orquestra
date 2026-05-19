@@ -1,7 +1,7 @@
 /**
  * Cloudflare Workers AI REST client for generating IDL descriptions.
  *
- * Uses the Cloudflare REST API (not the Workers AI binding) so it works from Node/Bun CLI.
+ * Uses the Cloudflare API (not the Workers AI binding) so it works from Node/Bun CLI.
  * Required env vars:
  *   CF_ACCOUNT_ID  — Cloudflare account ID
  *   CF_API_TOKEN   — API token with "Workers AI:Run" permission
@@ -59,7 +59,7 @@ export function buildIDLSummary(idl: Record<string, any>, programId: string): ID
 }
 
 /**
- * Call the Cloudflare Workers AI REST API to generate a short description
+ * Call the Cloudflare Workers AI API to generate a short description
  * and structured analysis JSON for a Solana Anchor IDL.
  *
  * Returns null if the AI call fails — callers should handle gracefully.

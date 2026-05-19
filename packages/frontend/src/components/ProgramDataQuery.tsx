@@ -78,12 +78,12 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
     <div className="space-y-6">
       <div className="card-static p-5 space-y-5">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-primary/20 bg-primary/10">
             <Database className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">Query Program Accounts</h3>
-            <p className="mt-1 text-xs leading-5 text-gray-500">
+            <h3 className="text-sm font-semibold text-sand-1600">Query Program Accounts</h3>
+            <p className="mt-1 text-xs leading-5 text-sand-1100">
               Search accounts owned by this program with account type, data size, raw memcmp,
               or fixed IDL field filters. Results are decoded with the IDL when possible.
             </p>
@@ -92,7 +92,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
 
         <div className="grid gap-4 lg:grid-cols-4">
           <div>
-            <label className="mb-2 block text-xs font-medium text-gray-400">Account type</label>
+            <label className="mb-2 block text-xs font-medium text-sand-1100">Account type</label>
             <select
               value={accountType}
               onChange={(e) => {
@@ -111,7 +111,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-medium text-gray-400">Network</label>
+            <label className="mb-2 block text-xs font-medium text-sand-1100">Network</label>
             <select value={network} onChange={(e) => setNetwork(e.target.value)} className="input w-full text-sm">
               {NETWORKS.map((n) => (
                 <option key={n.value} value={n.value}>
@@ -122,7 +122,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-medium text-gray-400">Data size</label>
+            <label className="mb-2 block text-xs font-medium text-sand-1100">Data size</label>
             <input
               type="number"
               min="1"
@@ -134,7 +134,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-medium text-gray-400">Limit</label>
+            <label className="mb-2 block text-xs font-medium text-sand-1100">Limit</label>
             <input
               type="number"
               min="1"
@@ -148,7 +148,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div>
-            <label className="mb-2 block text-xs font-medium text-gray-400">Pagination key</label>
+            <label className="mb-2 block text-xs font-medium text-sand-1100">Pagination key</label>
             <input
               type="text"
               value={paginationKey}
@@ -160,7 +160,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-medium text-gray-400">Changed since slot</label>
+            <label className="mb-2 block text-xs font-medium text-sand-1100">Changed since slot</label>
             <input
               type="number"
               min="0"
@@ -173,10 +173,10 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className=" border border-border-medium bg-sand-100 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Filter className="h-4 w-4 text-secondary" />
-              <p className="text-sm font-medium text-white">Raw memcmp</p>
+              <p className="text-sm font-medium text-sand-1600">Raw memcmp</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
               <input
@@ -198,10 +198,10 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
             </div>
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <div className=" border border-border-medium bg-sand-100 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Filter className="h-4 w-4 text-primary" />
-              <p className="text-sm font-medium text-white">IDL field filter</p>
+              <p className="text-sm font-medium text-sand-1600">IDL field filter</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
               <select
@@ -231,12 +231,12 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-400">
+          <label className="inline-flex items-center gap-2 text-sm text-sand-1100">
             <input
               type="checkbox"
               checked={includeRaw}
               onChange={(e) => setIncludeRaw(e.target.checked)}
-              className="h-4 w-4 rounded border-white/20 bg-dark-900 text-primary focus:ring-primary"
+              className="h-4 w-4 border-border-medium bg-bg1 text-primary focus:ring-primary"
             />
             Include raw base64 data
           </label>
@@ -253,7 +253,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
+        <div className=" border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -262,23 +262,23 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
         <div className="space-y-4">
           <div className="card-static p-4">
             <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="rounded-md border border-emerald-500/25 bg-emerald-500/15 px-2 py-1 font-bold text-emerald-400">
+              <span className=" border border-emerald-500/25 bg-emerald-500/15 px-2 py-1 font-bold text-emerald-400">
                 {result.count} account{result.count === 1 ? '' : 's'}
               </span>
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-gray-400">
+              <span className=" border border-border-low bg-sand-100 px-2 py-1 font-mono text-sand-1100">
                 {result.cluster}
               </span>
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-gray-400">
+              <span className=" border border-border-low bg-sand-100 px-2 py-1 font-mono text-sand-1100">
                 slot {result.slot.toLocaleString()}
               </span>
-              <span className="rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono text-gray-400">
+              <span className=" border border-border-low bg-sand-100 px-2 py-1 font-mono text-sand-1100">
                 {result.rpcMethod}
               </span>
             </div>
             {result.filtersApplied.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {result.filtersApplied.map((filter, index) => (
-                  <span key={index} className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] font-mono text-gray-500">
+                  <span key={index} className=" border border-border-low bg-sand-100 px-2 py-1 text-[11px] font-mono text-sand-1100">
                     {filter.type === 'dataSize'
                       ? `dataSize=${filter.dataSize}`
                       : `${filter.source}@${filter.offset}`}
@@ -288,7 +288,7 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
             )}
             {result.paginationKey && (
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <code className="min-w-0 break-all rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-gray-400">
+                <code className="min-w-0 break-all border border-border-low bg-sand-100 px-3 py-2 text-xs text-sand-1100">
                   next: {result.paginationKey}
                 </code>
                 <button
@@ -305,26 +305,26 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
           </div>
 
           {result.accounts.length === 0 ? (
-            <div className="card-static p-8 text-center text-sm text-gray-500">No matching accounts found.</div>
+            <div className="card-static p-8 text-center text-sm text-sand-1100">No matching accounts found.</div>
           ) : (
             result.accounts.map((account) => (
-              <div key={account.address} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.025]">
-                <div className="flex flex-col gap-3 border-b border-white/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div key={account.address} className="overflow-hidden border border-border-medium bg-sand-100">
+                <div className="flex flex-col gap-3 border-b border-border-low px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-mono text-primary">
+                      <span className=" border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-mono text-primary">
                         {account.accountType || 'Unknown'}
                       </span>
-                      <span className="text-xs text-gray-500">{lamportsToSol(account.lamports)} SOL</span>
+                      <span className="text-xs text-sand-1100">{lamportsToSol(account.lamports)} SOL</span>
                     </div>
-                    <code className="block truncate font-mono text-sm text-white">{account.address}</code>
+                    <code className="block truncate font-mono text-sm text-sand-1600">{account.address}</code>
                   </div>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(account.address)
                       showToast('Address copied', 'success')
                     }}
-                    className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-white/10 px-3 text-xs text-gray-400 transition-colors hover:border-primary/30 hover:text-primary"
+                    className="inline-flex h-9 items-center justify-center gap-2 border border-border-low px-3 text-xs text-sand-1100 transition-colors hover:border-primary/30 hover:text-primary"
                   >
                     <Copy className="h-3.5 w-3.5" />
                     Copy
@@ -334,31 +334,31 @@ export default function ProgramDataQuery({ projectId, accounts }: ProgramDataQue
                 <div className="space-y-4 p-5">
                   <div className="grid gap-3 text-xs sm:grid-cols-3">
                     <div>
-                      <p className="mb-1 uppercase tracking-[0.16em] text-gray-600">Owner</p>
-                      <code className="break-all font-mono text-gray-400">{account.owner}</code>
+                      <p className="mb-1 uppercase tracking-[0.16em] text-sand-1000">Owner</p>
+                      <code className="break-all font-mono text-sand-1100">{account.owner}</code>
                     </div>
                     <div>
-                      <p className="mb-1 uppercase tracking-[0.16em] text-gray-600">Executable</p>
-                      <span className="font-mono text-gray-400">{account.executable ? 'Yes' : 'No'}</span>
+                      <p className="mb-1 uppercase tracking-[0.16em] text-sand-1000">Executable</p>
+                      <span className="font-mono text-sand-1100">{account.executable ? 'Yes' : 'No'}</span>
                     </div>
                     <div>
-                      <p className="mb-1 uppercase tracking-[0.16em] text-gray-600">Rent epoch</p>
-                      <span className="font-mono text-gray-400">{account.rentEpoch}</span>
+                      <p className="mb-1 uppercase tracking-[0.16em] text-sand-1000">Rent epoch</p>
+                      <span className="font-mono text-sand-1100">{account.rentEpoch}</span>
                     </div>
                   </div>
 
                   {account.parseError && (
-                    <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-300">
+                    <div className=" border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-300">
                       Parse error: {account.parseError}
                     </div>
                   )}
 
                   {account.data ? (
-                    <pre className="overflow-x-auto rounded-lg bg-black/30 p-4 font-mono text-xs leading-relaxed text-gray-300">
+                    <pre className="overflow-x-auto bg-sand-100 p-4 font-mono text-xs leading-relaxed text-sand-1400">
                       {JSON.stringify(account.data, null, 2)}
                     </pre>
                   ) : account.raw ? (
-                    <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-black/30 p-4 font-mono text-[10px] leading-relaxed text-gray-500">
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-all bg-sand-100 p-4 font-mono text-[10px] leading-relaxed text-sand-1100">
                       {account.raw}
                     </pre>
                   ) : null}

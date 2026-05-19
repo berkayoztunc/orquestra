@@ -2,7 +2,7 @@
   "name": "@orquestra/worker",
   "version": "0.1.0",
   "type": "module",
-  "description": "Hono REST API backend on Cloudflare Workers",
+  "description": "Hono API backend on Cloudflare Workers",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

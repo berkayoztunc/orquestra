@@ -1,10 +1,10 @@
 # Worker Package
 
-Cloudflare Worker backend for Orquestra. It serves the REST API, MCP server, auth routes, generated docs, and discovery metadata.
+Cloudflare Worker backend for Orquestra. It serves the API, MCP server, auth routes, generated docs, and discovery metadata.
 
 ## Main Surfaces
 
-- REST API under `/api`
+- API under `/api`
 - MCP endpoint at `/mcp`
 - GitHub OAuth under `/auth`
 - `llms.txt` docs under `/project/:projectId/llms.txt`

@@ -168,7 +168,7 @@ npm run db:reset         # Reset database (dev only)
 - Create feature branch
 - Write code with tests
 - Update types in shared package
-- Document new APIs
+- Document new API
 
 ### 3. Testing
 
@@ -254,7 +254,7 @@ describe('Dashboard', () => {
 ### Code Comments
 
 - Explain *why*, not *what*
-- Document public APIs
+- Document public API
 - Add JSDoc for complex functions
 
 ```typescript

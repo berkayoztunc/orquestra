@@ -4,6 +4,7 @@
  */
 
 import type { D1Database } from '@cloudflare/workers-types'
+import { generateId } from '../utils/id'
 
 export interface SearchResult {
   id: string
@@ -215,7 +216,7 @@ export async function setCategoryAndAliases(
       created_at = CURRENT_TIMESTAMP
   `
 
-  const id = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  const id = generateId()
   await db.prepare(upsertSQL).bind(id, projectId, category, tagStr, aliasStr).run()
 }
 

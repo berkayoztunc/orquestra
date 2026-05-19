@@ -93,7 +93,7 @@ Limits:
 
 ## External API Notes
 
-Project owners can document third-party APIs related to a program. Orquestra stores these notes and publishes them in project docs and `llms.txt`. Orquestra does not call those external APIs.
+Project owners can document third-party API related to a program. Orquestra stores these notes and publishes them in project docs and `llms.txt`. Orquestra does not call those external API.
 
 Limits:
 

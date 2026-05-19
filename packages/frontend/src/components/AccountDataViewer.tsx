@@ -54,8 +54,8 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
       {/* ── Input panel ── */}
       <div className="card-static p-5 space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-white mb-1">Fetch Account Data</h3>
-          <p className="text-xs text-gray-500">
+          <h3 className="text-sm font-semibold text-sand-1600 mb-1">Fetch Account Data</h3>
+          <p className="text-xs text-sand-1100">
             Enter a Solana account address to fetch and parse its on-chain data using this
             program's IDL.
           </p>
@@ -117,7 +117,7 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
 
       {/* ── Error state ── */}
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+        <div className=" border border-red-500/20 bg-red-500/5 p-4">
           <div className="flex items-start gap-3">
             <svg
               className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5"
@@ -142,26 +142,26 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
 
       {/* ── Result ── */}
       {result && (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
+        <div className=" border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
           {/* Result header */}
-          <div className="flex items-center justify-between px-5 py-3 border-b border-emerald-500/15">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-emerald-500/20">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md">
+              <span className="text-xs font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5">
                 200 OK
               </span>
               {result.accountType ? (
-                <span className="text-xs font-mono font-semibold text-white bg-white/10 px-2 py-0.5 rounded-md border border-white/10">
+                <span className="text-xs font-mono font-semibold text-sand-1600 bg-sand-200 px-2 py-0.5 border border-border-low">
                   {result.accountType}
                 </span>
               ) : (
-                <span className="text-xs font-mono text-gray-400 bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                <span className="text-xs font-mono text-sand-1100 bg-sand-100 px-2 py-0.5 border border-border-low">
                   Unknown Type
                 </span>
               )}
-              <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-md font-mono">
+              <span className="text-[11px] text-sand-1100 bg-sand-100 px-2 py-0.5 font-mono">
                 {result.cluster}
               </span>
-              <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-md font-mono">
+              <span className="text-[11px] text-sand-1100 bg-sand-100 px-2 py-0.5 font-mono">
                 slot {result.slot.toLocaleString()}
               </span>
             </div>
@@ -170,7 +170,7 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
                 navigator.clipboard.writeText(result.address)
                 showToast('Address copied', 'success')
               }}
-              className="text-xs text-gray-500 hover:text-primary transition-colors flex-shrink-0"
+              className="text-xs text-sand-1100 hover:text-primary transition-colors flex-shrink-0"
             >
               Copy address
             </button>
@@ -179,37 +179,37 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
           <div className="p-5 space-y-5">
             {/* Address */}
             <div>
-              <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Address</p>
+              <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">Address</p>
               <code className="text-primary font-mono text-sm break-all">{result.address}</code>
             </div>
 
             {/* Meta row */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div>
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Balance</p>
-                <span className="text-white font-mono text-sm">
+                <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">Balance</p>
+                <span className="text-sand-1600 font-mono text-sm">
                   {lamportsToSol(result.lamports)} SOL
                 </span>
               </div>
               <div>
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">
+                <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">
                   Executable
                 </p>
-                <span className={`text-sm font-mono ${result.executable ? 'text-emerald-400' : 'text-gray-400'}`}>
+                <span className={`text-sm font-mono ${result.executable ? 'text-emerald-400' : 'text-sand-1100'}`}>
                   {result.executable ? 'Yes' : 'No'}
                 </span>
               </div>
               <div className="col-span-2 sm:col-span-1">
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">
+                <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">
                   Owner Program
                 </p>
-                <code className="text-gray-300 font-mono text-xs break-all">{result.programId}</code>
+                <code className="text-sand-1400 font-mono text-xs break-all">{result.programId}</code>
               </div>
             </div>
 
             {/* Parse error warning */}
             {result.parseError && (
-              <div className="flex items-center gap-2 text-xs p-2.5 bg-yellow-500/5 rounded-lg border border-yellow-500/15">
+              <div className="flex items-center gap-2 text-xs p-2.5 bg-yellow-500/5 border border-yellow-500/15">
                 <svg
                   className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0"
                   fill="none"
@@ -231,7 +231,7 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
             {result.data !== null ? (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] text-gray-500 uppercase tracking-wider">
+                  <p className="text-[11px] text-sand-1100 uppercase tracking-wider">
                     Decoded Fields
                   </p>
                   <button
@@ -239,7 +239,7 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
                       navigator.clipboard.writeText(JSON.stringify(result.data, null, 2))
                       showToast('JSON copied', 'success')
                     }}
-                    className="text-[11px] text-gray-500 hover:text-primary transition-colors flex items-center gap-1"
+                    className="text-[11px] text-sand-1100 hover:text-primary transition-colors flex items-center gap-1"
                   >
                     <svg
                       className="w-3 h-3"
@@ -257,15 +257,15 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
                     Copy JSON
                   </button>
                 </div>
-                <pre className="text-xs font-mono text-gray-300 bg-black/30 rounded-lg p-4 overflow-x-auto leading-relaxed whitespace-pre">
+                <pre className="text-xs font-mono text-sand-1400 bg-sand-100 p-4 overflow-x-auto leading-relaxed whitespace-pre">
                   {JSON.stringify(result.data, null, 2)}
                 </pre>
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-xs p-3 bg-white/3 rounded-lg border border-white/5">
+                <div className="flex items-center gap-2 text-xs p-3 bg-sand-100 border border-border-low">
                   <svg
-                    className="w-3.5 h-3.5 text-gray-500 flex-shrink-0"
+                    className="w-3.5 h-3.5 text-sand-1100 flex-shrink-0"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -277,13 +277,13 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
                       d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
                     />
                   </svg>
-                  <span className="text-gray-400">
+                  <span className="text-sand-1100">
                     Unknown account type — no IDL discriminator match. Showing raw data below.
                   </span>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[11px] text-gray-500 uppercase tracking-wider">
+                    <p className="text-[11px] text-sand-1100 uppercase tracking-wider">
                       Raw Data (base64)
                     </p>
                     <button
@@ -291,12 +291,12 @@ export default function AccountDataViewer({ projectId }: AccountDataViewerProps)
                         navigator.clipboard.writeText(result.raw)
                         showToast('Raw data copied', 'success')
                       }}
-                      className="text-[11px] text-gray-500 hover:text-primary transition-colors"
+                      className="text-[11px] text-sand-1100 hover:text-primary transition-colors"
                     >
                       Copy
                     </button>
                   </div>
-                  <pre className="text-[10px] font-mono text-gray-500 bg-black/30 rounded-lg p-3 overflow-x-auto break-all whitespace-pre-wrap">
+                  <pre className="text-[10px] font-mono text-sand-1100 bg-sand-100 p-3 overflow-x-auto break-all whitespace-pre-wrap">
                     {result.raw}
                   </pre>
                 </div>

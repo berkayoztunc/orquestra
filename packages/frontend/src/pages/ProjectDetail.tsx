@@ -110,7 +110,7 @@ export default function ProjectDetail(): JSX.Element {
     const name: string = selectedProject.name
     const description: string =
       selectedProject.description ||
-      `REST API, MCP tools, and AI-ready docs for ${name} on Solana — auto-generated from the on-chain Anchor IDL.`
+      `API, MCP tools, and AI-ready docs for ${name} on Solana — auto-generated from the on-chain Anchor IDL.`
     const url = `${window.location.origin}/project/${selectedProject.program_id}`
     const prevTitle = document.title
     document.title = `${name} — Orquestra`
@@ -232,7 +232,7 @@ export default function ProjectDetail(): JSX.Element {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sand-1600" />
       </div>
     )
   }
@@ -240,14 +240,14 @@ export default function ProjectDetail(): JSX.Element {
   if (!selectedProject) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6 text-center px-4">
-        <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
-          <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="w-16 h-16 bg-[#b75000]/10 flex items-center justify-center border border-[#b75000]/20">
+          <svg className="w-8 h-8 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-white mb-2">Program Not Found</h2>
-          <p className="text-gray-400 text-sm max-w-sm">
+          <h2 className="text-xl font-bold text-sand-1600 mb-2">Program Not Found</h2>
+          <p className="text-sand-1200 text-sm max-w-sm">
             {error || 'This program could not be found. It may not exist or may not have an Anchor IDL on-chain.'}
           </p>
         </div>
@@ -270,7 +270,7 @@ export default function ProjectDetail(): JSX.Element {
     { id: 'programData', label: 'Program Data' },
     { id: 'docs', label: 'Docs' },
     { id: 'addresses', label: 'Addresses' },
-    { id: 'externalApis', label: 'External APIs' },
+    { id: 'externalApis', label: 'External API' },
     ...(!isSystemProject && selectedProject.isOwner ? [{ id: 'settings' as Tab, label: 'Settings' }] : []),
   ]
 
@@ -516,19 +516,19 @@ export default function ProjectDetail(): JSX.Element {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
       {/* Unowned Program Banner */}
       {isSystemProject && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="bg-[#b75000]/10 border border-[#b75000]/20 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20 flex-shrink-0">
-              <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-10 h-10 bg-[#b75000]/10 flex items-center justify-center border border-[#b75000]/20 flex-shrink-0">
+              <svg className="w-5 h-5 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
             <div>
-              <p className="text-yellow-400 font-medium text-sm">No registered developer</p>
-              <p className="text-gray-400 text-xs mt-0.5">This program was auto-imported from Solana on-chain data. It has no verified developer on Orquestra.</p>
+              <p className="text-[#b75000] font-medium text-sm">No registered developer</p>
+              <p className="text-sand-1200 text-xs mt-0.5">This program was auto-imported from Solana on-chain data. It has no verified developer on Orquestra.</p>
             </div>
           </div>
           <a
@@ -544,16 +544,16 @@ export default function ProjectDetail(): JSX.Element {
       )}
 
       {/* Project Header - Modern */}
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
+      <section className="overflow-hidden border border-border-low bg-sand-100">
         <div className="flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1 space-y-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-lg font-semibold text-primary">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-border-low bg-sand-100 text-lg font-semibold text-sand-1600">
                 {selectedProject.avatar_url ? (
                   <img
                     src={selectedProject.avatar_url}
                     alt={selectedProject.username || selectedProject.name}
-                    className="h-full w-full rounded-xl object-cover"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
                   selectedProject.name.charAt(0).toUpperCase()
@@ -563,10 +563,10 @@ export default function ProjectDetail(): JSX.Element {
               <div className="min-w-0 flex-1">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+                    className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-medium ${
                       selectedProject.is_public
-                        ? 'border-primary/20 bg-primary/10 text-primary'
-                        : 'border-yellow-500/20 bg-yellow-500/10 text-yellow-300'
+                        ? 'border-border-low bg-sand-100 text-sand-1500'
+                        : 'border-[#b75000]/20 bg-[#b75000]/10 text-[#b75000]'
                     }`}
                   >
                     {selectedProject.is_public ? (
@@ -577,25 +577,25 @@ export default function ProjectDetail(): JSX.Element {
                     {selectedProject.is_public ? 'Public' : 'Private'}
                   </span>
                   {selectedProject.username && (
-                    <span className="text-sm text-gray-500">by {selectedProject.username}</span>
+                    <span className="text-sm text-sand-1200">by {selectedProject.username}</span>
                   )}
                 </div>
 
-                <h1 className="text-3xl font-semibold tracking-normal text-white sm:text-4xl">
+                <h1 className="text-3xl font-semibold tracking-tight text-sand-1600 sm:text-4xl">
                   {selectedProject.name}
                 </h1>
 
                 {selectedProject.description && (
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400 sm:text-base">
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-sand-1200 sm:text-base">
                     {selectedProject.description}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-white/10 bg-dark-950/40 p-3 sm:flex-row sm:items-center">
-              <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Program</span>
-              <code className="min-w-0 flex-1 truncate font-mono text-xs text-primary sm:text-sm">
+            <div className="flex min-w-0 flex-col gap-2 border border-border-low bg-sand-50 p-3 sm:flex-row sm:items-center">
+              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">Program</span>
+              <code className="min-w-0 flex-1 truncate font-mono text-xs text-sand-1500 sm:text-sm">
                 {selectedProject.program_id}
               </code>
               <button
@@ -603,33 +603,33 @@ export default function ProjectDetail(): JSX.Element {
                   navigator.clipboard.writeText(selectedProject.program_id)
                   showToast('Copied to clipboard', 'success')
                 }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-sand-1200 transition-colors hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-1600/30"
                 title="Copy program ID"
               >
                 <Clipboard className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="grid gap-2 text-xs text-gray-500 sm:grid-cols-3">
+            <div className="grid gap-2 text-xs text-sand-1200 sm:grid-cols-3">
               {selectedProject.latestVersion !== undefined && (
-                <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
-                  <GitBranch className="h-3.5 w-3.5 text-gray-600" />
+                <div className="flex items-center gap-2 border border-border-low bg-sand-50 px-3 py-2">
+                  <GitBranch className="h-3.5 w-3.5 text-sand-1100" />
                   <span className="truncate">
                     IDL v{selectedProject.latestVersion}
                     {selectedProject.latestVersionDate && (
-                      <span className="text-gray-600">
+                      <span className="text-sand-1100">
                         {' '}{new Date(selectedProject.latestVersionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </span>
                     )}
                   </span>
                 </div>
               )}
-              <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
-                <Clock3 className="h-3.5 w-3.5 text-gray-600" />
+              <div className="flex items-center gap-2 border border-border-low bg-sand-50 px-3 py-2">
+                <Clock3 className="h-3.5 w-3.5 text-sand-1100" />
                 <span>Updated {new Date(selectedProject.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.025] px-3 py-2">
-                <Calendar className="h-3.5 w-3.5 text-gray-600" />
+              <div className="flex items-center gap-2 border border-border-low bg-sand-50 px-3 py-2">
+                <Calendar className="h-3.5 w-3.5 text-sand-1100" />
                 <span>Created {new Date(selectedProject.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               </div>
             </div>
@@ -641,7 +641,7 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.twitter.startsWith('http') ? selectedProject.socials.twitter : `https://twitter.com/${selectedProject.socials.twitter.replace('@', '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-primary/25 hover:text-primary"
+                    className="inline-flex items-center gap-1.5 border border-border-low bg-sand-50 px-3 py-2 text-xs font-medium text-sand-1200 transition-colors hover:border-border-medium hover:text-sand-1600"
                   >
                     Twitter
                   </a>
@@ -651,7 +651,7 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.discord.startsWith('http') ? selectedProject.socials.discord : `https://discord.gg/${selectedProject.socials.discord}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-[#5865F2]/40 hover:text-[#8ea0ff]"
+                    className="inline-flex items-center gap-1.5 border border-border-low bg-sand-50 px-3 py-2 text-xs font-medium text-sand-1200 transition-colors hover:border-border-medium hover:text-sand-1600"
                   >
                     Discord
                   </a>
@@ -661,7 +661,7 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.telegram.startsWith('http') ? selectedProject.socials.telegram : `https://t.me/${selectedProject.socials.telegram.replace('@', '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-[#26A5E4]/40 hover:text-[#73caff]"
+                    className="inline-flex items-center gap-1.5 border border-border-low bg-sand-50 px-3 py-2 text-xs font-medium text-sand-1200 transition-colors hover:border-border-medium hover:text-sand-1600"
                   >
                     Telegram
                   </a>
@@ -671,7 +671,7 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.github.startsWith('http') ? selectedProject.socials.github : `https://github.com/${selectedProject.socials.github}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-white/25 hover:text-white"
+                    className="inline-flex items-center gap-1.5 border border-border-low bg-sand-50 px-3 py-2 text-xs font-medium text-sand-1200 transition-colors hover:border-border-medium hover:text-sand-1600"
                   >
                     GitHub
                   </a>
@@ -681,7 +681,7 @@ export default function ProjectDetail(): JSX.Element {
                     href={selectedProject.socials.website.startsWith('http') ? selectedProject.socials.website : `https://${selectedProject.socials.website}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:border-primary/25 hover:text-primary"
+                    className="inline-flex items-center gap-1.5 border border-border-low bg-sand-50 px-3 py-2 text-xs font-medium text-sand-1200 transition-colors hover:border-border-medium hover:text-sand-1600"
                   >
                     <Globe2 className="h-3.5 w-3.5" />
                     Website
@@ -711,7 +711,7 @@ export default function ProjectDetail(): JSX.Element {
                   /* user dismissed share sheet */
                 }
               }}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-200 transition-all duration-200 hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              className="inline-flex h-10 items-center justify-center gap-2 border border-border-low bg-sand-50 px-4 text-sm font-medium text-sand-1500 transition-all duration-200 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-1600/30"
               title="Share this program"
             >
               <Share2 className="h-3.5 w-3.5" />
@@ -723,7 +723,7 @@ export default function ProjectDetail(): JSX.Element {
 
       {/* Tabs - Modern */}
       <div
-        className="flex gap-1 border-b border-white/5 overflow-x-auto"
+        className="flex gap-1 border-b border-border-low overflow-x-auto"
         role="tablist"
         aria-label="Project sections"
         onKeyDown={(e) => {
@@ -742,10 +742,10 @@ export default function ProjectDetail(): JSX.Element {
             aria-controls={`tabpanel-${tab.id}`}
             tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-5 py-3 text-sm font-medium transition whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-inset ${
+            className={`px-5 py-3 text-sm font-medium transition whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-1600/30 focus-visible:ring-inset ${
               activeTab === tab.id
-                ? 'text-primary border-b-2 border-primary bg-primary/5'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                ? 'text-bg1 bg-sand-1600 border-b-2 border-sand-1600'
+                : 'text-sand-1200 hover:text-sand-1600 hover:bg-sand-100'
             }`}
           >
             {tab.label}
@@ -762,7 +762,7 @@ export default function ProjectDetail(): JSX.Element {
       >
         {tabLoading ? (
           <div className="flex justify-center py-12">
-            <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+            <div className="w-8 h-8 rounded-full border-2 border-sand-1200/30 border-t-sand-1600 animate-spin" />
           </div>
         ) : (
           <>
@@ -780,19 +780,19 @@ export default function ProjectDetail(): JSX.Element {
               <div className="grid gap-4">
                 {(accounts.accounts || []).length === 0 ? (
                   <div className="card-static p-8 text-center">
-                    <p className="text-gray-400">No account types defined</p>
+                    <p className="text-sand-1200">No account types defined</p>
                   </div>
                 ) : (
                   (accounts.accounts || []).map((acc: any) => (
                     <div key={acc.name} className="card-static p-5">
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <div className="w-8 h-8 bg-sand-100 flex items-center justify-center border border-border-low">
+                          <svg className="w-4 h-4 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                           </svg>
                         </div>
-                        <h3 className="text-lg font-bold text-white">{acc.name}</h3>
-                        <span className="badge bg-secondary/15 text-secondary border border-secondary/20 text-xs">
+                        <h3 className="text-lg font-bold text-sand-1600">{acc.name}</h3>
+                        <span className="badge bg-sand-100 text-sand-1200 border border-border-low text-xs">
                           {acc.kind}
                         </span>
                       </div>
@@ -800,16 +800,16 @@ export default function ProjectDetail(): JSX.Element {
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="text-gray-500 border-b border-white/5">
+                              <tr className="text-sand-1100 border-b border-border-low">
                                 <th className="text-left py-2 pr-4 font-medium">Field</th>
                                 <th className="text-left py-2 pr-4 font-medium">Type</th>
                               </tr>
                             </thead>
                             <tbody>
                               {acc.fields.map((f: any) => (
-                                <tr key={f.name} className="border-b border-white/5 last:border-0">
-                                  <td className="py-2.5 pr-4 font-mono text-gray-300">{f.name}</td>
-                                  <td className="py-2.5 pr-4 text-secondary">{f.type}</td>
+                                <tr key={f.name} className="border-b border-border-low last:border-0">
+                                  <td className="py-2.5 pr-4 font-mono text-sand-1500">{f.name}</td>
+                                  <td className="py-2.5 pr-4 text-sand-1200">{f.type}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -827,12 +827,12 @@ export default function ProjectDetail(): JSX.Element {
               <div className="card-static overflow-hidden">
                 {(errors.errors || []).length === 0 ? (
                   <div className="p-8 text-center">
-                    <p className="text-gray-400">No custom errors defined</p>
+                    <p className="text-sand-1200">No custom errors defined</p>
                   </div>
                 ) : (
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="text-gray-500 border-b border-white/5 bg-white/[0.02]">
+                      <tr className="text-sand-1100 border-b border-border-low bg-sand-50">
                         <th className="text-left py-3 px-4 font-medium">Code</th>
                         <th className="text-left py-3 px-4 font-medium">Name</th>
                         <th className="text-left py-3 px-4 font-medium">Message</th>
@@ -840,10 +840,10 @@ export default function ProjectDetail(): JSX.Element {
                     </thead>
                     <tbody>
                       {(errors.errors || []).map((err: any) => (
-                        <tr key={err.code} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
-                          <td className="py-3 px-4 text-primary font-mono">{err.code}</td>
-                          <td className="py-3 px-4 font-mono text-gray-300">{err.name}</td>
-                          <td className="py-3 px-4 text-gray-400">{err.msg}</td>
+                        <tr key={err.code} className="border-b border-border-low last:border-0 hover:bg-sand-50">
+                          <td className="py-3 px-4 text-sand-1600 font-mono">{err.code}</td>
+                          <td className="py-3 px-4 font-mono text-sand-1500">{err.name}</td>
+                          <td className="py-3 px-4 text-sand-1200">{err.msg}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -857,33 +857,33 @@ export default function ProjectDetail(): JSX.Element {
               <div className="grid gap-4">
                 {(events.events || []).length === 0 ? (
                   <div className="card-static p-8 text-center">
-                    <p className="text-gray-400">No events defined</p>
+                    <p className="text-sand-1200">No events defined</p>
                   </div>
                 ) : (
                   (events.events || []).map((evt: any) => (
                     <div key={evt.name} className="card-static p-5">
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <div className="w-8 h-8 bg-sand-100 flex items-center justify-center border border-border-low">
+                          <svg className="w-4 h-4 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                           </svg>
                         </div>
-                        <h3 className="text-lg font-bold text-white">{evt.name}</h3>
+                        <h3 className="text-lg font-bold text-sand-1600">{evt.name}</h3>
                       </div>
                       {Array.isArray(evt.fields) && evt.fields.length > 0 && (
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="text-gray-500 border-b border-white/5">
+                              <tr className="text-sand-1100 border-b border-border-low">
                                 <th className="text-left py-2 pr-4 font-medium">Field</th>
                                 <th className="text-left py-2 pr-4 font-medium">Type</th>
                               </tr>
                             </thead>
                             <tbody>
                               {evt.fields.map((f: any) => (
-                                <tr key={f.name} className="border-b border-white/5 last:border-0">
-                                  <td className="py-2.5 pr-4 font-mono text-gray-300">{f.name}</td>
-                                  <td className="py-2.5 pr-4 text-secondary">{f.type}</td>
+                                <tr key={f.name} className="border-b border-border-low last:border-0">
+                                  <td className="py-2.5 pr-4 font-mono text-sand-1500">{f.name}</td>
+                                  <td className="py-2.5 pr-4 text-sand-1200">{f.type}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -901,17 +901,17 @@ export default function ProjectDetail(): JSX.Element {
               <div className="card-static p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-10 h-10 bg-sand-100 flex items-center justify-center border border-border-low">
+                      <svg className="w-5 h-5 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-white">
+                      <h3 className="font-semibold text-sand-1600">
                         {isCustomDocs ? 'Custom Documentation' : 'Generated Documentation'}
                       </h3>
                       {isCustomDocs && (
-                        <span className="text-xs text-blue-400">Edited</span>
+                        <span className="text-xs text-sand-1200">Edited</span>
                       )}
                     </div>
                   </div>
@@ -961,16 +961,16 @@ export default function ProjectDetail(): JSX.Element {
                       </a>
                     )}
                     {!isEditingDocs && (
-                      <div className="flex items-center border border-white/10 rounded-lg overflow-hidden text-sm">
+                      <div className="flex items-center border border-border-low overflow-hidden text-sm">
                         <button
                           onClick={() => setDocsViewMode('preview')}
-                          className={`px-3 py-1.5 transition-colors ${docsViewMode === 'preview' ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                          className={`px-3 py-1.5 transition-colors ${docsViewMode === 'preview' ? 'bg-sand-1600 text-bg1' : 'text-sand-1200 hover:text-sand-1600 hover:bg-sand-100'}`}
                         >
                           Preview
                         </button>
                         <button
                           onClick={() => setDocsViewMode('raw')}
-                          className={`px-3 py-1.5 transition-colors ${docsViewMode === 'raw' ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                          className={`px-3 py-1.5 transition-colors ${docsViewMode === 'raw' ? 'bg-sand-1600 text-bg1' : 'text-sand-1200 hover:text-sand-1600 hover:bg-sand-100'}`}
                         >
                           Raw
                         </button>
@@ -979,16 +979,16 @@ export default function ProjectDetail(): JSX.Element {
                   </div>
                 </div>
                 {!isEditingDocs && (
-                  <div className="mb-6 rounded-xl border border-white/10 bg-surface-elevated p-5">
+                  <div className="mb-6 border border-border-low bg-sand-50 p-5">
                     <div className="flex flex-col gap-4">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                         <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20 shrink-0">
-                            <Sparkles className="w-4 h-4 text-primary" />
+                          <div className="w-9 h-9 bg-sand-100 flex items-center justify-center border border-border-low shrink-0">
+                            <Sparkles className="w-4 h-4 text-sand-1500" />
                           </div>
                           <div>
-                            <h4 className="font-semibold text-white">AI Analysis</h4>
-                            <p className="text-sm text-gray-400 mt-1">
+                            <h4 className="font-semibold text-sand-1600">AI Analysis</h4>
+                            <p className="text-sm text-sand-1200 mt-1">
                               {isLoadingAIAnalysis
                                 ? 'Generating analysis from the latest llms.txt...'
                                 : aiAnalysis?.shortDescription || 'No AI analysis has been generated yet.'}
@@ -996,7 +996,7 @@ export default function ProjectDetail(): JSX.Element {
                           </div>
                         </div>
                         {aiAnalysis?.modelUsed && (
-                          <div className="text-xs text-gray-500 sm:text-right">
+                          <div className="text-xs text-sand-1100 sm:text-right">
                             <div>{aiAnalysis.modelUsed}</div>
                             {aiAnalysis.generatedAt && (
                               <div>{new Date(aiAnalysis.generatedAt).toLocaleString()}</div>
@@ -1006,14 +1006,14 @@ export default function ProjectDetail(): JSX.Element {
                       </div>
 
                       {aiAnalysisError && (
-                        <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                        <div className="text-sm text-[#b75000] bg-[#b75000]/5 border border-[#b75000]/20 px-3 py-2">
                           {aiAnalysisError}
                         </div>
                       )}
 
                       {isLoadingAIAnalysis && (
-                        <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
-                          <div className="h-full w-1/2 bg-primary animate-pulse" />
+                        <div className="h-1.5 rounded-full bg-sand-200 overflow-hidden">
+                          <div className="h-full w-1/2 bg-sand-1600 animate-pulse" />
                         </div>
                       )}
 
@@ -1022,7 +1022,7 @@ export default function ProjectDetail(): JSX.Element {
                           {aiAnalysis.detailedAnalysis.tags?.length > 0 && (
                             <div className="flex flex-wrap gap-2">
                               {aiAnalysis.detailedAnalysis.tags.map((tag: string) => (
-                                <span key={tag} className="text-xs text-primary bg-primary/10 border border-primary/20 rounded-full px-2.5 py-1">
+                                <span key={tag} className="text-xs text-sand-1500 bg-sand-100 border border-border-low px-2.5 py-1">
                                   {tag}
                                 </span>
                               ))}
@@ -1030,7 +1030,7 @@ export default function ProjectDetail(): JSX.Element {
                           )}
 
                           {aiAnalysis.detailedAnalysis.summary && (
-                            <p className="text-sm text-gray-300 leading-relaxed">
+                            <p className="text-sm text-sand-1500 leading-relaxed">
                               {aiAnalysis.detailedAnalysis.summary}
                             </p>
                           )}
@@ -1042,19 +1042,19 @@ export default function ProjectDetail(): JSX.Element {
                               ['Errors', aiAnalysis.detailedAnalysis.errorCount],
                               ['Events', aiAnalysis.detailedAnalysis.eventCount],
                             ].map(([label, value]) => (
-                              <div key={label as string} className="rounded-lg bg-dark-900/60 border border-white/10 px-3 py-2">
-                                <div className="text-xs text-gray-500">{label}</div>
-                                <div className="text-lg font-semibold text-white">{value ?? 0}</div>
+                              <div key={label as string} className="border border-border-low bg-sand-50 px-3 py-2">
+                                <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">{label}</div>
+                                <div className="text-lg font-semibold text-sand-1600">{value ?? 0}</div>
                               </div>
                             ))}
                           </div>
 
                           {aiAnalysis.detailedAnalysis.capabilities?.length > 0 && (
                             <div>
-                              <h5 className="text-sm font-semibold text-white mb-2">Capabilities</h5>
+                              <h5 className="text-sm font-semibold text-sand-1600 mb-2">Capabilities</h5>
                               <div className="flex flex-wrap gap-2">
                                 {aiAnalysis.detailedAnalysis.capabilities.map((item: string) => (
-                                  <span key={item} className="text-xs text-gray-300 bg-white/5 rounded-md px-2.5 py-1">
+                                  <span key={item} className="text-xs text-sand-1500 bg-sand-100 px-2.5 py-1 border border-border-low">
                                     {item}
                                   </span>
                                 ))}
@@ -1064,11 +1064,11 @@ export default function ProjectDetail(): JSX.Element {
 
                           {aiAnalysis.detailedAnalysis.keyInstructions?.length > 0 && (
                             <div>
-                              <h5 className="text-sm font-semibold text-white mb-2">Key Instructions</h5>
+                              <h5 className="text-sm font-semibold text-sand-1600 mb-2">Key Instructions</h5>
                               <div className="space-y-2">
                                 {aiAnalysis.detailedAnalysis.keyInstructions.map((item: { name: string; purpose: string }) => (
-                                  <div key={item.name} className="text-sm text-gray-300">
-                                    <code className="text-primary bg-primary/10 px-1.5 py-0.5 rounded">{item.name}</code>
+                                  <div key={item.name} className="text-sm text-sand-1500">
+                                    <code className="text-sand-1600 bg-sand-100 px-1.5 py-0.5 border border-border-low">{item.name}</code>
                                     <span className="ml-2">{item.purpose}</span>
                                   </div>
                                 ))}
@@ -1078,8 +1078,8 @@ export default function ProjectDetail(): JSX.Element {
 
                           {aiAnalysis.detailedAnalysis.integrationNotes?.length > 0 && (
                             <div>
-                              <h5 className="text-sm font-semibold text-white mb-2">Integration Notes</h5>
-                              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                              <h5 className="text-sm font-semibold text-sand-1600 mb-2">Integration Notes</h5>
+                              <ul className="list-disc list-inside space-y-1 text-sm text-sand-1500">
                                 {aiAnalysis.detailedAnalysis.integrationNotes.map((item: string) => (
                                   <li key={item}>{item}</li>
                                 ))}
@@ -1089,8 +1089,8 @@ export default function ProjectDetail(): JSX.Element {
 
                           {aiAnalysis.detailedAnalysis.accountsOverview?.length > 0 && (
                             <div>
-                              <h5 className="text-sm font-semibold text-white mb-2">Accounts Overview</h5>
-                              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                              <h5 className="text-sm font-semibold text-sand-1600 mb-2">Accounts Overview</h5>
+                              <ul className="list-disc list-inside space-y-1 text-sm text-sand-1500">
                                 {aiAnalysis.detailedAnalysis.accountsOverview.map((item: string) => (
                                   <li key={item}>{item}</li>
                                 ))}
@@ -1100,8 +1100,8 @@ export default function ProjectDetail(): JSX.Element {
 
                           {aiAnalysis.detailedAnalysis.risks?.length > 0 && (
                             <div>
-                              <h5 className="text-sm font-semibold text-white mb-2">Risks</h5>
-                              <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
+                              <h5 className="text-sm font-semibold text-sand-1600 mb-2">Risks</h5>
+                              <ul className="list-disc list-inside space-y-1 text-sm text-sand-1500">
                                 {aiAnalysis.detailedAnalysis.risks.map((item: string) => (
                                   <li key={item}>{item}</li>
                                 ))}
@@ -1137,32 +1137,32 @@ export default function ProjectDetail(): JSX.Element {
                     </div>
                   </div>
                 ) : (
-                  <div className="max-h-[600px] overflow-y-auto rounded-xl bg-surface-elevated p-5">
+                  <div className="max-h-[600px] overflow-y-auto border border-border-low bg-sand-50 p-5">
                     {docsViewMode === 'raw' ? (
-                      <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono leading-relaxed">
+                      <pre className="whitespace-pre-wrap text-sm text-sand-1500 font-mono leading-relaxed">
                         {docs || 'Loading...'}
                       </pre>
                     ) : (
-                      <div className="prose prose-invert prose-sm max-w-none
-                        prose-headings:text-white prose-headings:font-bold
+                      <div className="prose prose-sm max-w-none
+                        prose-headings:text-sand-1600 prose-headings:font-bold
                         prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
-                        prose-p:text-gray-300 prose-p:leading-relaxed
-                        prose-a:text-primary prose-a:no-underline hover:prose-a:underline
-                        prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
-                        prose-pre:bg-dark-900 prose-pre:border prose-pre:border-white/10 prose-pre:rounded-xl prose-pre:p-4
-                        prose-pre:text-gray-300 prose-pre:text-sm prose-pre:overflow-x-auto
-                        prose-blockquote:border-l-primary prose-blockquote:text-gray-400
-                        prose-strong:text-white prose-em:text-gray-300
-                        prose-ul:text-gray-300 prose-ol:text-gray-300
-                        prose-li:marker:text-primary
-                        prose-hr:border-white/10
+                        prose-p:text-sand-1500 prose-p:leading-relaxed
+                        prose-a:text-sand-1600 prose-a:no-underline hover:prose-a:underline
+                        prose-code:text-sand-1500 prose-code:bg-sand-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+                        prose-pre:bg-sand-50 prose-pre:border prose-pre:border-border-low prose-pre:prose-pre:p-4
+                        prose-pre:text-sand-1500 prose-pre:text-sm prose-pre:overflow-x-auto
+                        prose-blockquote:border-l-border-medium prose-blockquote:text-sand-1200
+                        prose-strong:text-sand-1600 prose-em:text-sand-1200
+                        prose-ul:text-sand-1200 prose-ol:text-sand-1200
+                        prose-li:marker:text-sand-1100
+                        prose-hr:border-border-low
                         prose-table:text-sm
-                        prose-th:text-gray-300 prose-th:border-white/10 prose-th:bg-white/5 prose-th:p-2
-                        prose-td:text-gray-400 prose-td:border-white/10 prose-td:p-2">
+                        prose-th:text-sand-1200 prose-th:border-border-low prose-th:bg-sand-100 prose-th:p-2
+                        prose-td:text-sand-1200 prose-td:border-border-low prose-td:p-2">
                         {docs ? (
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{docs}</ReactMarkdown>
                         ) : (
-                          <p className="text-gray-500 text-sm">Loading...</p>
+                          <p className="text-sand-1100 text-sm">Loading...</p>
                         )}
                       </div>
                     )}
@@ -1176,12 +1176,12 @@ export default function ProjectDetail(): JSX.Element {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-10 h-10 bg-sand-100 flex items-center justify-center border border-border-low">
+                      <svg className="w-5 h-5 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-bold text-white">Known Addresses</h3>
+                    <h3 className="text-lg font-bold text-sand-1600">Known Addresses</h3>
                   </div>
                   {selectedProject.isOwner && (
                     <button
@@ -1197,7 +1197,7 @@ export default function ProjectDetail(): JSX.Element {
                   <div className="card-static p-5 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">Label *</label>
+                        <label className="block text-sm text-sand-1200 mb-2">Label *</label>
                         <input
                           type="text"
                           value={newAddress.label}
@@ -1208,7 +1208,7 @@ export default function ProjectDetail(): JSX.Element {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">Public Key *</label>
+                        <label className="block text-sm text-sand-1200 mb-2">Public Key *</label>
                         <input
                           type="text"
                           value={newAddress.address}
@@ -1219,7 +1219,7 @@ export default function ProjectDetail(): JSX.Element {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-2">Description</label>
+                      <label className="block text-sm text-sand-1200 mb-2">Description</label>
                       <input
                         type="text"
                         value={newAddress.description}
@@ -1240,7 +1240,7 @@ export default function ProjectDetail(): JSX.Element {
 
                 {knownAddresses.length === 0 ? (
                   <div className="card-static p-8 text-center">
-                    <p className="text-gray-400">No known addresses added yet</p>
+                    <p className="text-sand-1200">No known addresses added yet</p>
                   </div>
                 ) : (
                   <div className="grid gap-3">
@@ -1251,17 +1251,17 @@ export default function ProjectDetail(): JSX.Element {
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-white">{addr.label}</span>
+                            <span className="font-semibold text-sand-1600">{addr.label}</span>
                           </div>
-                          <code className="text-xs font-mono text-primary break-all block">{addr.address}</code>
+                          <code className="text-xs font-mono text-sand-1500 break-all block">{addr.address}</code>
                           {addr.description && (
-                            <p className="text-sm text-gray-500 mt-1">{addr.description}</p>
+                            <p className="text-sm text-sand-1100 mt-1">{addr.description}</p>
                           )}
                         </div>
                         {selectedProject.isOwner && (
                           <button
                             onClick={() => handleDeleteAddress(addr.id)}
-                            className="text-red-400 hover:text-red-300 text-sm px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition self-start"
+                            className="text-[#b75000] hover:text-[#b75000] text-sm px-3 py-1.5 hover:bg-[#b75000]/10 transition self-start"
                           >
                             Delete
                           </button>
@@ -1273,7 +1273,7 @@ export default function ProjectDetail(): JSX.Element {
               </div>
             )}
 
-            {/* External APIs Tab */}
+            {/* External API Tab */}
             {activeTab === 'externalApis' && (
               <ExternalApisPanel projectId={projectId!} isOwner={Boolean(selectedProject.isOwner)} />
             )}
@@ -1303,15 +1303,15 @@ export default function ProjectDetail(): JSX.Element {
                 {/* Visibility Toggle */}
                 <div className="card-static p-6">
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-10 h-10 bg-sand-100 flex items-center justify-center border border-border-low">
+                      <svg className="w-5 h-5 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-bold text-white mb-1">Visibility</h3>
-                      <p className="text-gray-400 text-sm mb-4">
+                      <h3 className="font-bold text-sand-1600 mb-1">Visibility</h3>
+                      <p className="text-sand-1200 text-sm mb-4">
                         {selectedProject.is_public
                           ? 'This project is public. Anyone can view the API.'
                           : 'This project is private. Only you can access it.'}
@@ -1329,14 +1329,14 @@ export default function ProjectDetail(): JSX.Element {
                 {/* API Keys */}
                 <div className="card-static p-6">
                   <div className="flex items-center gap-4 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-10 h-10 bg-sand-100 flex items-center justify-center border border-border-low">
+                      <svg className="w-5 h-5 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-bold text-white">API Keys</h3>
-                      <p className="text-gray-400 text-sm">Manage your API keys for programmatic access</p>
+                      <h3 className="font-bold text-sand-1600">API Keys</h3>
+                      <p className="text-sand-1200 text-sm">Manage your API keys for programmatic access</p>
                     </div>
                     <button
                       onClick={handleGenerateKey}
@@ -1347,17 +1347,17 @@ export default function ProjectDetail(): JSX.Element {
                   </div>
 
                   {newKey && (
-                    <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 mb-4">
+                    <div className="bg-sand-100 border border-border-low p-4 mb-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <p className="text-green-400 text-sm font-medium">
+                        <p className="text-sand-1500 text-sm font-medium">
                           New API Key (copy now — it won't be shown again):
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="flex-1 text-xs bg-surface-elevated p-3 rounded-lg font-mono break-all">
+                        <code className="flex-1 text-xs bg-sand-50 border border-border-low p-3 font-mono break-all text-sand-1500">
                           {newKey}
                         </code>
                         <button
@@ -1374,24 +1374,24 @@ export default function ProjectDetail(): JSX.Element {
                   )}
 
                   {apiKeys.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No API keys generated yet</p>
+                    <p className="text-sand-1100 text-sm">No API keys generated yet</p>
                   ) : (
                     <div className="grid gap-3">
                       {apiKeys.map((key: any) => (
                         <div
                           key={key.id}
-                          className="flex items-center justify-between bg-surface-elevated p-3 rounded-xl"
+                          className="flex items-center justify-between bg-sand-50 border border-border-low p-3"
                         >
                           <div className="min-w-0 flex-1">
-                            <code className="text-xs font-mono text-gray-400 block truncate">{key.key}</code>
-                            <p className="text-xs text-gray-600 mt-1">
+                            <code className="text-xs font-mono text-sand-1200 block truncate">{key.key}</code>
+                            <p className="text-xs text-sand-1100 mt-1">
                               Created: {new Date(key.created_at).toLocaleDateString()}
                               {key.last_used && ` · Last used: ${new Date(key.last_used).toLocaleDateString()}`}
                             </p>
                           </div>
                           <button
                             onClick={() => handleDeleteKey(key.id)}
-                            className="text-red-400 hover:text-red-300 text-sm px-3 py-1.5 rounded-lg hover:bg-red-500/10 transition ml-4"
+                            className="text-[#b75000] hover:text-[#b75000] text-sm px-3 py-1.5 hover:bg-[#b75000]/10 transition ml-4"
                           >
                             Delete
                           </button>
@@ -1404,21 +1404,21 @@ export default function ProjectDetail(): JSX.Element {
                 {/* Social Links */}
                 <div className="card-static p-6">
                   <div className="flex items-center gap-4 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                      <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-10 h-10 bg-sand-100 flex items-center justify-center border border-border-low">
+                      <svg className="w-5 h-5 text-sand-1500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-bold text-white">Social Links</h3>
-                      <p className="text-gray-400 text-sm">Add social media and website links for your project</p>
+                      <h3 className="font-bold text-sand-1600">Social Links</h3>
+                      <p className="text-sand-1200 text-sm">Add social media and website links for your project</p>
                     </div>
                   </div>
 
                   <div className="grid gap-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label className="block text-sm text-sand-1200 mb-2">
                           <span className="flex items-center gap-2">
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -1435,7 +1435,7 @@ export default function ProjectDetail(): JSX.Element {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label className="block text-sm text-sand-1200 mb-2">
                           <span className="flex items-center gap-2">
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286z" />
@@ -1452,7 +1452,7 @@ export default function ProjectDetail(): JSX.Element {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label className="block text-sm text-sand-1200 mb-2">
                           <span className="flex items-center gap-2">
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0a12 12 0 00-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
@@ -1469,7 +1469,7 @@ export default function ProjectDetail(): JSX.Element {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm text-gray-400 mb-2">
+                        <label className="block text-sm text-sand-1200 mb-2">
                           <span className="flex items-center gap-2">
                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
@@ -1487,7 +1487,7 @@ export default function ProjectDetail(): JSX.Element {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm text-gray-400 mb-2">
+                      <label className="block text-sm text-sand-1200 mb-2">
                         <span className="flex items-center gap-2">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -1516,25 +1516,25 @@ export default function ProjectDetail(): JSX.Element {
                 {/* Update IDL */}
                 <div className="card-static p-6">
                   <div className="flex items-start gap-4 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 flex-shrink-0">
-                      <UploadCloud className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 bg-sand-100 flex items-center justify-center border border-border-low flex-shrink-0">
+                      <UploadCloud className="w-5 h-5 text-sand-1500" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-bold text-white mb-1">Update IDL</h3>
-                      <p className="text-gray-400 text-sm">Replace the IDL for this project. A new version will be created and all endpoints will be regenerated.</p>
+                      <h3 className="font-bold text-sand-1600 mb-1">Update IDL</h3>
+                      <p className="text-sand-1200 text-sm">Replace the IDL for this project. A new version will be created and all endpoints will be regenerated.</p>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <label
                       htmlFor="idl-reupload"
-                      className="flex items-center gap-3 cursor-pointer w-full rounded-xl border border-dashed border-white/10 hover:border-primary/40 bg-surface-elevated hover:bg-primary/5 transition p-4"
+                      className="flex items-center gap-3 cursor-pointer w-full border border-dashed border-border-medium hover:border-border-strong bg-sand-50 hover:bg-sand-100 transition p-4"
                     >
-                      <FileJson className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                      <span className="text-sm text-gray-400 truncate flex-1">
+                      <FileJson className="w-5 h-5 text-sand-1200 flex-shrink-0" />
+                      <span className="text-sm text-sand-1200 truncate flex-1">
                         {reuploadIdlFileName || 'Click to select an IDL JSON file'}
                       </span>
-                      <span className="text-xs text-primary border border-primary/30 rounded-lg px-3 py-1 flex-shrink-0">Browse</span>
+                      <span className="text-xs text-sand-1500 border border-border-medium px-3 py-1 flex-shrink-0">Browse</span>
                     </label>
                     <input
                       type="file"
@@ -1545,18 +1545,18 @@ export default function ProjectDetail(): JSX.Element {
                     />
 
                     {reuploadIdlPreview && (
-                      <div className="bg-surface-elevated rounded-xl p-4 flex flex-wrap gap-4">
+                      <div className="bg-sand-50 border border-border-low p-4 flex flex-wrap gap-4">
                         <div>
-                          <p className="text-xs text-gray-500 mb-0.5">Program</p>
-                          <p className="text-sm font-medium text-white">{reuploadIdlPreview.name}</p>
+                          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100 mb-0.5">Program</p>
+                          <p className="text-sm font-medium text-sand-1600">{reuploadIdlPreview.name}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500 mb-0.5">Instructions</p>
-                          <p className="text-sm font-medium text-white">{reuploadIdlPreview.instructions}</p>
+                          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100 mb-0.5">Instructions</p>
+                          <p className="text-sm font-medium text-sand-1600">{reuploadIdlPreview.instructions}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500 mb-0.5">Accounts</p>
-                          <p className="text-sm font-medium text-white">{reuploadIdlPreview.accounts}</p>
+                          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100 mb-0.5">Accounts</p>
+                          <p className="text-sm font-medium text-sand-1600">{reuploadIdlPreview.accounts}</p>
                         </div>
                       </div>
                     )}
@@ -1576,21 +1576,21 @@ export default function ProjectDetail(): JSX.Element {
                 </div>
 
                 {/* Delete Project */}
-                <div className="card-static p-6 border border-red-500/20">
+                <div className="card-static p-6 border border-[#b75000]/20">
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
-                      <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="w-10 h-10 bg-[#b75000]/10 flex items-center justify-center border border-[#b75000]/20">
+                      <svg className="w-5 h-5 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-bold text-red-400 mb-1">Danger Zone</h3>
-                      <p className="text-gray-400 text-sm mb-4">
+                      <h3 className="font-bold text-[#b75000] mb-1">Danger Zone</h3>
+                      <p className="text-sand-1200 text-sm mb-4">
                         Permanently delete this project and all associated data. This action cannot be undone.
                       </p>
                       <button
                         onClick={() => { setShowDeleteModal(true); setDeleteConfirmName(''); setDeleteError('') }}
-                        className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-2 rounded-xl hover:bg-red-500/20 transition text-sm font-medium"
+                        className="bg-[#b75000]/10 border border-[#b75000]/30 text-[#b75000] px-4 py-2 hover:bg-[#b75000]/20 transition text-sm font-medium"
                       >
                         Delete Project
                       </button>
@@ -1605,10 +1605,10 @@ export default function ProjectDetail(): JSX.Element {
 
       {/* Generic Confirm Modal */}
       {confirmModal?.show && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="card-static p-6 max-w-md w-full border border-white/10">
-            <h3 className="text-lg font-bold text-white mb-3">{confirmModal.title}</h3>
-            <p className="text-gray-400 text-sm mb-5">{confirmModal.message}</p>
+        <div className="fixed inset-0 bg-sand-1600/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card-static p-6 max-w-md w-full border border-border-low">
+            <h3 className="text-lg font-bold text-sand-1600 mb-3">{confirmModal.title}</h3>
+            <p className="text-sand-1200 text-sm mb-5">{confirmModal.message}</p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setConfirmModal(null)}
@@ -1629,18 +1629,18 @@ export default function ProjectDetail(): JSX.Element {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="card-static p-6 max-w-md w-full border border-red-500/20">
+        <div className="fixed inset-0 bg-sand-1600/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card-static p-6 max-w-md w-full border border-[#b75000]/20">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
-                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-10 h-10 bg-[#b75000]/10 flex items-center justify-center border border-[#b75000]/20">
+                <svg className="w-5 h-5 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-white">Delete Project</h3>
+              <h3 className="text-lg font-bold text-sand-1600">Delete Project</h3>
             </div>
-            <p className="text-gray-400 text-sm mb-4">
-              This will permanently delete <strong className="text-white">{selectedProject.name}</strong> and all associated data.
+            <p className="text-sand-1200 text-sm mb-4">
+              This will permanently delete <strong className="text-sand-1600">{selectedProject.name}</strong> and all associated data.
               Type the project name to confirm:
             </p>
             <input
@@ -1652,7 +1652,7 @@ export default function ProjectDetail(): JSX.Element {
               autoFocus
             />
             {deleteError && (
-              <p className="text-red-400 text-sm mb-3">{deleteError}</p>
+              <p className="text-[#b75000] text-sm mb-3">{deleteError}</p>
             )}
             <div className="flex justify-end gap-3">
               <button
@@ -1664,7 +1664,7 @@ export default function ProjectDetail(): JSX.Element {
               <button
                 onClick={handleDeleteProject}
                 disabled={deleteConfirmName !== selectedProject.name}
-                className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-2 rounded-xl hover:bg-red-500/20 transition text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+                className="bg-[#b75000]/10 border border-[#b75000]/30 text-[#b75000] px-4 py-2 hover:bg-[#b75000]/20 transition text-sm font-medium disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 Delete Project
               </button>

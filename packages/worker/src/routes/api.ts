@@ -10,14 +10,12 @@ import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } fr
 import { detectAccountType, deserializeAccountData, detectCodamaAccountType, deserializeCodamaAccountData } from '../services/account-parser'
 import { queryProgramAccounts, normalizeProgramAccountsQuery } from '../services/program-accounts'
 import { generateDocumentation } from '../services/doc-generator'
-import { validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
+import { PROGRAM_ACCOUNTS_SELECTOR_ERROR, hasProgramAccountsSelector, validateProjectInput, validateBuildRequest as validateBuildInput, validatePdaRequest } from '../services/validation'
 import { fetchAnchorIDLFromChain } from '../services/idl-fetcher'
 import { searchProjects } from '../services/search'
 import { autoSeedCategory } from '../services/program-auto-detect'
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-}
+import { getInstructionSummary, getPublicIdlSummary, readIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-summary'
+import { generateId } from '../utils/id'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -395,12 +393,23 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
     if (kv) {
       await kv.put(`idl:${projectId}:latest`, fetchResult.idlJson, { expirationTtl: 86400 * 30 })
     }
-
     // Generate and cache docs
     const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
     const docs = generateDocumentation(fetchResult.idl, programId, apiBaseUrl, projectId, null)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+    try {
+      await writeIdlSummaryCache({
+        kv,
+        projectId,
+        programId,
+        version: 1,
+        idl: fetchResult.idl,
+        docs,
+      })
+    } catch (err) {
+      console.error('[api] Failed to cache IDL summary:', err)
     }
 
     return c.json({
@@ -738,87 +747,16 @@ app.get('/:projectId/instructions', async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch ──────────────────────────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const prog = codamaIdl.program
-      const instructions = prog.instructions.map((ix) => {
-        const userArgs = getCodamaUserArgs(ix)
-        const userAccounts = ix.accounts.filter(
-          (a) => !a.defaultValue || a.defaultValue.kind !== 'publicKeyValueNode'
-        )
-        return {
-          name: ix.name,
-          docs: Array.isArray(ix.docs) ? ix.docs.filter((d) => typeof d === 'string') : [],
-          accountCount: userAccounts.length,
-          argCount: userArgs.length,
-          accounts: userAccounts.map((a) => ({
-            name: a.name,
-            isMut: a.isWritable,
-            isSigner: a.isSigner === true || a.isSigner === 'either',
-            isOptional: !!a.isOptional,
-          })),
-          args: userArgs.map((a) => {
-            const isDefinedType = a.type.kind === 'definedTypeLinkNode'
-            return {
-              name: a.name,
-              type: resolveCodamaType(a.type),
-              isDefinedType,
-              definedTypeName: isDefinedType ? (a.type as any).name : null,
-              fields: a.type.kind === 'structTypeNode'
-                ? (a.type as any).fields.map((f: any) => ({
-                    name: f.name,
-                    type: resolveCodamaType(f.type),
-                    isDefinedType: false,
-                    nestedFields: null,
-                  }))
-                : null,
-            }
-          }),
-        }
-      })
-      return c.json({ projectId, programName: prog.name, programId: data.programId, instructions })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
-    const instructions = data.idl.instructions.map((ix) => ({
-      name: ix.name,
-      docs: Array.isArray(ix.docs) ? ix.docs.filter((d) => typeof d === 'string') : [],
-      accountCount: ix.accounts?.length || 0,
-      argCount: ix.args?.length || 0,
-      accounts: ix.accounts.map((a) => {
-        const norm = normalizeAccountMeta(a)
-        return {
-          name: norm.name,
-          isMut: norm.isMut,
-          isSigner: norm.isSigner,
-          isOptional: norm.isOptional,
-        }
-      }),
-      args: expandInstructionArgs(data.idl, ix.args).map((a) => ({
-        name: a.name,
-        type: a.typeStr,
-        isDefinedType: a.isDefinedType,
-        definedTypeName: a.definedTypeName,
-        fields: a.fields ? a.fields.map((f) => ({
-          name: f.name,
-          type: f.typeStr,
-          isDefinedType: f.isDefinedType,
-          nestedFields: f.nestedFields,
-        })) : null,
-      })),
-    }))
-
     return c.json({
       projectId,
-      programName: data.idl.name,
-      programId: data.programId,
-      instructions,
+      programName: summary.programName,
+      programId: summary.programId,
+      instructions: summary.instructions,
     })
   } catch (err) {
     return c.json({ error: 'Failed to list instructions' }, 500)
@@ -831,86 +769,20 @@ app.get('/:projectId/instructions/:name', async (c) => {
   const instructionName = c.req.param('name')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch ──────────────────────────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const codamaIx = getCodamaInstruction(codamaIdl, instructionName)
-      if (!codamaIx) {
-        return c.json({ error: `Instruction "${instructionName}" not found` }, 404)
-      }
-      const userArgs = getCodamaUserArgs(codamaIx)
-      const userAccounts = codamaIx.accounts.filter(
-        (a) => !a.defaultValue || a.defaultValue.kind !== 'publicKeyValueNode'
-      )
-      return c.json({
-        projectId,
-        programId: data.programId,
-        instruction: {
-          name: codamaIx.name,
-          docs: Array.isArray(codamaIx.docs) ? codamaIx.docs.filter((d) => typeof d === 'string') : [],
-          accounts: userAccounts.map((a) => ({
-            name: a.name,
-            isMut: a.isWritable,
-            isSigner: a.isSigner === true || a.isSigner === 'either',
-            isOptional: !!a.isOptional,
-            pda: null,
-          })),
-          args: userArgs.map((a) => {
-            const isDefinedType = a.type.kind === 'definedTypeLinkNode'
-            return {
-              name: a.name,
-              type: resolveCodamaType(a.type),
-              defaultValue: null,
-              isDefinedType,
-              definedTypeName: isDefinedType ? (a.type as any).name : null,
-              fields: null,
-            }
-          }),
-        },
-      })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
-    const ix = getInstruction(data.idl, instructionName)
-    if (!ix) {
+    const instruction = getInstructionSummary(summary, instructionName)
+    if (!instruction) {
       return c.json({ error: `Instruction "${instructionName}" not found` }, 404)
     }
 
     return c.json({
       projectId,
-      programId: data.programId,
-      instruction: {
-        name: ix.name,
-        docs: Array.isArray(ix.docs) ? ix.docs.filter((d) => typeof d === 'string') : [],
-        accounts: ix.accounts.map((a) => {
-          const norm = normalizeAccountMeta(a)
-          return {
-            name: norm.name,
-            isMut: norm.isMut,
-            isSigner: norm.isSigner,
-            isOptional: norm.isOptional,
-            pda: a.pda || null,
-          }
-        }),
-        args: expandInstructionArgs(data.idl, ix.args).map((a) => ({
-          name: a.name,
-          type: a.typeStr,
-          defaultValue: getDefaultValue(a.type, data.idl),
-          isDefinedType: a.isDefinedType,
-          definedTypeName: a.definedTypeName,
-          fields: a.fields ? a.fields.map((f) => ({
-            name: f.name,
-            type: f.typeStr,
-            isDefinedType: f.isDefinedType,
-            nestedFields: f.nestedFields,
-          })) : null,
-        })),
-      },
+      programId: summary.programId,
+      instruction,
     })
   } catch (err) {
     return c.json({ error: 'Failed to get instruction' }, 500)
@@ -994,25 +866,15 @@ app.get('/:projectId/pda', async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch: list program.pdas ─────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const pdaAccounts = listCodamaPdaAccounts(codamaIdl)
-      return c.json({ projectId, programId: data.programId, pdaAccounts })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
-    const pdaAccounts = listPdaAccounts(data.idl)
-
     return c.json({
       projectId,
-      programId: data.programId,
-      pdaAccounts,
+      programId: summary.programId,
+      pdaAccounts: summary.pdaAccounts,
     })
   } catch (err) {
     return c.json({ error: 'Failed to list PDA accounts', details: (err as Error).message }, 500)
@@ -1213,6 +1075,9 @@ app.post('/:projectId/program-accounts/query', async (c) => {
     if (body.includeRaw !== undefined && typeof body.includeRaw !== 'boolean') {
       errors.push({ field: 'includeRaw', message: 'includeRaw must be a boolean' })
     }
+    if (!hasProgramAccountsSelector(body)) {
+      errors.push({ field: 'filters', message: PROGRAM_ACCOUNTS_SELECTOR_ERROR })
+    }
 
     if (errors.length > 0) {
       return c.json({ error: 'Invalid program account query', details: errors }, 400)
@@ -1257,51 +1122,15 @@ app.get('/:projectId/accounts', async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch ──────────────────────────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const prog = codamaIdl.program
-      const accounts = prog.accounts.map((acc) => {
-        const discInfo = describeCodamaDiscriminator((acc.discriminators || []) as any[])
-        const accFields = resolveCodamaAccountFields(acc as any)
-        return {
-          name: acc.name,
-          kind: accFields.kind,
-          docs: acc.docs || [],
-          discriminator: (acc.discriminators || []).flatMap((d: any) => d.bytes || []),
-          discriminatorKind: discInfo.kind,
-          discriminatorValue: discInfo.value,
-          size: (acc as any).size ?? null,
-          fields: accFields.fields.map((f) => ({ name: f.name, type: f.typeStr, docs: f.docs })),
-        }
-      })
-      return c.json({ projectId, programName: prog.name, accounts })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
-    const accounts = (data.idl.accounts || []).map((acc) => {
-      const resolved = resolveAccountFields(data.idl, acc)
-      return {
-        name: acc.name,
-        kind: resolved.kind,
-        docs: acc.docs || [],
-        discriminator: acc.discriminator || [],
-        fields: resolved.fields.map((f) => ({
-          name: f.name,
-          type: f.typeStr,
-        })),
-      }
-    })
-
     return c.json({
       projectId,
-      programName: data.idl.name,
-      accounts,
+      programName: summary.programName,
+      accounts: summary.accounts,
     })
   } catch (err) {
     return c.json({ error: 'Failed to get accounts' }, 500)
@@ -1313,27 +1142,15 @@ app.get('/:projectId/errors', async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch ──────────────────────────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const prog = codamaIdl.program
-      return c.json({
-        projectId,
-        programName: prog.name,
-        errors: prog.errors.map((e) => ({ name: e.name, code: e.code, msg: e.message })),
-      })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
     return c.json({
       projectId,
-      programName: data.idl.name,
-      errors: data.idl.errors || [],
+      programName: summary.programName,
+      errors: summary.errors,
     })
   } catch (err) {
     return c.json({ error: 'Failed to get errors' }, 500)
@@ -1345,43 +1162,15 @@ app.get('/:projectId/events', async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch ──────────────────────────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const prog = codamaIdl.program
-      const events = (prog.events || []).map((e: any) => ({
-        name: e.name || e.kind || 'unknown',
-        discriminator: [],
-        fields: (e.fields || []).map((f: any) => ({
-          name: f.name,
-          type: f.type ? resolveCodamaType(f.type) : 'unknown',
-        })),
-      }))
-      return c.json({ projectId, programName: prog.name, events })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
-    const events = (data.idl.events || []).map((event) => {
-      const resolved = resolveEventFields(data.idl, event)
-      return {
-        name: event.name,
-        discriminator: event.discriminator || [],
-        fields: resolved.fields.map((f) => ({
-          name: f.name,
-          type: f.typeStr,
-        })),
-      }
-    })
-
     return c.json({
       projectId,
-      programName: data.idl.name,
-      events,
+      programName: summary.programName,
+      events: summary.events,
     })
   } catch (err) {
     return c.json({ error: 'Failed to get events' }, 500)
@@ -1393,44 +1182,15 @@ app.get('/:projectId/types', async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
-    if (!data) {
+    const summary = await getPublicIdlSummary({ db: c.env?.DB, kv: c.env?.IDLS, projectId })
+    if (!summary) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
-    // ── Codama branch ──────────────────────────────────────────────────────────
-    if (detectIDLFormat(data.idl as unknown) === 'codama') {
-      const codamaIdl = data.idl as unknown as CodamaIDL
-      const prog = codamaIdl.program
-      const types = prog.definedTypes.map((t) => ({
-        name: t.name,
-        kind: t.type.kind === 'structTypeNode' ? 'struct' : t.type.kind === 'enumTypeNode' ? 'enum' : 'unknown',
-        fields: t.type.kind === 'structTypeNode'
-          ? (t.type as any).fields.map((f: any) => ({
-              name: f.name,
-              type: resolveCodamaType(f.type),
-            }))
-          : [],
-      }))
-      return c.json({ projectId, programName: prog.name, types })
-    }
-
-    // ── Anchor branch ─────────────────────────────────────────────────────────
-    const types = (data.idl.types || []).map((t) => ({
-      name: t.name,
-      kind: t.type?.kind || 'unknown',
-      fields: (t.type?.fields || [])
-        .filter((f): f is { name: string; type: any } => typeof f === 'object' && f !== null && 'name' in f && 'type' in f)
-        .map((f) => ({
-          name: f.name,
-          type: resolveType(f.type),
-        })),
-    }))
-
     return c.json({
       projectId,
-      programName: data.idl.name,
-      types,
+      programName: summary.programName,
+      types: summary.types,
     })
   } catch (err) {
     return c.json({ error: 'Failed to get types' }, 500)
@@ -1471,6 +1231,34 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
       return c.json({ projectId, docs: customDocs, isCustom: true })
     }
 
+    if (!refresh && project.is_public) {
+      const summary = await readIdlSummaryCache({
+        kv: c.env?.IDLS,
+        projectId,
+        programId: project.program_id as string,
+      })
+      if (summary?.docs) {
+        if (format === 'md' || format === 'markdown') {
+          return c.text(summary.docs.full)
+        }
+        return c.json({
+          projectId,
+          docs: summary.docs.full,
+          isCustom: false,
+          source: 'summary-cache',
+          sections: {
+            overview: summary.docs.overview,
+            instructions: summary.docs.instructions,
+            accounts: summary.docs.accounts,
+            programAccounts: summary.docs.programAccounts,
+            types: summary.docs.types,
+            errors: summary.docs.errors,
+            events: summary.docs.events,
+          },
+        })
+      }
+    }
+
     // Try cache first for auto-generated docs unless refresh is requested
     if (!refresh && c.env?.CACHE) {
       const cached = await c.env.CACHE.get(`docs:${projectId}`)
@@ -1484,7 +1272,7 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
 
     const result = await db
       ?.prepare(
-        'SELECT iv.idl_json, iv.cpi_md, p.program_id, p.name FROM idl_versions iv JOIN projects p ON iv.project_id = p.id WHERE iv.project_id = ? ORDER BY iv.version DESC LIMIT 1'
+        'SELECT iv.idl_json, iv.cpi_md, iv.version, p.program_id, p.name FROM idl_versions iv JOIN projects p ON iv.project_id = p.id WHERE iv.project_id = ? ORDER BY iv.version DESC LIMIT 1'
       )
       .bind(projectId)
       .first()
@@ -1506,6 +1294,20 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
     // Cache the result
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+    if (project.is_public) {
+      try {
+        await writeIdlSummaryCache({
+          kv: c.env?.IDLS,
+          projectId,
+          programId: result.program_id as string,
+          version: (result as any).version as number | undefined,
+          idl,
+          docs,
+        })
+      } catch (err) {
+        console.error('[api] Failed to cache IDL summary docs:', err)
+      }
     }
 
     if (format === 'md' || format === 'markdown') {

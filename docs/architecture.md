@@ -22,7 +22,7 @@ The worker uses:
 - Cloudflare D1 for relational data
 - Cloudflare KV for IDL and docs cache
 - Cloudflare AI for optional categorization and analysis
-- Web Crypto APIs for JWT handling
+- Web Crypto API for JWT handling
 - Streamable HTTP MCP transport for `/mcp`
 
 ## Frontend

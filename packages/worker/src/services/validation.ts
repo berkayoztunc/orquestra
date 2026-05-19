@@ -14,6 +14,9 @@ export interface ValidationResult<T> {
   errors?: ValidationError[]
 }
 
+export const PROGRAM_ACCOUNTS_SELECTOR_ERROR =
+  'Program account queries require at least one selector: accountType, dataSize, memcmp, fieldFilters, paginationKey, or changedSinceSlot'
+
 // ----- Primitive validators -----
 
 export function isNonEmptyString(value: unknown): value is string {
@@ -38,6 +41,27 @@ export function isObject(value: unknown): value is Record<string, unknown> {
 
 export function isArray(value: unknown): value is unknown[] {
   return Array.isArray(value)
+}
+
+// ----- Program account query selector validation -----
+
+export interface ProgramAccountsSelectorInput {
+  accountType?: unknown
+  dataSize?: unknown
+  memcmp?: unknown
+  fieldFilters?: unknown
+  paginationKey?: unknown
+  changedSinceSlot?: unknown
+}
+
+export function hasProgramAccountsSelector(input: ProgramAccountsSelectorInput): boolean {
+  if (isNonEmptyString(input.accountType)) return true
+  if (Number.isInteger(input.dataSize) && (input.dataSize as number) > 0) return true
+  if (Array.isArray(input.memcmp) && input.memcmp.length > 0) return true
+  if (Array.isArray(input.fieldFilters) && input.fieldFilters.length > 0) return true
+  if (isNonEmptyString(input.paginationKey)) return true
+  if (Number.isInteger(input.changedSinceSlot) && (input.changedSinceSlot as number) >= 0) return true
+  return false
 }
 
 // ----- Project validation -----

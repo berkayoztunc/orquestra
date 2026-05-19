@@ -8,27 +8,41 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Orquestra - Connect Solana Program with MCP</title>
+    <title>Orquestra - API and MCP layer for Solana programs</title>
     <meta name="description" content="Connect your Solana program with MCP effortlessly" />
-    <meta property="og:title" content="Orquestra - Connect Solana Program with MCP" />
-    <meta property="og:description" content="Upload your Anchor IDL. Get a REST API, AI docs, and an MCP server — in 30 seconds. No backend code, no SDK, no infrastructure setup." />
+    <meta property="og:title" content="Orquestra - API and MCP layer for Solana programs" />
+    <meta property="og:description" content="Upload your Anchor IDL. Get a API, AI docs, and an MCP server — in 30 seconds. No backend code, no SDK, no infrastructure setup." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/banner.png" />
-    <meta name="theme-color" content="#14F195" />
+    <meta name="theme-color" content="#faf9f7" />
     <meta property="og:url" content="https://orquestra.dev/">
         
     <!-- Twitter Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
     <meta property="twitter:domain" content="orquestra.dev">
     <meta property="twitter:url" content="https://orquestra.dev">
-    <meta name="twitter:title" content="Orquestra - Connect Solana Program with MCP">
-    <meta name="twitter:description" content="Upload your Anchor IDL. Get a REST API, AI docs, and an MCP server — in 30 seconds. No backend code, no SDK, no infrastructure setup.">
+    <meta name="twitter:title" content="Orquestra - API and MCP layer for Solana programs">
+    <meta name="twitter:description" content="Upload your Anchor IDL. Get a API, AI docs, and an MCP server — in 30 seconds. No backend code, no SDK, no infrastructure setup.">
     <meta name="twitter:image" content="/banner.png">
 
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script>
+      (function () {
+        try {
+          var storedTheme = localStorage.getItem('orquestra-theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = storedTheme ? storedTheme === 'dark' : prefersDark;
+          document.documentElement.classList.toggle('dark', isDark);
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) themeColor.setAttribute('content', isDark ? '#171614' : '#faf9f7');
+        } catch (error) {
+          document.documentElement.style.colorScheme = 'light';
+        }
+      })();
+    </script>
 
   </head>
-  <body class="bg-dark-900 text-gray-100">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

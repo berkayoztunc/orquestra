@@ -344,10 +344,16 @@ function encodeCodamaValue(value: any, type: CodamaTypeNode, idl?: CodamaIDL): n
         return [...out]
       }
       // Generic: encode inner value, zero-pad or truncate to fixed size
-      const innerBytes = new Uint8Array(encodeCodamaValue(value, inner))
+      const innerBytes = new Uint8Array(encodeCodamaValue(value, inner, idl))
       const out = new Uint8Array(size)
       out.set(innerBytes.slice(0, size))
       return [...out]
+    }
+    case 'definedTypeLinkNode': {
+      if (!idl) return []
+      const typeDef = idl.program.definedTypes.find((t) => t.name === type.name)
+      if (!typeDef) return []
+      return encodeCodamaValue(value, typeDef.type as CodamaTypeNode, idl)
     }
     case 'optionTypeNode':
     case 'zeroableOptionTypeNode': {

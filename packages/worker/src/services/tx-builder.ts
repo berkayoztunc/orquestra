@@ -296,7 +296,7 @@ function listInstructionNames(idl: AnchorIDL): string {
 
 // ─── Codama encoding helpers ──────────────────────────────────────────────────
 
-function encodeCodamaValue(value: any, type: CodamaTypeNode): number[] {
+function encodeCodamaValue(value: any, type: CodamaTypeNode, idl?: CodamaIDL): number[] {
   switch (type.kind) {
     case 'numberTypeNode': {
       switch (type.format) {
@@ -333,34 +333,55 @@ function encodeCodamaValue(value: any, type: CodamaTypeNode): number[] {
       const len = bytes.length
       return [len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff, (len >> 24) & 0xff, ...bytes]
     }
+    case 'fixedSizeTypeNode': {
+      const size = type.size
+      const inner = type.type
+      if (inner.kind === 'stringTypeNode') {
+        const enc = new TextEncoder()
+        const strBytes = enc.encode(String(value ?? ''))
+        const out = new Uint8Array(size)
+        out.set(strBytes.slice(0, size))
+        return [...out]
+      }
+      const innerBytes = new Uint8Array(encodeCodamaValue(value, inner, idl))
+      const out = new Uint8Array(size)
+      out.set(innerBytes.slice(0, size))
+      return [...out]
+    }
+    case 'definedTypeLinkNode': {
+      if (!idl) return []
+      const typeDef = idl.program.definedTypes.find((t) => t.name === type.name)
+      if (!typeDef) return []
+      return encodeCodamaValue(value, typeDef.type as CodamaTypeNode, idl)
+    }
     case 'optionTypeNode':
     case 'zeroableOptionTypeNode': {
       if (value === null || value === undefined) return [0]
-      return [1, ...encodeCodamaValue(value, type.item)]
+      return [1, ...encodeCodamaValue(value, type.item, idl)]
     }
     case 'arrayTypeNode': {
       const arr = Array.isArray(value) ? value : []
       if (type.count.kind === 'fixedCountNode') {
         const result: number[] = []
-        for (let i = 0; i < type.count.value; i++) result.push(...encodeCodamaValue(arr[i] ?? 0, type.item))
+        for (let i = 0; i < type.count.value; i++) result.push(...encodeCodamaValue(arr[i] ?? 0, type.item, idl))
         return result
       }
       // prefixed / remainder → length-prefixed vec
       const len = arr.length
       const result = [len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff, (len >> 24) & 0xff]
-      for (const item of arr) result.push(...encodeCodamaValue(item, type.item))
+      for (const item of arr) result.push(...encodeCodamaValue(item, type.item, idl))
       return result
     }
     case 'tupleTypeNode': {
       const arr = Array.isArray(value) ? value : []
       const result: number[] = []
-      type.items.forEach((t: CodamaTypeNode, i: number) => result.push(...encodeCodamaValue(arr[i], t)))
+      type.items.forEach((t: CodamaTypeNode, i: number) => result.push(...encodeCodamaValue(arr[i], t, idl)))
       return result
     }
     case 'structTypeNode': {
       const obj = (typeof value === 'object' && value !== null) ? value : {}
       const result: number[] = []
-      for (const field of type.fields) result.push(...encodeCodamaValue(obj[field.name], field.type))
+      for (const field of type.fields) result.push(...encodeCodamaValue(obj[field.name], field.type, idl))
       return result
     }
     default: return []
@@ -370,10 +391,11 @@ function encodeCodamaValue(value: any, type: CodamaTypeNode): number[] {
 function encodeCodamaArgs(
   args: Record<string, any>,
   argDefs: CodamaInstructionArgument[],
+  idl: CodamaIDL,
 ): Uint8Array {
   const buffers: number[] = []
   for (const argDef of argDefs) {
-    buffers.push(...encodeCodamaValue(args[argDef.name], argDef.type))
+    buffers.push(...encodeCodamaValue(args[argDef.name], argDef.type, idl))
   }
   return new Uint8Array(buffers)
 }
@@ -552,7 +574,7 @@ async function buildCodamaTx(
   }
 
   // Encode args
-  const encodedArgs = encodeCodamaArgs(request.args, userArgs)
+  const encodedArgs = encodeCodamaArgs(request.args, userArgs, idl)
 
   // Combine discriminator + args
   const instructionData = new Uint8Array(discriminator.length + encodedArgs.length)

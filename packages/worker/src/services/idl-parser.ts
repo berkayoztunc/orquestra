@@ -13,6 +13,7 @@ export type CodamaTypeNode =
   | { kind: 'booleanTypeNode' }
   | { kind: 'stringTypeNode'; encoding?: string }
   | { kind: 'bytesTypeNode' }
+  | { kind: 'fixedSizeTypeNode'; size: number; type: CodamaTypeNode }
   | { kind: 'definedTypeLinkNode'; name: string }
   | { kind: 'optionTypeNode'; item: CodamaTypeNode; prefix?: CodamaTypeNode }
   | { kind: 'zeroableOptionTypeNode'; item: CodamaTypeNode }
@@ -201,6 +202,7 @@ export function resolveCodamaType(type: CodamaTypeNode | undefined | null): stri
       if (type.count.kind === 'remainderCountNode') return `[${inner}]`
       return `Vec<${inner}>`
     }
+    case 'fixedSizeTypeNode': return `fixedSize(${resolveCodamaType(type.type)}, ${type.size})`
     case 'tupleTypeNode': return `(${type.items.map(resolveCodamaType).join(', ')})`
     case 'mapTypeNode': return `Map<${resolveCodamaType(type.key)}, ${resolveCodamaType(type.value)}>`
     case 'setTypeNode': return `Set<${resolveCodamaType(type.item)}>`

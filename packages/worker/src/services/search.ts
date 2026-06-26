@@ -38,8 +38,37 @@ interface FTSRow {
 }
 
 /**
- * Determine which field most likely matched the search term
- * by checking which columns contain the query string.
+ * Escape a single token for use inside an FTS5 quoted phrase: "token"*
+ * Only double-quotes need escaping within quoted terms.
+ */
+function escapeToken(token: string): string {
+  return token.replace(/"/g, '""')
+}
+
+/**
+ * Build an FTS5 query from one or more tokens.
+ *
+ * Each token must appear in at least one text column (AND between tokens).
+ * Uses "token"* form to avoid FTS5 operator conflicts with special chars
+ * like hyphens, colons, and asterisks that appear in real program names.
+ *
+ * Column order in projects_fts:
+ *   project_id(UNINDEXED=0), name(10), description(2), category(5), tags(8), aliases(8)
+ */
+function buildFtsQuery(tokens: string[]): string {
+  return tokens
+    .map((t) => {
+      const e = escapeToken(t)
+      return (
+        `(name:"${e}"* OR aliases:"${e}"* OR tags:"${e}"* OR ` +
+        `category:"${e}"* OR description:"${e}"*)`
+      )
+    })
+    .join(' AND ')
+}
+
+/**
+ * Determine which field most likely matched the search term.
  */
 function detectMatchType(row: FTSRow, query: string): SearchResult['match_type'] {
   const q = query.toLowerCase()
@@ -51,7 +80,8 @@ function detectMatchType(row: FTSRow, query: string): SearchResult['match_type']
 }
 
 /**
- * Search projects with full-text search and relevance ranking
+ * Search projects with full-text search and relevance ranking.
+ * Falls back to LIKE search if FTS fails or FTS index is unavailable.
  */
 export async function searchProjects(
   db: D1Database,
@@ -60,26 +90,25 @@ export async function searchProjects(
   offset: number = 0,
   userId?: string
 ): Promise<{ results: SearchResult[]; total: number }> {
-  // Escape FTS5 special characters: " : * -
-  const escapedQuery = searchQuery
-    .replace(/"/g, '""')
-    .replace(/:/g, '\\:')
-    .replace(/\*/g, '\\*')
-    .replace(/-/g, '\\-')
+  const tokens = searchQuery
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(escapeToken)
 
-  // Build FTS5 query with field-specific matching
-  // Use OR to match any field, but rank by specificity
-  const ftsQuery = `
-    (name:${escapedQuery}* OR tags:${escapedQuery}* OR aliases:${escapedQuery}* OR category:${escapedQuery}* OR description:${escapedQuery}*)
-  `
+  if (tokens.length === 0) {
+    return { results: [], total: 0 }
+  }
+
+  const ftsQuery = buildFtsQuery(tokens)
 
   try {
-    // Get total count
+    // BM25 weights: project_id(0), name(10), description(2), category(5), tags(8), aliases(8)
     const countSQL = userId
-      ? `SELECT COUNT(*) as count FROM projects_fts 
+      ? `SELECT COUNT(*) as count FROM projects_fts
          JOIN projects p ON projects_fts.project_id = p.id
          WHERE projects_fts MATCH ? AND (p.is_public = 1 OR p.user_id = ?)`
-      : `SELECT COUNT(*) as count FROM projects_fts 
+      : `SELECT COUNT(*) as count FROM projects_fts
          JOIN projects p ON projects_fts.project_id = p.id
          WHERE projects_fts MATCH ? AND p.is_public = 1`
 
@@ -87,11 +116,9 @@ export async function searchProjects(
     const countResult = await db.prepare(countSQL).bind(...countParams).first<{ count: number }>()
     const total = countResult?.count || 0
 
-    // Get ranked results using BM25 with per-column weights:
-    // column order in FTS5: project_id(0), name(10), description(2), category(5), tags(8), aliases(8)
     const resultSQL = userId
       ? `
-        SELECT 
+        SELECT
           bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
           p.id,
           p.name,
@@ -113,7 +140,7 @@ export async function searchProjects(
         LIMIT ? OFFSET ?
       `
       : `
-        SELECT 
+        SELECT
           bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
           p.id,
           p.name,
@@ -135,9 +162,7 @@ export async function searchProjects(
         LIMIT ? OFFSET ?
       `
 
-    const resultParams = userId
-      ? [ftsQuery, userId, limit, offset]
-      : [ftsQuery, limit, offset]
+    const resultParams = userId ? [ftsQuery, userId, limit, offset] : [ftsQuery, limit, offset]
 
     const rows = await db.prepare(resultSQL).bind(...resultParams).all<FTSRow>()
     const results = (rows.results || []).map((row) => ({
@@ -149,14 +174,13 @@ export async function searchProjects(
     return { results, total }
   } catch (error) {
     console.error('FTS search error:', error)
-    // Fallback to LIKE search if FTS fails
     return fallbackLikeSearch(db, searchQuery, limit, offset, userId)
   }
 }
 
 /**
- * Fallback to simple LIKE search if FTS is unavailable
- * (e.g., during migration or if FTS table not created)
+ * Fallback to LIKE search when FTS is unavailable.
+ * Covers all text fields: name, description, category, aliases, tags.
  */
 async function fallbackLikeSearch(
   db: D1Database,
@@ -168,26 +192,79 @@ async function fallbackLikeSearch(
   const searchTerm = `%${searchQuery.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
 
   const countSQL = userId
-    ? "SELECT COUNT(*) as count FROM projects WHERE (is_public = 1 OR user_id = ?) AND (LOWER(name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(description,'')) LIKE LOWER(?) ESCAPE '\\')"
-    : "SELECT COUNT(*) as count FROM projects WHERE is_public = 1 AND (LOWER(name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(description,'')) LIKE LOWER(?) ESCAPE '\\')"
+    ? `SELECT COUNT(*) as count FROM projects p
+       LEFT JOIN program_categories pc ON p.id = pc.project_id
+       WHERE (p.is_public = 1 OR p.user_id = ?)
+         AND (
+           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+         )`
+    : `SELECT COUNT(*) as count FROM projects p
+       LEFT JOIN program_categories pc ON p.id = pc.project_id
+       WHERE p.is_public = 1
+         AND (
+           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+         )`
 
-  const countParams = userId ? [userId, searchTerm, searchTerm] : [searchTerm, searchTerm]
+  const countParams = userId
+    ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
+    : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
+
   const countResult = await db.prepare(countSQL).bind(...countParams).first<{ count: number }>()
   const total = countResult?.count || 0
 
   const resultSQL = userId
-    ? "SELECT p.*, u.username, u.avatar_url, CAST(0 AS INTEGER) as rank, '' as category, '' as tags, '' as aliases FROM projects p JOIN users u ON p.user_id = u.id WHERE (p.is_public = 1 OR p.user_id = ?) AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT ? OFFSET ?"
-    : "SELECT p.*, u.username, u.avatar_url, CAST(0 AS INTEGER) as rank, '' as category, '' as tags, '' as aliases FROM projects p JOIN users u ON p.user_id = u.id WHERE p.is_public = 1 AND (LOWER(p.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\') ORDER BY p.updated_at DESC LIMIT ? OFFSET ?"
+    ? `SELECT p.*, u.username, u.avatar_url,
+              COALESCE(pc.category, '') as category,
+              COALESCE(pc.tags, '') as tags,
+              COALESCE(pc.aliases, '') as aliases
+       FROM projects p
+       JOIN users u ON p.user_id = u.id
+       LEFT JOIN program_categories pc ON p.id = pc.project_id
+       WHERE (p.is_public = 1 OR p.user_id = ?)
+         AND (
+           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+         )
+       ORDER BY p.updated_at DESC
+       LIMIT ? OFFSET ?`
+    : `SELECT p.*, u.username, u.avatar_url,
+              COALESCE(pc.category, '') as category,
+              COALESCE(pc.tags, '') as tags,
+              COALESCE(pc.aliases, '') as aliases
+       FROM projects p
+       JOIN users u ON p.user_id = u.id
+       LEFT JOIN program_categories pc ON p.id = pc.project_id
+       WHERE p.is_public = 1
+         AND (
+           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+         )
+       ORDER BY p.updated_at DESC
+       LIMIT ? OFFSET ?`
 
   const resultParams = userId
-    ? [userId, searchTerm, searchTerm, limit, offset]
-    : [searchTerm, searchTerm, limit, offset]
+    ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
+    : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
 
   const rows = await db.prepare(resultSQL).bind(...resultParams).all<FTSRow>()
   const results = (rows.results || []).map((row) => ({
     ...row,
     relevance_score: 0,
-    match_type: 'name' as const,
+    match_type: detectMatchType(row, searchQuery),
   }))
 
   return { results, total }

@@ -1,4 +1,4 @@
-import { parseIDL } from './idl-parser'
+import { parseIDL, normalizeAccountMeta } from './idl-parser'
 
 export const DEFAULT_AI_ANALYSIS_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
 
@@ -25,6 +25,8 @@ export interface AIDetailedAnalysis {
   accountsOverview: string[]
   risks: string[]
   integrationNotes: string[]
+  instructionFlows?: Array<{ name: string; steps: string[]; description: string }>
+  crossProgramAccounts?: Array<{ account: string; program: string; note: string }>
 }
 
 interface GenerateAIAnalysisInput {
@@ -53,6 +55,40 @@ function normalizeStringArray(value: unknown, max = 8): string[] {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, max)
+}
+
+function normalizeInstructionFlows(value: unknown): Array<{ name: string; steps: string[]; description: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      const name = typeof row.name === 'string' ? row.name.trim() : ''
+      const description = typeof row.description === 'string' ? row.description.trim() : ''
+      const steps = Array.isArray(row.steps)
+        ? row.steps.filter((s): s is string => typeof s === 'string').map((s) => s.trim()).filter(Boolean)
+        : []
+      if (!name || !steps.length) return null
+      return { name, steps, description }
+    })
+    .filter((item): item is { name: string; steps: string[]; description: string } => item !== null)
+    .slice(0, 6)
+}
+
+function normalizeCrossProgramAccounts(value: unknown): Array<{ account: string; program: string; note: string }> {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      const account = typeof row.account === 'string' ? row.account.trim() : ''
+      const program = typeof row.program === 'string' ? row.program.trim() : ''
+      const note = typeof row.note === 'string' ? row.note.trim() : ''
+      if (!account || !program) return null
+      return { account, program, note }
+    })
+    .filter((item): item is { account: string; program: string; note: string } => item !== null)
+    .slice(0, 10)
 }
 
 function normalizeKeyInstructions(value: unknown): Array<{ name: string; purpose: string }> {
@@ -89,6 +125,25 @@ function extractJsonObject(raw: string): Record<string, unknown> | null {
   }
 }
 
+function extractCrossProgramHints(idl: Record<string, any>): Array<{ instruction: string; account: string; address: string }> {
+  const instructions = Array.isArray(idl.instructions)
+    ? idl.instructions
+    : Array.isArray(idl.program?.instructions)
+      ? idl.program.instructions
+      : []
+  const results: Array<{ instruction: string; account: string; address: string }> = []
+  for (const ix of instructions) {
+    if (!ix?.name || !Array.isArray(ix.accounts)) continue
+    for (const acc of ix.accounts) {
+      const norm = normalizeAccountMeta(acc)
+      if (norm.address) {
+        results.push({ instruction: ix.name, account: norm.name, address: norm.address })
+      }
+    }
+  }
+  return results.slice(0, 20)
+}
+
 function getInstructionNames(idl: Record<string, any>): string[] {
   const instructions = Array.isArray(idl.instructions)
     ? idl.instructions
@@ -122,6 +177,8 @@ function fallbackDetailedAnalysis(
     accountsOverview: [],
     risks: [],
     integrationNotes: [],
+    instructionFlows: [],
+    crossProgramAccounts: [],
   }
 }
 
@@ -148,6 +205,8 @@ function normalizeDetailedAnalysis(
     accountsOverview: normalizeStringArray(parsedJson.accountsOverview),
     risks: normalizeStringArray(parsedJson.risks),
     integrationNotes: normalizeStringArray(parsedJson.integrationNotes),
+    instructionFlows: normalizeInstructionFlows(parsedJson.instructionFlows),
+    crossProgramAccounts: normalizeCrossProgramAccounts(parsedJson.crossProgramAccounts),
   }
 }
 
@@ -165,6 +224,8 @@ function buildPrompt(input: GenerateAIAnalysisInput): { system: string; user: st
     instructions: instructionNames,
   }
 
+  const crossProgramHints = extractCrossProgramHints(input.idl)
+
   const system = `You are an expert Solana smart contract analyst. Analyze uploaded Anchor or Codama IDLs for developer documentation.
 
 Return only a JSON object with this exact shape:
@@ -180,20 +241,36 @@ Return only a JSON object with this exact shape:
   "keyInstructions": [{"name":"instructionName","purpose":"what it likely does"}],
   "accountsOverview": ["important account/storage concepts"],
   "risks": ["security or integration risks visible from the IDL"],
-  "integrationNotes": ["practical notes for API/agent users"]
+  "integrationNotes": ["practical notes for API/agent users"],
+  "instructionFlows": [
+    {
+      "name": "Flow name describing the user action",
+      "steps": ["1. instructionName — what it does", "2. nextInstruction — what it does"],
+      "description": "Why these steps must happen in this order"
+    }
+  ],
+  "crossProgramAccounts": [
+    {
+      "account": "accountNameInIDL",
+      "program": "ExternalProgramId",
+      "note": "What this external program provides"
+    }
+  ]
 }
 
+For instructionFlows: identify logical sequences of instructions a developer must call in order to complete a real action (e.g. create → initialize → deposit). Only include flows with 2+ steps. Max 6 flows.
+For crossProgramAccounts: identify accounts that reference external program addresses (provided in hints below). Max 10 entries. Omit if none exist.
 Do not invent external facts. If purpose is ambiguous, say what can be inferred from names and structure.`
 
   const user = `Project: ${input.projectName}
 IDL summary:
 ${JSON.stringify(idlSummary, null, 2)}
 
-Generated llms.txt:
-${truncate(input.docsText, 14_000)}
+${crossProgramHints.length ? `Cross-program account hints (accounts with fixed external program addresses):\n${JSON.stringify(crossProgramHints, null, 2)}\n\n` : ''}Generated llms.txt:
+${truncate(input.docsText, 13_000)}
 
 Raw IDL excerpt:
-${truncate(JSON.stringify(input.idl), 8_000)}`
+${truncate(JSON.stringify(input.idl), 7_000)}`
 
   return { system, user }
 }
@@ -211,7 +288,7 @@ export async function generateAndStoreAIAnalysis(input: GenerateAIAnalysisInput)
         { role: 'user', content: prompt.user },
       ],
       response_format: { type: 'json_object' },
-      max_tokens: 1600,
+      max_tokens: 2400,
       temperature: 0.2,
     })
     raw = (response as { response?: string })?.response || ''

@@ -11,9 +11,9 @@ import { cn } from '@/ui/cn'
 const navItems = [
   { to: '/', label: 'Home' },
   { to: '/explorer', label: 'Explorer' },
+  { to: '/updates', label: 'Updates' },
   { to: '/analytics', label: 'Analytics' },
   { to: '/docs/api', label: 'Docs' },
-
 ]
 
 const docsItems = [

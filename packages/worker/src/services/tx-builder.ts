@@ -333,6 +333,22 @@ function encodeCodamaValue(value: any, type: CodamaTypeNode): number[] {
       const len = bytes.length
       return [len & 0xff, (len >> 8) & 0xff, (len >> 16) & 0xff, (len >> 24) & 0xff, ...bytes]
     }
+    case 'fixedSizeTypeNode': {
+      const size = type.size
+      const inner = type.type
+      if (inner.kind === 'stringTypeNode') {
+        const enc = new TextEncoder()
+        const strBytes = enc.encode(String(value ?? ''))
+        const out = new Uint8Array(size)
+        out.set(strBytes.slice(0, size))
+        return [...out]
+      }
+      // Generic: encode inner value, zero-pad or truncate to fixed size
+      const innerBytes = new Uint8Array(encodeCodamaValue(value, inner))
+      const out = new Uint8Array(size)
+      out.set(innerBytes.slice(0, size))
+      return [...out]
+    }
     case 'optionTypeNode':
     case 'zeroableOptionTypeNode': {
       if (value === null || value === undefined) return [0]

@@ -58,6 +58,13 @@ export async function fetchCurrentUser() {
   return res.data.user
 }
 
+// ─── Updates ─────────────────────────────────────────
+
+export async function listUpdates(params?: { page?: number; limit?: number; project_id?: string }) {
+  const res = await api.get('/updates', { params })
+  return res.data
+}
+
 // ─── Projects ────────────────────────────────────────
 
 export async function listProjects(params?: {

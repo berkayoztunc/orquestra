@@ -38,6 +38,9 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 [ai]
 binding = "AI"
 
+[triggers]
+crons = ["0 0 * * *"]
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -61,6 +64,9 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 
 [env.production.ai]
 binding = "AI"
+
+[env.production.triggers]
+crons = ["0 0 * * *"]
 
 # Environment: Development
 [env.development]

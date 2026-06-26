@@ -15,6 +15,7 @@ import MCP from '@/pages/MCP'
 import API from '@/pages/API'
 import Analytics from '@/pages/Analytics'
 import Lists from '@/pages/Lists'
+import Updates from '@/pages/Updates'
 import { ToastProvider } from '@/components/Toast'
 import { useAuthStore } from '@/store/auth'
 
@@ -38,6 +39,7 @@ function App(): JSX.Element {
             <Route path="/auth/error" element={<AuthError />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/lists" element={<Lists />} />
+            <Route path="/updates" element={<Updates />} />
             <Route path="*" element={<NotFound />} />
           </Route>
           <Route element={<DocsShell />}>

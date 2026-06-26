@@ -198,6 +198,62 @@ app.get('/stats', async (c) => {
   }
 })
 
+// List on-chain IDL update log entries (detected by daily cron)
+app.get('/updates', async (c) => {
+  const rawPage = parseInt(c.req.query('page') || '1', 10)
+  const rawLimit = parseInt(c.req.query('limit') || '20', 10)
+  const projectId = c.req.query('project_id') || ''
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20
+  const offset = (page - 1) * limit
+
+  try {
+    const db = c.env?.DB
+
+    const whereParts: string[] = []
+    const params: (string | number)[] = []
+
+    if (projectId) {
+      whereParts.push('ul.project_id = ?')
+      params.push(projectId)
+    }
+
+    const where = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : ''
+
+    const countResult = await db!
+      .prepare(`SELECT COUNT(*) as count FROM update_logs ul ${where}`)
+      .bind(...params)
+      .first() as { count: number } | null
+
+    const total = countResult?.count || 0
+
+    const updates = await db!
+      .prepare(
+        `SELECT ul.id, ul.project_id, ul.program_id, ul.program_name,
+                ul.old_version, ul.new_version, ul.old_hash, ul.new_hash, ul.detected_at
+         FROM update_logs ul
+         ${where}
+         ORDER BY ul.detected_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .bind(...params, limit, offset)
+      .all()
+
+    return c.json({
+      updates: updates?.results || [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
+  } catch (err) {
+    console.error('Updates list error:', err)
+    return c.json({ error: 'Failed to list updates' }, 500)
+  }
+})
+
 // List all public projects (+ user's private projects if authenticated)
 // Uses full-text search with relevance ranking
 app.get('/projects', optionalAuthMiddleware, async (c) => {

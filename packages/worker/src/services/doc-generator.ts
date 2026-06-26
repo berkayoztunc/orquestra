@@ -222,15 +222,27 @@ function generateInstructionsDocs(idl: AnchorIDL, apiBaseUrl: string, projectSlu
 
     // Accounts table
     if (ix.accounts?.length) {
+      const hasCrossProgram = ix.accounts.some((acc: any) => normalizeAccountMeta(acc).address)
       md += '#### Accounts\n\n'
-      md += '| Name | Writable | Signer | Optional | PDA |\n'
-      md += '|------|----------|--------|----------|-----|\n'
-
-      for (const acc of ix.accounts) {
-        const norm = normalizeAccountMeta(acc)
-        const pdaSeeds = extractPDASeeds(acc)
-        const pdaStr = pdaSeeds.length ? pdaSeeds.join(', ') : '-'
-        md += `| \`${norm.name}\` | ${norm.isMut ? '✅' : '❌'} | ${norm.isSigner ? '✅' : '❌'} | ${norm.isOptional ? '✅' : '❌'} | ${pdaStr} |\n`
+      if (hasCrossProgram) {
+        md += '| Name | Writable | Signer | Optional | PDA | Source Program |\n'
+        md += '|------|----------|--------|----------|-----|----------------|\n'
+        for (const acc of ix.accounts) {
+          const norm = normalizeAccountMeta(acc)
+          const pdaSeeds = extractPDASeeds(acc)
+          const pdaStr = pdaSeeds.length ? pdaSeeds.join(', ') : '-'
+          const srcProg = norm.address ? `\`${norm.address}\`` : '-'
+          md += `| \`${norm.name}\` | ${norm.isMut ? '✅' : '❌'} | ${norm.isSigner ? '✅' : '❌'} | ${norm.isOptional ? '✅' : '❌'} | ${pdaStr} | ${srcProg} |\n`
+        }
+      } else {
+        md += '| Name | Writable | Signer | Optional | PDA |\n'
+        md += '|------|----------|--------|----------|-----|\n'
+        for (const acc of ix.accounts) {
+          const norm = normalizeAccountMeta(acc)
+          const pdaSeeds = extractPDASeeds(acc)
+          const pdaStr = pdaSeeds.length ? pdaSeeds.join(', ') : '-'
+          md += `| \`${norm.name}\` | ${norm.isMut ? '✅' : '❌'} | ${norm.isSigner ? '✅' : '❌'} | ${norm.isOptional ? '✅' : '❌'} | ${pdaStr} |\n`
+        }
       }
       md += '\n'
     }

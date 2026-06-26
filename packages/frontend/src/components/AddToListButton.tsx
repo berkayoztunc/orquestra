@@ -82,8 +82,8 @@ export default function AddToListButton({ projectId, variant = 'default' }: AddT
 
   const label = variant === 'header' ? 'Save' : lists.length > 1 ? 'Add to list' : 'Save'
   const buttonClassName = variant === 'header'
-    ? 'inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-200 transition-all duration-200 hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-50'
-    : 'flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-primary transition-colors border border-white/10 hover:border-primary/40 rounded-lg px-2 py-1 bg-transparent hover:bg-primary/5 disabled:opacity-50'
+    ? 'inline-flex h-10 items-center justify-center gap-2 border border-border-low bg-sand-100 px-4 text-sm font-medium text-sand-1400 transition-all duration-200 hover:border-border-medium hover:bg-sand-200 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 disabled:cursor-not-allowed disabled:opacity-50'
+    : 'flex items-center gap-1 text-xs font-medium text-sand-1100 hover:text-sand-1600 transition-colors border border-border-low hover:border-border-medium px-2 py-1 bg-transparent hover:bg-sand-100 disabled:opacity-50'
 
   return (
     <div ref={dropdownRef} className="relative" onClick={(e) => e.stopPropagation()}>
@@ -94,7 +94,7 @@ export default function AddToListButton({ projectId, variant = 'default' }: AddT
         title="Add to list"
       >
         {loading ? (
-          <div className="w-3.5 h-3.5 rounded-full border border-primary/30 border-t-primary animate-spin" />
+          <div className="w-3.5 h-3.5 border border-border-low border-t-sand-1600 animate-spin" />
         ) : (
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -104,20 +104,20 @@ export default function AddToListButton({ projectId, variant = 'default' }: AddT
       </button>
 
       {open && lists.length > 1 && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-dark-800 border border-white/10 rounded-xl shadow-xl overflow-hidden">
-          <div className="px-3 py-2 border-b border-white/5">
-            <p className="text-xs text-gray-500 font-medium">Add to list</p>
+        <div className="absolute right-0 top-full mt-1 z-50 w-48 bg-bg1 border border-border-low shadow-xl overflow-hidden">
+          <div className="px-3 py-2 border-b border-border-low">
+            <p className="text-xs text-sand-1100 font-medium">Add to list</p>
           </div>
           <div className="max-h-48 overflow-y-auto">
             {lists.map((list) => (
               <button
                 key={list.id}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleAdd(list.id) }}
-                className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors text-left"
+                className="w-full flex items-center justify-between px-3 py-2 text-sm text-sand-1400 hover:text-sand-1600 hover:bg-sand-100 transition-colors text-left"
               >
                 <span className="truncate">{list.name}</span>
                 {list.is_default && (
-                  <span className="text-xs text-primary ml-2 shrink-0">Default</span>
+                  <span className="text-xs text-sand-1100 ml-2 shrink-0">Default</span>
                 )}
               </button>
             ))}

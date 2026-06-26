@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { CheckIcon, CopyIcon } from 'lucide-react'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
+import oneLight from 'react-syntax-highlighter/dist/esm/styles/prism/one-light'
 import oneDark from 'react-syntax-highlighter/dist/esm/styles/prism/one-dark'
 import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
 import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
 import python from 'react-syntax-highlighter/dist/esm/languages/prism/python'
 import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust'
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
+import { useIsDark } from '@/lib/useIsDark'
 
 type SupportedLanguage = 'bash' | 'json' | 'python' | 'rust' | 'typescript' | 'text'
 
@@ -34,6 +36,7 @@ export default function CodeBlock({
   maxHeightClassName,
 }: CodeBlockProps): JSX.Element {
   const [copied, setCopied] = useState(false)
+  const isDark = useIsDark()
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code).then(() => {
@@ -43,7 +46,7 @@ export default function CodeBlock({
   }
 
   const containerClassName = [
-    'overflow-x-auto rounded-xl border border-white/5 bg-dark-900 p-4',
+    'overflow-x-auto border border-border-low bg-sand-50 p-4',
     maxHeightClassName,
   ]
     .filter(Boolean)
@@ -53,11 +56,11 @@ export default function CodeBlock({
     <div className="space-y-3">
       {(title || copyable) && (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {title ? <p className="font-mono text-xs text-gray-500">{title}</p> : <span />}
+          {title ? <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">{title}</p> : <span />}
           {copyable && (
             <button
               onClick={handleCopy}
-              className="flex min-h-10 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-400 transition-all duration-200 hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-dark-900"
+              className="flex min-h-9 items-center gap-1.5 border border-border-low bg-sand-100 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-bg1 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-bg1"
               title="Copy"
               aria-label="Copy code snippet"
             >
@@ -80,7 +83,7 @@ export default function CodeBlock({
       <div className={containerClassName}>
         <SyntaxHighlighter
           language={language === 'text' ? undefined : language}
-          style={oneDark}
+          style={isDark ? oneDark : oneLight}
           wrapLongLines={wrapLongLines}
           customStyle={{
             margin: 0,
@@ -91,7 +94,7 @@ export default function CodeBlock({
           }}
           codeTagProps={{
             style: {
-              fontFamily: 'JetBrains Mono, Fira Code, ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontFamily: '"Berkeley Mono", "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace',
             },
           }}
         >

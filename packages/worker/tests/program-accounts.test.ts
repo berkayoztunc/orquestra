@@ -375,6 +375,26 @@ describe('program account REST route', () => {
     expect(json.error).toBe('Invalid program account query')
   })
 
+  test('rejects filters-free queries before calling RPC', async () => {
+    let called = false
+    globalThis.fetch = mock(async () => {
+      called = true
+      return new Response('{}')
+    }) as any
+
+    const res = await apiApp.request('/proj_test/program-accounts/query', {
+      method: 'POST',
+      body: JSON.stringify({ limit: 25 }),
+      headers: { 'Content-Type': 'application/json' },
+    }, makeEnv() as any)
+
+    expect(res.status).toBe(400)
+    const json = await res.json() as any
+    expect(json.error).toBe('Invalid program account query')
+    expect(json.details.some((detail: any) => detail.field === 'filters')).toBe(true)
+    expect(called).toBe(false)
+  })
+
   test('returns decoded program account query results', async () => {
     const raw = await counterAccountBase64(7n)
     globalThis.fetch = mock(async () => new Response(JSON.stringify({

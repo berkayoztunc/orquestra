@@ -32,14 +32,19 @@ function shortId(value: string): string {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
+const CHART_COLORS = {
+  primary: 'rgb(var(--rgb-sand-1600))',
+  secondary: 'rgb(var(--rgb-sand-1100))',
+} as const
+
 interface BarChartProps {
   data: { label: string; value: number }[]
-  color: string
-  glowColor: string
+  tone?: 'primary' | 'secondary'
   height?: number
 }
 
-function BarChart({ data, color, glowColor, height = 148 }: BarChartProps) {
+function BarChart({ data, tone = 'primary', height = 148 }: BarChartProps) {
+  const color = CHART_COLORS[tone]
   const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string; value: number } | null>(null)
 
   if (data.length === 0) {
@@ -62,13 +67,13 @@ function BarChart({ data, color, glowColor, height = 148 }: BarChartProps) {
         aria-label="Usage bar chart"
       >
         <defs>
-          <linearGradient id={`bar-${color.replace('#', '')}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="1" />
-            <stop offset="100%" stopColor={color} stopOpacity="0.28" />
+          <linearGradient id={`bar-${tone}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" style={{ stopColor: color, stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: color, stopOpacity: 0.3 }} />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((line) => (
-          <line key={line} x1="0" x2="100" y1={height * line} y2={height * line} stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" />
+          <line key={line} x1="0" x2="100" y1={height * line} y2={height * line} style={{ stroke: 'rgb(var(--rgb-border-low))' }} strokeWidth="0.5" />
         ))}
         {data.map((d, i) => {
           const barH = Math.max(3, (d.value / max) * (height - 24))
@@ -82,11 +87,10 @@ function BarChart({ data, color, glowColor, height = 148 }: BarChartProps) {
               y={y}
               width={w}
               height={barH}
-              rx="1.8"
-              fill={`url(#bar-${color.replace('#', '')})`}
-              opacity={d.value === 0 ? 0.2 : 0.95}
+              rx="0"
+              fill={`url(#bar-${tone})`}
+              opacity={d.value === 0 ? 0.2 : 0.9}
               className="cursor-pointer motion-safe:transition-opacity motion-safe:duration-150 hover:opacity-100"
-              style={{ filter: d.value > 0 ? `drop-shadow(0 0 7px ${glowColor})` : undefined }}
               onMouseEnter={(e) => {
                 const svg = (e.target as SVGRectElement).closest('svg')!
                 const rect = svg.getBoundingClientRect()
@@ -101,7 +105,7 @@ function BarChart({ data, color, glowColor, height = 148 }: BarChartProps) {
 
       <div className="mt-3 flex">
         {data.map((d, i) => (
-          <div key={`${d.label}-label`} className="overflow-hidden text-center text-[10px] text-gray-500" style={{ width: `${barWidth}%` }}>
+          <div key={`${d.label}-label`} className="overflow-hidden text-center text-[10px] text-sand-1100" style={{ width: `${barWidth}%` }}>
             {i % labelStep === 0 ? d.label.split(' ')[1] : ''}
           </div>
         ))}
@@ -109,11 +113,11 @@ function BarChart({ data, color, glowColor, height = 148 }: BarChartProps) {
 
       {tooltip && (
         <div
-          className="fixed z-50 min-w-[132px] pointer-events-none rounded-xl border border-white/10 bg-dark-900/95 px-3 py-2 text-xs shadow-2xl backdrop-blur"
+          className="fixed z-50 min-w-[132px] pointer-events-none border border-border-medium bg-bg1 px-3 py-2 text-xs shadow-lg"
           style={{ left: tooltip.x - 66, top: tooltip.y - 54 }}
         >
-          <p className="text-gray-400">{tooltip.label}</p>
-          <p className="mt-0.5 font-bold text-white">{tooltip.value.toLocaleString()} requests</p>
+          <p className="text-sand-1200">{tooltip.label}</p>
+          <p className="mt-0.5 font-bold text-sand-1600">{tooltip.value.toLocaleString()} requests</p>
         </div>
       )}
     </div>
@@ -125,53 +129,56 @@ interface StatCardProps {
   value: number | string
   icon: ReactNode
   isLoading?: boolean
-  tone?: 'primary' | 'secondary'
   hint?: string
 }
 
-function StatCard({ label, value, icon, isLoading, tone = 'primary', hint }: StatCardProps) {
-  const toneClass = tone === 'primary'
-    ? 'border-primary/20 bg-primary/10 text-primary shadow-[0_0_32px_rgba(20,241,149,0.08)]'
-    : 'border-secondary/20 bg-secondary/10 text-secondary shadow-[0_0_32px_rgba(0,217,255,0.08)]'
-
+function StatCard({ label, value, icon, isLoading, hint }: StatCardProps) {
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-surface-card/80 p-5">
-        <div className="h-10 w-10 rounded-xl bg-white/10 motion-safe:animate-pulse" />
-        <div className="mt-5 h-3 w-24 rounded bg-white/10 motion-safe:animate-pulse" />
-        <div className="mt-3 h-8 w-20 rounded bg-white/10 motion-safe:animate-pulse" />
+      <div className="border border-border-low bg-bg1 p-5">
+        <div className="h-10 w-10 bg-sand-200 motion-safe:animate-pulse" />
+        <div className="mt-5 h-3 w-24 bg-sand-200 motion-safe:animate-pulse" />
+        <div className="mt-3 h-8 w-20 bg-sand-200 motion-safe:animate-pulse" />
       </div>
     )
   }
 
   return (
-    <div className="group overflow-hidden rounded-2xl border border-white/10 bg-surface-card/80 p-5 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-1">
+    <div className="group overflow-hidden border border-border-low bg-bg1 p-5 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-1">
       <div className="flex items-start justify-between gap-4">
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass}`}>{icon}</div>
-        {hint && <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-gray-400">{hint}</span>}
+        <div className="flex h-11 w-11 items-center justify-center border border-border-low bg-sand-100 text-sand-1500">
+          {icon}
+        </div>
+        {hint && (
+          <span className="border border-border-low bg-sand-100 px-2.5 py-1 text-[11px] text-sand-1200">
+            {hint}
+          </span>
+        )}
       </div>
-      <p className="mt-5 text-xs font-medium uppercase tracking-[0.16em] text-gray-500">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-tight text-white">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+      <p className="mt-5 text-xs font-medium uppercase tracking-[0.16em] text-sand-1100">{label}</p>
+      <p className="mt-2 text-3xl font-black tracking-tight text-sand-1600">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </p>
     </div>
   )
 }
 
 function EmptyState({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="flex min-h-32 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-8 text-center">
-      <p className="font-semibold text-white">{title}</p>
-      <p className="mt-1 max-w-sm text-sm leading-6 text-gray-500">{desc}</p>
+    <div className="flex min-h-32 flex-col items-center justify-center border border-dashed border-border-low bg-sand-50 px-4 py-8 text-center">
+      <p className="font-semibold text-sand-1600">{title}</p>
+      <p className="mt-1 max-w-sm text-sm leading-6 text-sand-1200">{desc}</p>
     </div>
   )
 }
 
 function ChartSkeleton() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-surface-card/80 p-5">
-      <div className="h-5 w-52 rounded bg-white/10 motion-safe:animate-pulse" />
+    <div className="border border-border-low bg-bg1 p-5">
+      <div className="h-5 w-52 bg-sand-200 motion-safe:animate-pulse" />
       <div className="mt-7 flex h-36 items-end gap-1.5">
         {skeletonHeights.map((height, i) => (
-          <div key={i} className="flex-1 rounded-t bg-white/10 motion-safe:animate-pulse" style={{ height: `${height}%` }} />
+          <div key={i} className="flex-1 bg-sand-200 motion-safe:animate-pulse" style={{ height: `${height}%` }} />
         ))}
       </div>
     </div>
@@ -241,52 +248,39 @@ export default function Analytics() {
   const topProgram = analytics?.top_programs[0]
 
   return (
-    <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-surface-card px-5 py-7 md:px-8 md:py-9">
-        <div className="absolute inset-0 bg-grid-pattern bg-grid opacity-60" />
-        <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -right-24 bottom-0 h-72 w-72 rounded-full bg-secondary/10 blur-3xl" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_14px_rgba(20,241,149,0.9)]" />
-              Platform telemetry - last 30 days
-            </div>
-            <h1 className="text-balance text-4xl font-light leading-[1.02] tracking-[-0.045em] text-white md:text-5xl">
-              Analytics for{' '}
-              <span className="gradient-text font-black">
-                REST APIs and MCP agents
-              </span>
-              <span className="font-light text-gray-200">.</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-400 md:text-base">
-              Clear usage signals for Orquestra adoption: program traffic, API calls, MCP tool demand, and daily momentum.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              loadStats()
-              loadAnalytics()
-            }}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-gray-300 transition-colors duration-150 hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
-          >
-            <RefreshIcon />
-            Refresh
-          </button>
+    <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
+      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <h1 className="text-balance text-4xl font-semibold tracking-tight text-sand-1600 md:text-5xl">
+            Analytics for API and MCP agents
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-sand-1200 md:text-base">
+            Clear usage signals for Orquestra adoption: program traffic, API calls, MCP tool demand, and daily momentum.
+          </p>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            loadStats()
+            loadAnalytics()
+          }}
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-border-low bg-bg1 px-4 text-sm font-semibold text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400"
+        >
+          <RefreshIcon />
+          Refresh
+        </button>
       </section>
 
       {error && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300">
+        <div className="border border-[#b75000]/20 bg-[#b75000]/5 p-4 text-sm">
           <div className="flex items-start gap-3">
-            <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <p className="font-semibold text-red-200">Analytics failed to load</p>
-              <p className="mt-1 text-red-300/80">{error}</p>
+              <p className="font-semibold text-[#b75000]">Analytics failed to load</p>
+              <p className="mt-1 text-[#b75000]/80">{error}</p>
             </div>
           </div>
         </div>
@@ -330,7 +324,6 @@ export default function Analytics() {
           label="MCP today"
           value={isLoadingAnalytics ? '-' : totals.todayMcp}
           isLoading={isLoadingAnalytics && !analytics}
-          tone="secondary"
           hint={`${activeTools} tools`}
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -342,20 +335,20 @@ export default function Analytics() {
 
       {analytics && !isLoadingAnalytics && (
         <section className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-primary/15 bg-primary/10 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">30d API volume</p>
-            <p className="mt-2 text-2xl font-black text-white">{totals.api30d.toLocaleString()}</p>
-            <p className="mt-1 text-sm text-gray-400">REST request demand</p>
+          <div className="border border-border-low bg-sand-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">30d API volume</p>
+            <p className="mt-2 text-2xl font-black text-sand-1600">{totals.api30d.toLocaleString()}</p>
+            <p className="mt-1 text-sm text-sand-1200">REST request demand</p>
           </div>
-          <div className="rounded-2xl border border-secondary/15 bg-secondary/10 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">30d MCP volume</p>
-            <p className="mt-2 text-2xl font-black text-white">{totals.mcp30d.toLocaleString()}</p>
-            <p className="mt-1 text-sm text-gray-400">Agent tool calls</p>
+          <div className="border border-border-low bg-sand-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">30d MCP volume</p>
+            <p className="mt-2 text-2xl font-black text-sand-1600">{totals.mcp30d.toLocaleString()}</p>
+            <p className="mt-1 text-sm text-sand-1200">Agent tool calls</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-surface-elevated/70 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-gray-500">Top program</p>
-            <p className="mt-2 truncate text-2xl font-black text-white">{topProgram?.name ?? topProgram?.project_id ?? 'No traffic'}</p>
-            <p className="mt-1 text-sm text-gray-400">{topProgram ? `${topProgram.total.toLocaleString()} requests` : 'Waiting for usage'}</p>
+          <div className="border border-border-low bg-sand-100 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1100">Top program</p>
+            <p className="mt-2 truncate text-2xl font-black text-sand-1600">{topProgram?.name ?? topProgram?.project_id ?? 'No traffic'}</p>
+            <p className="mt-1 text-sm text-sand-1200">{topProgram ? `${topProgram.total.toLocaleString()} requests` : 'Waiting for usage'}</p>
           </div>
         </section>
       )}
@@ -370,38 +363,38 @@ export default function Analytics() {
       {analytics && !isLoadingAnalytics && (
         <>
           <section className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-surface-card/80 p-5">
+            <div className="border border-border-low bg-bg1 p-5">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">REST API</p>
-                  <h2 className="mt-1 text-xl font-bold text-white">Daily API requests</h2>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">API</p>
+                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Daily API requests</h2>
                 </div>
-                <span className="w-fit rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <span className="w-fit border border-border-low bg-sand-100 px-3 py-1 text-xs font-medium text-sand-1500">
                   {totals.api30d.toLocaleString()} total
                 </span>
               </div>
-              <BarChart data={dailyApiData} color="#14F195" glowColor="rgba(20,241,149,0.28)" />
+              <BarChart data={dailyApiData} tone="primary" />
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-surface-card/80 p-5">
+            <div className="border border-border-low bg-bg1 p-5">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">MCP agents</p>
-                  <h2 className="mt-1 text-xl font-bold text-white">Daily MCP tool calls</h2>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">MCP agents</p>
+                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Daily MCP tool calls</h2>
                 </div>
-                <span className="w-fit rounded-full border border-secondary/20 bg-secondary/10 px-3 py-1 text-xs font-medium text-secondary">
+                <span className="w-fit border border-border-low bg-sand-100 px-3 py-1 text-xs font-medium text-sand-1500">
                   {totals.mcp30d.toLocaleString()} total
                 </span>
               </div>
-              <BarChart data={dailyMcpData} color="#00D9FF" glowColor="rgba(0,217,255,0.28)" />
+              <BarChart data={dailyMcpData} tone="secondary" />
             </div>
           </section>
 
           <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="rounded-2xl border border-white/10 bg-surface-card/80 p-5">
+            <div className="border border-border-low bg-bg1 p-5">
               <div className="mb-5">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">Agent behavior</p>
-                <h2 className="mt-1 text-xl font-bold text-white">MCP tool breakdown</h2>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Agent behavior</p>
+                <h2 className="mt-1 text-xl font-bold text-sand-1600">MCP tool breakdown</h2>
               </div>
 
               {toolBreakdown.length > 0 ? (
@@ -410,13 +403,13 @@ export default function Analytics() {
                     const maxCount = toolBreakdown[0][1]
                     const pct = maxCount ? (count / maxCount) * 100 : 0
                     return (
-                      <div key={toolId} className="rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                      <div key={toolId} className="border border-border-low bg-sand-50 p-3">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <code className="truncate font-mono text-xs text-secondary">{MCP_TOOL_NAMES[toolId] ?? `tool_${toolId}`}</code>
-                          <span className="font-mono text-xs text-gray-300">{count.toLocaleString()}</span>
+                          <code className="truncate font-mono text-xs text-sand-1500">{MCP_TOOL_NAMES[toolId] ?? `tool_${toolId}`}</code>
+                          <span className="font-mono text-xs text-sand-1200">{count.toLocaleString()}</span>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-white/5">
-                          <div className="h-full rounded-full bg-gradient-to-r from-secondary to-primary motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${pct}%` }} />
+                        <div className="h-1.5 overflow-hidden bg-sand-200">
+                          <div className="h-full bg-sand-1600 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
                     )
@@ -427,13 +420,13 @@ export default function Analytics() {
               )}
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-surface-card/80 p-5">
+            <div className="border border-border-low bg-bg1 p-5">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Program demand</p>
-                  <h2 className="mt-1 text-xl font-bold text-white">Top programs</h2>
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Program demand</p>
+                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Top programs</h2>
                 </div>
-                <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-gray-400">
+                <span className="border border-border-low bg-sand-100 px-3 py-1 text-xs text-sand-1200">
                   30d
                 </span>
               </div>
@@ -442,32 +435,32 @@ export default function Analytics() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/10 text-xs uppercase tracking-[0.16em] text-gray-500">
+                      <tr className="border-b border-border-low text-xs uppercase tracking-[0.16em] text-sand-1100">
                         <th className="pb-3 text-left font-semibold">#</th>
                         <th className="pb-3 text-left font-semibold">Program</th>
                         <th className="hidden pb-3 text-left font-semibold md:table-cell">Program ID</th>
                         <th className="pb-3 text-right font-semibold">Requests</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-border-low">
                       {analytics.top_programs.map((program, i) => {
                         const maxTotal = analytics.top_programs[0].total
                         const pct = maxTotal ? (program.total / maxTotal) * 100 : 0
                         return (
-                          <tr key={program.project_id} className="transition-colors duration-150 hover:bg-white/[0.03]">
-                            <td className="py-4 pr-3 font-mono text-xs text-gray-500">{i + 1}</td>
+                          <tr key={program.project_id} className="transition-colors duration-150 hover:bg-sand-50">
+                            <td className="py-4 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
                             <td className="py-4 pr-4">
                               <div className="min-w-[180px]">
-                                <p className="truncate font-semibold text-white">{program.name ?? program.project_id}</p>
-                                <div className="mt-2 h-1.5 max-w-xs overflow-hidden rounded-full bg-white/5">
-                                  <div className="h-full rounded-full bg-gradient-to-r from-primary to-secondary" style={{ width: `${pct}%` }} />
+                                <p className="truncate font-semibold text-sand-1600">{program.name ?? program.project_id}</p>
+                                <div className="mt-2 h-1.5 max-w-xs overflow-hidden bg-sand-200">
+                                  <div className="h-full bg-sand-1600" style={{ width: `${pct}%` }} />
                                 </div>
                               </div>
                             </td>
                             <td className="hidden py-4 pr-4 md:table-cell">
-                              <span className="font-mono text-xs text-gray-500">{shortId(program.project_id)}</span>
+                              <span className="font-mono text-xs text-sand-1100">{shortId(program.project_id)}</span>
                             </td>
-                            <td className="py-4 text-right font-mono font-semibold tabular-nums text-primary">
+                            <td className="py-4 text-right font-mono font-semibold tabular-nums text-sand-1600">
                               {program.total.toLocaleString()}
                             </td>
                           </tr>

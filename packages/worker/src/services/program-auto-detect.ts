@@ -5,6 +5,7 @@
  */
 
 import type { D1Database } from '@cloudflare/workers-types'
+import { generateId } from '../utils/id'
 
 export interface KnownProgram {
   name: string
@@ -176,7 +177,7 @@ export async function autoSeedCategory(
     }
 
     // Insert category metadata
-    const categoryId = `cat_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+    const categoryId = generateId()
     const tagsStr = known.tags.join(',')
     const aliasesStr = known.aliases.join(',')
 

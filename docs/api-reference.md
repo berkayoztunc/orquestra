@@ -160,7 +160,7 @@ Notes:
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/api/:projectId/external-apis` | List documented external APIs |
+| `GET` | `/api/:projectId/external-apis` | List documented external API |
 | `POST` | `/api/:projectId/external-apis` | Add documented external API |
 | `PUT` | `/api/:projectId/external-apis/:endpointId` | Update documented external API |
 | `DELETE` | `/api/:projectId/external-apis/:endpointId` | Delete documented external API |

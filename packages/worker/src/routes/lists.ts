@@ -1,9 +1,6 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-}
+import { generateId } from '../utils/id'
 
 async function generateScopeKey(): Promise<string> {
   const keyBytes = new Uint8Array(32)

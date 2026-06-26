@@ -12,6 +12,7 @@ import {
   ZapIcon,
 } from 'lucide-react'
 import CodeBlock from '../components/CodeBlock'
+import { DocsLayout } from '@/ui/DocsLayout'
 
 const API_BASE = 'https://api.orquestra.dev'
 
@@ -138,7 +139,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="flex min-h-10 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-400 transition-all duration-200 hover:border-primary/30 hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+      className="flex min-h-10 items-center gap-1.5 border border-border-low bg-sand-100 px-3 py-1.5 text-xs font-medium text-sand-1200 transition-all duration-200 hover:bg-sand-200 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
       title="Copy"
       aria-label="Copy to clipboard"
     >
@@ -168,20 +169,25 @@ export default function API(): JSX.Element {
   }'`
 
   return (
-    <div className="animate-fade-in space-y-12">
+    <DocsLayout
+      title="Public API Reference"
+      description="Query program metadata, inspect instruction schemas, derive PDAs, and build unsigned transaction payloads through the Orquestra API."
+      toc={['Base URL', 'Discovery', 'Authentication', 'Endpoints']}
+    >
+      <div className="animate-fade-in space-y-12">
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="badge badge-primary text-xs">Docs</span>
-          <span className="text-xs text-gray-600">/</span>
-          <span className="font-mono text-xs text-gray-400">api</span>
+          <span className="text-xs text-sand-1100">/</span>
+          <span className="font-mono text-xs text-sand-1100">api</span>
         </div>
 
         <h1 className="text-3xl font-bold sm:text-4xl">
-          <span className="gradient-text">Public API</span>{' '}
-          <span className="text-white">Reference</span>
+          <span className="text-sand-1600">Public API</span>{' '}
+          <span className="text-sand-1600">Reference</span>
         </h1>
 
-        <p className="max-w-2xl leading-relaxed text-gray-400">
+        <p className="max-w-2xl leading-relaxed text-sand-1200">
           Query public Solana program metadata, inspect instruction schemas, derive PDAs, and build
           unsigned transaction payloads through the same Orquestra API surface used by the docs and MCP server.
         </p>
@@ -208,13 +214,13 @@ export default function API(): JSX.Element {
           return (
             <div key={step.title} className="card p-5">
               <div className="mb-3 flex items-center justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/5 bg-surface-elevated">
+                <div className="flex h-10 w-10 items-center justify-center border border-border-low bg-sand-100">
                   <Icon className="h-5 w-5 text-primary" />
                 </div>
-                <span className="font-mono text-xs text-gray-600">step {index + 1}</span>
+                <span className="font-mono text-xs text-sand-1100">step {index + 1}</span>
               </div>
-              <p className="mb-1 text-sm font-semibold text-white">{step.title}</p>
-              <p className="text-xs leading-relaxed text-gray-500">{step.description}</p>
+              <p className="mb-1 text-sm font-semibold text-sand-1600">{step.title}</p>
+              <p className="text-xs leading-relaxed text-sand-1200">{step.description}</p>
             </div>
           )
         })}
@@ -230,15 +236,15 @@ export default function API(): JSX.Element {
             className="card space-y-3 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+              <div className="flex h-10 w-10 items-center justify-center border border-border-low bg-sand-100">
                 <BookOpenIcon className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <h2 className="font-semibold text-white">{link.label}</h2>
-                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-gray-600">Discovery</p>
+                <h2 className="font-semibold text-sand-1600">{link.label}</h2>
+                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-sand-1100">Discovery</p>
               </div>
             </div>
-            <p className="text-sm leading-relaxed text-gray-400">{link.description}</p>
+            <p className="text-sm leading-relaxed text-sand-1200">{link.description}</p>
             <div className="break-all font-mono text-xs text-primary">{link.href}</div>
           </a>
         ))}
@@ -247,12 +253,12 @@ export default function API(): JSX.Element {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr,0.9fr]">
         <section className="card space-y-4 p-5 sm:p-6">
           <div>
-            <h2 className="text-xl font-bold text-white sm:text-2xl">Base URL</h2>
-            <p className="mt-2 text-sm text-gray-400">
+            <h2 className="text-xl font-bold text-sand-1600 sm:text-2xl">Base URL</h2>
+            <p className="mt-2 text-sm text-sand-1200">
               Use the API host directly for REST clients, automation scripts, and SDK generation.
             </p>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-surface-elevated px-4 py-3 font-mono text-sm text-gray-300">
+          <div className="flex flex-wrap items-center justify-between gap-3 border border-border-low bg-sand-100 px-4 py-3 font-mono text-sm text-sand-1500">
             <span>{API_BASE}</span>
             <CopyButton text={API_BASE} />
           </div>
@@ -260,8 +266,8 @@ export default function API(): JSX.Element {
 
         <section className="card space-y-4 p-5 sm:p-6">
           <div>
-            <h2 className="text-xl font-bold text-white sm:text-2xl">Authentication</h2>
-            <p className="mt-2 text-sm text-gray-400">
+            <h2 className="text-xl font-bold text-sand-1600 sm:text-2xl">Authentication</h2>
+            <p className="mt-2 text-sm text-sand-1200">
               Public discovery endpoints are open. Build and protected project flows use either a session token or an API key.
             </p>
           </div>
@@ -270,18 +276,18 @@ export default function API(): JSX.Element {
               const Icon = mode.icon
 
               return (
-                <div key={mode.title} className="rounded-xl border border-white/5 bg-surface-elevated p-4">
+                <div key={mode.title} className=" border border-border-low bg-sand-100 p-4">
                   <div className="mb-2 flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/5 bg-surface-card">
+                    <div className="flex h-9 w-9 items-center justify-center border border-border-low bg-cream">
                       <Icon className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-white">{mode.title}</p>
-                      <p className="text-xs text-gray-500">{mode.description}</p>
+                      <p className="text-sm font-semibold text-sand-1600">{mode.title}</p>
+                      <p className="text-xs text-sand-1200">{mode.description}</p>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-white/5 bg-dark-900 px-3 py-2 font-mono text-xs text-gray-300">
-                    <span className="text-gray-500">{mode.header}:</span> {mode.value}
+                  <div className=" border border-border-low bg-sand-50 px-3 py-2 font-mono text-xs text-sand-1500">
+                    <span className="text-sand-1200">{mode.header}:</span> {mode.value}
                   </div>
                 </div>
               )
@@ -292,30 +298,30 @@ export default function API(): JSX.Element {
 
       <section className="card space-y-5 p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-white sm:text-2xl">Core endpoints</h2>
-          <p className="mt-2 text-sm text-gray-400">
+          <h2 className="text-xl font-bold text-sand-1600 sm:text-2xl">Core endpoints</h2>
+          <p className="mt-2 text-sm text-sand-1200">
             These are the primary routes surfaced in the API catalog and OpenAPI spec for apps, docs, and agents.
           </p>
         </div>
         <div className="space-y-3">
           {endpoints.map((endpoint) => (
-            <div key={endpoint.path} className="rounded-xl border border-white/5 bg-surface-elevated p-4">
+            <div key={endpoint.path} className=" border border-border-low bg-sand-100 p-4">
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-2 md:flex-row md:items-center md:gap-3">
-                  <span className="w-fit rounded-full bg-primary/10 px-2.5 py-1 font-mono text-xs text-primary">
+                  <span className={`w-fit border px-2.5 py-1 font-mono text-xs ${endpoint.method === 'POST' ? 'border-[#b75000]/20 bg-[#b75000]/10 text-[#b75000]' : 'border-border-low bg-sand-100 text-sand-1500'}`}>
                     {endpoint.method}
                   </span>
-                  <code className="break-all text-sm text-white">{endpoint.path}</code>
+                  <code className="break-all text-sm text-sand-1600">{endpoint.path}</code>
                   {'network' in endpoint && endpoint.network && (
-                    <span className="flex w-fit items-center gap-1 rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
+                    <span className="flex w-fit items-center gap-1 border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
                       <GlobeIcon className="h-2.5 w-2.5" />
                       ?network=
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-300">{endpoint.summary}</p>
+                <p className="text-sm text-sand-1500">{endpoint.summary}</p>
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-gray-500">{endpoint.detail}</p>
+              <p className="mt-3 text-xs leading-relaxed text-sand-1200">{endpoint.detail}</p>
             </div>
           ))}
         </div>
@@ -323,21 +329,21 @@ export default function API(): JSX.Element {
 
       <section className="card space-y-5 p-5 sm:p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-secondary/20 bg-secondary/10">
+          <div className="flex h-10 w-10 items-center justify-center border border-secondary/20 bg-secondary/10">
             <GlobeIcon className="h-5 w-5 text-secondary" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white sm:text-2xl">Network parameter</h2>
-            <p className="mt-0.5 text-xs text-gray-500">Endpoints that query live on-chain data</p>
+            <h2 className="text-xl font-bold text-sand-1600 sm:text-2xl">Network parameter</h2>
+            <p className="mt-0.5 text-xs text-sand-1200">Endpoints that query live on-chain data</p>
           </div>
         </div>
-        <p className="text-sm text-gray-400 leading-relaxed">
+        <p className="text-sm text-sand-1200 leading-relaxed">
           Endpoints marked with{' '}
-          <span className="inline-flex items-center gap-1 rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
+          <span className="inline-flex items-center gap-1 border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-medium text-secondary">
             <GlobeIcon className="h-2.5 w-2.5" />?network=
           </span>{' '}
           accept an optional{' '}
-          <code className="rounded bg-surface-elevated px-1.5 py-0.5 font-mono text-xs text-gray-300">network</code>{' '}
+          <code className="bg-sand-100 px-1.5 py-0.5 font-mono text-xs text-sand-1500">network</code>{' '}
           query parameter to target a specific Solana cluster. Omitting it defaults to{' '}
           <span className="font-mono text-xs text-primary">mainnet-beta</span>.
         </p>
@@ -349,23 +355,23 @@ export default function API(): JSX.Element {
           ].map((net) => (
             <div
               key={net.value}
-              className={`rounded-xl border p-4 ${net.primary ? 'border-primary/20 bg-primary/5' : 'border-white/5 bg-surface-elevated'}`}
+              className={` border p-4 ${net.primary ? 'border-primary/20 bg-primary/5' : 'border-border-low bg-sand-100'}`}
             >
               <div className="mb-1.5 flex items-center gap-2">
-                <DatabaseIcon className={`h-4 w-4 ${net.primary ? 'text-primary' : 'text-gray-500'}`} />
-                <span className={`text-sm font-semibold ${net.primary ? 'text-primary' : 'text-white'}`}>{net.label}</span>
+                <DatabaseIcon className={`h-4 w-4 ${net.primary ? 'text-primary' : 'text-sand-1200'}`} />
+                <span className={`text-sm font-semibold ${net.primary ? 'text-primary' : 'text-sand-1600'}`}>{net.label}</span>
                 {net.primary && (
-                  <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] text-primary">default</span>
+                  <span className="bg-primary/20 px-2 py-0.5 text-[10px] text-primary">default</span>
                 )}
               </div>
-              <code className="block font-mono text-xs text-gray-400">?network={net.value}</code>
-              <p className="mt-1.5 text-xs leading-relaxed text-gray-500">{net.desc}</p>
+              <code className="block font-mono text-xs text-sand-1200">?network={net.value}</code>
+              <p className="mt-1.5 text-xs leading-relaxed text-sand-1200">{net.desc}</p>
             </div>
           ))}
         </div>
-        <div className="rounded-xl border border-white/5 bg-dark-900 p-4">
-          <p className="mb-2 font-mono text-xs text-gray-500">example — devnet account fetch</p>
-          <code className="block break-all font-mono text-xs text-gray-300">
+        <div className=" border border-border-low bg-sand-50 p-4">
+          <p className="mb-2 font-mono text-xs text-sand-1200">example — devnet account fetch</p>
+          <code className="block break-all font-mono text-xs text-sand-1500">
             {'GET '}
             {API_BASE}
             {'/api/{projectId}/pda/fetch/{address}?network=devnet'}
@@ -375,8 +381,8 @@ export default function API(): JSX.Element {
 
       <section className="card space-y-4 p-5 sm:p-6">
         <div>
-          <h2 className="text-xl font-bold text-white sm:text-2xl">Example request</h2>
-          <p className="mt-2 text-sm text-gray-400">
+          <h2 className="text-xl font-bold text-sand-1600 sm:text-2xl">Example request</h2>
+          <p className="mt-2 text-sm text-sand-1200">
             Build an unsigned instruction payload, then hand the response to your wallet or signing layer.
           </p>
         </div>
@@ -386,34 +392,35 @@ export default function API(): JSX.Element {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="card space-y-3 p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+            <div className="flex h-10 w-10 items-center justify-center border border-border-low bg-sand-100">
               <SearchIcon className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Best for app backends</h2>
-              <p className="text-xs text-gray-500">REST-first integration</p>
+              <h2 className="text-lg font-bold text-sand-1600">Best for app backends</h2>
+              <p className="text-xs text-sand-1200">REST-first integration</p>
             </div>
           </div>
-          <p className="text-sm leading-relaxed text-gray-400">
-            Use the REST API directly if you are wiring Orquestra into a dashboard, API layer, cron workflow, or custom signing service.
+          <p className="text-sm leading-relaxed text-sand-1200">
+            Use the API directly if you are wiring Orquestra into a dashboard, API layer, cron workflow, or custom signing service.
           </p>
         </div>
 
         <div className="card space-y-3 p-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-secondary/20 bg-secondary/10">
+            <div className="flex h-10 w-10 items-center justify-center border border-secondary/20 bg-secondary/10">
               <ZapIcon className="h-4 w-4 text-secondary" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Best for agents</h2>
-              <p className="text-xs text-gray-500">MCP-first integration</p>
+              <h2 className="text-lg font-bold text-sand-1600">Best for agents</h2>
+              <p className="text-xs text-sand-1200">MCP-first integration</p>
             </div>
           </div>
-          <p className="text-sm leading-relaxed text-gray-400">
+          <p className="text-sm leading-relaxed text-sand-1200">
             Use the MCP endpoint when you want AI clients to discover tools, inspect instruction metadata, and build payloads conversationally.
           </p>
         </div>
       </section>
-    </div>
+      </div>
+    </DocsLayout>
   )
 }

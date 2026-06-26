@@ -1,34 +1,55 @@
 #!/usr/bin/env bash
-# Orquestra Claude Agents + Skills Installer
+# Orquestra — Agents, Skills & MCP Installer
 #
-# Installs:
-#   - 6 sub-agents   → .claude/agents/             (Solana task pipeline, Claude Code)
-#   - 3 skills       → .claude/skills/             (MCP reference, Claude Code)
-#   - MCP server     → Claude Desktop config       (--claude-desktop flag)
+# Installs Orquestra agents + skills for Claude Code, then optionally patches
+# MCP server config for Claude Code, Claude Desktop, and OpenAI Codex CLI.
 #
 # Usage:
-#   ./install-skills.sh                     # project-level agents + skills
-#   ./install-skills.sh --global            # global agents + skills (~/.claude/)
-#   ./install-skills.sh --claude-desktop    # patch Claude Desktop MCP config
-#   ./install-skills.sh --global --claude-desktop  # all of the above
+#   ./install-skills.sh                        # agents + skills → local .claude/
+#   ./install-skills.sh --global               # agents + skills → ~/.claude/
+#   ./install-skills.sh --claude-code          # + patch Claude Code MCP config
+#   ./install-skills.sh --claude-desktop       # + patch Claude Desktop MCP config
+#   ./install-skills.sh --codex                # + patch Codex CLI MCP config
+#   ./install-skills.sh --all                  # + patch all three clients (global)
+#
+# Remote one-liner:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh) --all
 #
 set -euo pipefail
 
 REPO_RAW="https://raw.githubusercontent.com/berkayoztunc/orquestra/main"
+MCP_URL="https://api.orquestra.dev/mcp"
 
 GLOBAL=false
-CLAUDE_DESKTOP=false
+DO_CLAUDE_CODE=false
+DO_CLAUDE_DESKTOP=false
+DO_CODEX=false
 
 for arg in "$@"; do
   case "$arg" in
     --global)          GLOBAL=true ;;
-    --claude-desktop)  CLAUDE_DESKTOP=true ;;
+    --claude-code)     DO_CLAUDE_CODE=true ;;
+    --claude-desktop)  DO_CLAUDE_DESKTOP=true ;;
+    --codex)           DO_CODEX=true ;;
+    --all)             GLOBAL=true; DO_CLAUDE_CODE=true; DO_CLAUDE_DESKTOP=true; DO_CODEX=true ;;
     --help|-h)
-      echo "Usage: $0 [--global] [--claude-desktop]"
-      echo "  --global          Install agents+skills to ~/.claude/ (all projects)"
-      echo "  --claude-desktop  Patch Claude Desktop MCP config (macOS)"
-      echo "  default           Install to .claude/ in current directory"
+      echo ""
+      echo "Orquestra Installer"
+      echo ""
+      echo "Usage: $0 [options]"
+      echo ""
+      echo "Options:"
+      echo "  (default)          Install agents + skills to .claude/ in current directory"
+      echo "  --global           Install agents + skills to ~/.claude/ (all projects)"
+      echo "  --claude-code      Patch Claude Code MCP config (settings.json)"
+      echo "  --claude-desktop   Patch Claude Desktop MCP config (macOS)"
+      echo "  --codex            Patch OpenAI Codex CLI MCP config (~/.codex/config.toml)"
+      echo "  --all              --global + all three MCP patches"
+      echo ""
+      echo "Remote install:"
+      echo "  bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh) --all"
+      echo ""
       exit 0 ;;
   esac
 done
@@ -47,7 +68,6 @@ ok()   { echo -e "${GREEN}✓${RESET} $*"; }
 info() { echo -e "${YELLOW}→${RESET} $*"; }
 err()  { echo -e "${RED}✗${RESET} $*" >&2; }
 
-# ── Agents ─────────────────────────────────────────────────────────────────
 AGENTS=(
   orquestra
   orquestra-researcher
@@ -57,7 +77,6 @@ AGENTS=(
   orquestra-signer
 )
 
-# ── Skills ──────────────────────────────────────────────────────────────────
 SKILLS=(
   orquestra-mcp-connect
   orquestra-mcp-tools
@@ -65,11 +84,11 @@ SKILLS=(
 )
 
 echo ""
-echo "Orquestra Claude Agents + Skills Installer"
+echo "Orquestra — Agents, Skills & MCP Installer"
 echo "Target: $BASE_DIR"
 echo ""
 
-# ── Install agents ──────────────────────────────────────────────────────────
+# ── Install agents ────────────────────────────────────────────────────────────
 mkdir -p "$AGENTS_DIR"
 info "Installing agents → $AGENTS_DIR"
 
@@ -83,7 +102,7 @@ for agent in "${AGENTS[@]}"; do
   fi
 done
 
-# ── Install skills ───────────────────────────────────────────────────────────
+# ── Install skills ────────────────────────────────────────────────────────────
 echo ""
 info "Installing skills → $SKILLS_DIR"
 
@@ -99,35 +118,107 @@ for skill in "${SKILLS[@]}"; do
   fi
 done
 
-# ── Patch Claude Desktop config ─────────────────────────────────────────────
-if $CLAUDE_DESKTOP; then
+# ── Patch Claude Code MCP config ──────────────────────────────────────────────
+if $DO_CLAUDE_CODE; then
+  echo ""
+  info "Patching Claude Code MCP config..."
+
+  CLAUDE_CODE_CONFIG="$BASE_DIR/settings.json"
+  mkdir -p "$BASE_DIR"
+
+  if python3 - "$CLAUDE_CODE_CONFIG" "$MCP_URL" << 'PYEOF'
+import json, sys, os
+
+path = sys.argv[1]
+mcp_url = sys.argv[2]
+
+config = {}
+if os.path.isfile(path):
+    with open(path, 'r') as f:
+        try:
+            config = json.load(f)
+        except json.JSONDecodeError:
+            config = {}
+
+config.setdefault('mcpServers', {})
+
+if 'orquestra' in config['mcpServers']:
+    print("already_present")
+    sys.exit(0)
+
+config['mcpServers']['orquestra'] = {
+    "type": "http",
+    "url": mcp_url
+}
+
+with open(path, 'w') as f:
+    json.dump(config, f, indent=2)
+
+print("patched")
+PYEOF
+  then
+    result=$(python3 - "$CLAUDE_CODE_CONFIG" "$MCP_URL" 2>/dev/null << 'PYEOF'
+import json, sys, os
+
+path = sys.argv[1]
+mcp_url = sys.argv[2]
+
+config = {}
+if os.path.isfile(path):
+    with open(path, 'r') as f:
+        try:
+            config = json.load(f)
+        except json.JSONDecodeError:
+            config = {}
+
+if 'orquestra' in config.get('mcpServers', {}):
+    print("already_present")
+else:
+    print("patched")
+PYEOF
+    )
+    if [[ "$result" == "already_present" ]]; then
+      ok "  orquestra MCP already in Claude Code config"
+    else
+      ok "  orquestra MCP added to Claude Code ($CLAUDE_CODE_CONFIG)"
+    fi
+  else
+    err "  Failed to patch Claude Code config (python3 required)"
+  fi
+fi
+
+# ── Patch Claude Desktop MCP config ──────────────────────────────────────────
+if $DO_CLAUDE_DESKTOP; then
   echo ""
   info "Patching Claude Desktop config..."
 
   DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
 
   if [[ ! -f "$DESKTOP_CONFIG" ]]; then
-    err "Claude Desktop config not found: $DESKTOP_CONFIG"
-    err "Install Claude Desktop first: https://claude.ai/download"
+    err "  Claude Desktop config not found: $DESKTOP_CONFIG"
+    err "  Install Claude Desktop first: https://claude.ai/download"
   else
-    # Check if orquestra already present
-    if python3 -c "import json,sys; d=json.load(open('$DESKTOP_CONFIG')); exit(0 if 'orquestra' in d.get('mcpServers',{}) else 1)" 2>/dev/null; then
-      ok "  orquestra MCP already in Claude Desktop config"
-    else
-      # Inject orquestra MCP server using python3 (safe JSON merge)
-      python3 - "$DESKTOP_CONFIG" << 'PYEOF'
+    result=$(python3 - "$DESKTOP_CONFIG" "$MCP_URL" << 'PYEOF'
 import json, sys
 
 path = sys.argv[1]
+mcp_url = sys.argv[2]
+
 with open(path, 'r') as f:
     config = json.load(f)
 
-config.setdefault('mcpServers', {})['orquestra'] = {
+config.setdefault('mcpServers', {})
+
+if 'orquestra' in config['mcpServers']:
+    print("already_present")
+    sys.exit(0)
+
+config['mcpServers']['orquestra'] = {
     "command": "npx",
     "args": [
         "-y",
         "@modelcontextprotocol/client-streamable-http",
-        "https://api.orquestra.dev/mcp"
+        mcp_url
     ]
 }
 
@@ -136,25 +227,65 @@ with open(path, 'w') as f:
 
 print("patched")
 PYEOF
+    )
+    if [[ "$result" == "already_present" ]]; then
+      ok "  orquestra MCP already in Claude Desktop config"
+    else
       ok "  orquestra MCP added to Claude Desktop"
       info "  Restart Claude Desktop to load the new MCP server"
     fi
   fi
 fi
 
-# ── Summary ─────────────────────────────────────────────────────────────────
+# ── Patch Codex CLI MCP config ────────────────────────────────────────────────
+if $DO_CODEX; then
+  echo ""
+  info "Patching OpenAI Codex CLI config..."
+
+  CODEX_CONFIG="$HOME/.codex/config.toml"
+
+  if [[ ! -d "$HOME/.codex" ]]; then
+    err "  Codex CLI config dir not found: ~/.codex"
+    err "  Install Codex CLI first: https://github.com/openai/codex"
+  else
+    if [[ -f "$CODEX_CONFIG" ]] && grep -q 'name = "orquestra"' "$CODEX_CONFIG" 2>/dev/null; then
+      ok "  orquestra MCP already in Codex CLI config"
+    else
+      {
+        echo ""
+        echo "[[mcp_servers]]"
+        echo "name = \"orquestra\""
+        echo "url = \"$MCP_URL\""
+      } >> "$CODEX_CONFIG"
+      ok "  orquestra MCP added to Codex CLI ($CODEX_CONFIG)"
+    fi
+  fi
+fi
+
+# ── Summary ───────────────────────────────────────────────────────────────────
 echo ""
 ok "Done! ${#AGENTS[@]} agents + ${#SKILLS[@]} skills installed."
 echo ""
-info "Agents (Claude Code):  /orquestra → researcher → pda-explorer → tx-builder → simulator → signer"
-info "Skills (Claude Code):  /orquestra-mcp-connect  /orquestra-mcp-tools  /orquestra-solana"
+info "Agents:  orquestra → researcher → pda-explorer → tx-builder → simulator → signer"
+info "Skills:  /orquestra-mcp-connect  /orquestra-mcp-tools  /orquestra-solana"
 echo ""
-if $CLAUDE_DESKTOP; then
-  info "Claude Desktop: orquestra MCP tools now available (restart required)"
-  info "  Tools: search_programs, list_instructions, build_instruction,"
-  info "         list_pda_accounts, derive_pda, read_llms_txt,"
-  info "         get_ai_analysis, simulate_instruction"
+
+if $DO_CLAUDE_CODE || $DO_CLAUDE_DESKTOP || $DO_CODEX; then
+  info "MCP server ($MCP_URL) configured for:"
+  $DO_CLAUDE_CODE    && info "  ✓ Claude Code    ($BASE_DIR/settings.json)"
+  $DO_CLAUDE_DESKTOP && info "  ✓ Claude Desktop (restart required)"
+  $DO_CODEX          && info "  ✓ Codex CLI      (~/.codex/config.toml)"
+  echo ""
 else
-  info "To also patch Claude Desktop:  $0 --claude-desktop"
+  info "To also configure MCP clients:"
+  info "  --claude-code      Claude Code settings.json"
+  info "  --claude-desktop   Claude Desktop (macOS)"
+  info "  --codex            OpenAI Codex CLI"
+  info "  --all              All of the above"
+  echo ""
 fi
+
+info "MCP tools: search_programs, list_instructions, build_instruction,"
+info "           list_pda_accounts, derive_pda, read_llms_txt,"
+info "           get_ai_analysis, simulate_instruction"
 echo ""

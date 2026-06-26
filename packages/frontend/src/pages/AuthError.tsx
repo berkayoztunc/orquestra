@@ -9,10 +9,10 @@ export default function AuthError(): JSX.Element {
       <div className="text-center max-w-md">
         <div className="text-red-500 text-5xl mb-4">⚠️</div>
         <h1 className="text-2xl font-bold mb-4">Authentication Failed</h1>
-        <p className="text-gray-400 mb-8">{message}</p>
+        <p className="text-sand-1100 mb-8">{message}</p>
         <Link
           to="/"
-          className="bg-primary text-dark-900 px-6 py-3 rounded-lg font-bold hover:bg-secondary transition inline-block"
+          className="bg-sand-1600 text-bg1 px-6 py-3 font-bold hover:bg-sand-1400 transition inline-block"
         >
           Back to Home
         </Link>

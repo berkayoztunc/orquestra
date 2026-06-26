@@ -23,7 +23,7 @@ Orquestra stores relational data in Cloudflare D1 and cached IDL/docs data in KV
 
 Public projects are available through:
 
-- REST read APIs
+- REST read API
 - Project pages
 - Program search
 - `llms.txt`

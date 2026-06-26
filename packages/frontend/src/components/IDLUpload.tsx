@@ -99,17 +99,17 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
   }
 
   return (
-    <div className="card-static overflow-hidden border border-white/5">
+    <div className="overflow-hidden border border-border-low bg-bg1">
       <div className="grid lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="relative border-b border-white/5 bg-surface-elevated/55 p-6 lg:border-b-0 lg:border-r">
+        <div className="relative border-b border-border-low bg-sand-100 p-6 lg:border-b-0 lg:border-r">
           <div className="absolute inset-0 bg-grid-pattern bg-grid opacity-30" />
           <div className="relative">
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+            <div className="inline-flex items-center gap-2 border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
               <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
               IDL intake
             </div>
-            <h2 className="mt-4 text-2xl font-bold text-white">Turn an Anchor IDL into a usable API surface.</h2>
-            <p className="mt-3 text-sm leading-6 text-gray-400">
+            <h2 className="mt-4 text-2xl font-bold text-sand-1600">Turn an Anchor IDL into a usable API surface.</h2>
+            <p className="mt-3 text-sm leading-6 text-sand-1100">
               Upload the program schema, add the on-chain program address, and Orquestra will index the interface for endpoints, docs, transaction builders, and agent tools.
             </p>
 
@@ -118,12 +118,12 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
               alt="Green blueprint diagram of an Anchor IDL becoming API surfaces"
               width={960}
               height={720}
-              className="mt-6 aspect-[4/3] w-full rounded-2xl border border-primary/20 object-cover shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
+              className="mt-6 aspect-[4/3] w-full border border-primary/20 object-cover shadow-[0_24px_80px_rgba(0,0,0,0.35)]"
             />
 
             <div className="mt-6 space-y-3">
               {uploadBenefits.map((benefit) => (
-                <div key={benefit} className="flex gap-3 text-sm leading-6 text-gray-300">
+                <div key={benefit} className="flex gap-3 text-sm leading-6 text-sand-1400">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" aria-hidden="true" />
                   <span>{benefit}</span>
                 </div>
@@ -135,19 +135,19 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
         <div className="p-6">
           <div className="mb-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
+              <div className="flex h-10 w-10 items-center justify-center border border-primary/20 bg-primary/10">
                 <UploadCloud className="h-5 w-5 text-primary" aria-hidden="true" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-white">Upload Anchor IDL</h3>
-                <p className="text-sm text-gray-400">Required fields are marked with an asterisk.</p>
+                <h3 className="text-xl font-bold text-sand-1600">Upload Anchor IDL</h3>
+                <p className="text-sm text-sand-1100">Required fields are marked with an asterisk.</p>
               </div>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading}>
             <div>
-              <label htmlFor="idl-upload" className="block text-sm text-gray-300 mb-2">IDL File *</label>
+              <label htmlFor="idl-upload" className="block text-sm text-sand-1400 mb-2">IDL File *</label>
               <div className="relative">
                 <input
                   id="idl-upload"
@@ -166,18 +166,18 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                     <div className="flex flex-col items-center gap-2">
                       <CheckCircle2 className="h-6 w-6 text-primary" aria-hidden="true" />
                       <span className="break-all text-sm font-medium text-primary">{idlFileName}</span>
-                      <span className="text-xs text-gray-500">Select a different file to replace it.</span>
+                      <span className="text-xs text-sand-1100">Select a different file to replace it.</span>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-gray-400">
+                    <div className="flex flex-col items-center gap-2 text-sand-1100">
                       <UploadCloud className="h-7 w-7 text-primary" aria-hidden="true" />
-                      <span className="text-sm font-medium text-gray-300">Select an IDL JSON file</span>
-                      <span className="text-xs text-gray-500">Anchor IDL files usually end in .json.</span>
+                      <span className="text-sm font-medium text-sand-1400">Select an IDL JSON file</span>
+                      <span className="text-xs text-sand-1100">Anchor IDL files usually end in .json.</span>
                     </div>
                   )}
                 </label>
               </div>
-              <p id="idl-upload-help" className="mt-2 text-xs leading-5 text-gray-500">
+              <p id="idl-upload-help" className="mt-2 text-xs leading-5 text-sand-1100">
                 The IDL is parsed locally first so the form can confirm the program name, version, and instruction count before upload.
               </p>
               {idlJson && (
@@ -192,7 +192,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
             </div>
 
             <div>
-              <label htmlFor="project-name" className="block text-sm text-gray-300 mb-2">Project Name *</label>
+              <label htmlFor="project-name" className="block text-sm text-sand-1400 mb-2">Project Name *</label>
               <input
                 id="project-name"
                 type="text"
@@ -205,7 +205,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 aria-describedby={fieldErrors.name ? 'project-name-error' : 'project-name-help'}
                 className={`input w-full ${fieldErrors.name ? 'border-red-500/50' : ''}`}
               />
-              <p id="project-name-help" className="mt-1.5 text-xs text-gray-500">
+              <p id="project-name-help" className="mt-1.5 text-xs text-sand-1100">
                 This name appears in your dashboard, generated docs, and API references.
               </p>
               {fieldErrors.name && (
@@ -214,7 +214,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
             </div>
 
             <div>
-              <label htmlFor="program-id" className="block text-sm text-gray-300 mb-2">Program ID (Solana Address) *</label>
+              <label htmlFor="program-id" className="block text-sm text-sand-1400 mb-2">Program ID (Solana Address) *</label>
               <input
                 id="program-id"
                 type="text"
@@ -228,7 +228,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 aria-describedby={fieldErrors.programId ? 'program-id-error' : 'program-id-help'}
                 className={`input w-full font-mono text-sm ${fieldErrors.programId ? 'border-red-500/50' : ''}`}
               />
-              <p id="program-id-help" className="mt-1.5 text-xs text-gray-500">
+              <p id="program-id-help" className="mt-1.5 text-xs text-sand-1100">
                 Use the deployed program address. This links generated endpoints and PDA helpers to the correct on-chain program.
               </p>
               {fieldErrors.programId && (
@@ -237,7 +237,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
             </div>
 
             <div>
-              <label htmlFor="project-description" className="block text-sm text-gray-300 mb-2">Description</label>
+              <label htmlFor="project-description" className="block text-sm text-sand-1400 mb-2">Description</label>
               <textarea
                 id="project-description"
                 value={description}
@@ -246,13 +246,13 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 rows={3}
                 className="input w-full resize-y"
               />
-              <p className="mt-1.5 text-xs text-gray-500">
+              <p className="mt-1.5 text-xs text-sand-1100">
                 A useful description improves generated docs and helps teammates understand when to use this API.
               </p>
             </div>
 
             <div>
-              <label htmlFor="cpi-docs" className="block text-sm text-gray-300 mb-2">CPI Documentation (optional)</label>
+              <label htmlFor="cpi-docs" className="block text-sm text-sand-1400 mb-2">CPI Documentation (optional)</label>
               <textarea
                 id="cpi-docs"
                 value={cpiMd}
@@ -262,12 +262,12 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 spellCheck={false}
                 className="input w-full resize-y font-mono text-sm"
               />
-              <p className="mt-1.5 text-xs text-gray-500">
+              <p className="mt-1.5 text-xs text-sand-1100">
                 Add Markdown for account constraints, seed derivation, signer expectations, or instruction ordering.
               </p>
             </div>
 
-            <div className="flex items-center gap-4 rounded-xl border border-white/5 bg-surface-elevated p-4">
+            <div className="flex items-center gap-4 border border-border-low bg-bg1 p-4">
               <label htmlFor="project-visibility" className="relative inline-flex min-h-10 cursor-pointer items-center">
                 <input
                   id="project-visibility"
@@ -276,25 +276,25 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                   onChange={(e) => setIsPublic(e.target.checked)}
                   className="peer sr-only"
                 />
-                <div className="h-6 w-11 rounded-full bg-white/10 transition-all peer-checked:border peer-checked:border-primary/50 peer-checked:bg-primary/30 peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface">
+                <div className="h-6 w-11 rounded-full bg-sand-100 transition-all peer-checked:border peer-checked:border-primary/50 peer-checked:bg-primary/30 peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface">
                   <div className={`mt-0.5 h-5 w-5 rounded-full bg-white transition-all duration-200 ${isPublic ? 'translate-x-5' : 'translate-x-0.5'}`} />
                 </div>
               </label>
               <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 text-sm font-medium text-white">
-                  {isPublic ? <Eye className="h-4 w-4 text-primary" aria-hidden="true" /> : <EyeOff className="h-4 w-4 text-gray-400" aria-hidden="true" />}
+                <p className="flex items-center gap-2 text-sm font-medium text-sand-1600">
+                  {isPublic ? <Eye className="h-4 w-4 text-primary" aria-hidden="true" /> : <EyeOff className="h-4 w-4 text-sand-1100" aria-hidden="true" />}
                   {isPublic ? 'Public Project' : 'Private Project'}
                 </p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
+                <p className="mt-1 text-xs leading-5 text-sand-1100">
                   {isPublic ? 'Anyone can discover and call the generated public API.' : 'Only your authenticated account can access this project.'}
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-primary/15 bg-primary/5 p-4">
+            <div className=" border border-primary/15 bg-primary/5 p-4">
               <div className="flex gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" aria-hidden="true" />
-                <p className="text-xs leading-5 text-gray-400">
+                <p className="text-xs leading-5 text-sand-1100">
                   Uploading creates the project record, stores the IDL, and starts generation for docs and API metadata. You can edit docs and custom endpoints after the project is created.
                 </p>
               </div>

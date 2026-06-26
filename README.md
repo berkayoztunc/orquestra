@@ -1,6 +1,6 @@
 # Orquestra
 
-Orquestra turns Solana Anchor and Codama IDLs into hosted REST APIs, AI-ready docs, and MCP tools.
+Orquestra turns Solana Anchor and Codama IDLs into hosted API, AI-ready docs, and MCP tools.
 
 Upload an IDL once, then use Orquestra to inspect instructions, derive PDAs, decode account data, and build unsigned Solana transactions from HTTP clients or AI agents.
 

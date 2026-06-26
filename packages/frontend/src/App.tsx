@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Layout from '@/components/Layout'
+import DocsShell from '@/components/DocsShell'
 import Home from '@/pages/Home'
 import Dashboard from '@/pages/Dashboard'
 import Explorer from '@/pages/Explorer'
@@ -12,9 +13,9 @@ import SignAndSend from '@/pages/SignAndSend'
 import CLI from '@/pages/CLI'
 import MCP from '@/pages/MCP'
 import API from '@/pages/API'
-import Pricing from '@/pages/Pricing'
 import Analytics from '@/pages/Analytics'
 import Lists from '@/pages/Lists'
+import Updates from '@/pages/Updates'
 import { ToastProvider } from '@/components/Toast'
 import { useAuthStore } from '@/store/auth'
 
@@ -36,14 +37,16 @@ function App(): JSX.Element {
             <Route path="/project/:programId" element={<ProjectDetail />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/error" element={<AuthError />} />
+            <Route path="/analytics" element={<Analytics />} />
+            <Route path="/lists" element={<Lists />} />
+            <Route path="/updates" element={<Updates />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+          <Route element={<DocsShell />}>
             <Route path="/docs/sign-and-send" element={<SignAndSend />} />
             <Route path="/docs/cli" element={<CLI />} />
             <Route path="/docs/mcp" element={<MCP />} />
             <Route path="/docs/api" element={<API />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/lists" element={<Lists />} />
-            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </Router>

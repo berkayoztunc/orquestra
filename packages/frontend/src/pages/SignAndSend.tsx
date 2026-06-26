@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CodeIcon, BookOpenIcon, ZapIcon, SendIcon } from 'lucide-react'
 import CodeBlock from '../components/CodeBlock'
+import { DocsLayout } from '@/ui/DocsLayout'
 
 type Language = 'typescript' | 'python' | 'rust'
 
@@ -320,24 +321,29 @@ export default function SignAndSend(): JSX.Element {
   const code = CODE_MAP[lang]
 
   return (
-    <div className="animate-fade-in space-y-12">
+    <DocsLayout
+      title="Sign & Send Transactions"
+      description="Build unsigned transactions with Orquestra, then decode, sign, send, and confirm them with your client wallet or backend signer."
+      toc={['Flow', 'Language examples', 'Security notes', 'References']}
+    >
+      <div className="animate-fade-in space-y-12">
 
       {/* ── Hero ─────────────────────────────────────────── */}
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="badge badge-primary text-xs">Docs</span>
-          <span className="text-gray-600 text-xs">/</span>
-          <span className="text-gray-400 text-xs font-mono">sign-and-send</span>
+          <span className="text-sand-1100 text-xs">/</span>
+          <span className="text-sand-1200 text-xs font-mono">sign-and-send</span>
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-bold">
-          <span className="gradient-text">Sign &amp; Send</span>{' '}
-          <span className="text-white">Transactions</span>
+          <span className="text-sand-1600">Sign &amp; Send</span>{' '}
+          <span className="text-sand-1600">Transactions</span>
         </h1>
 
-        <p className="text-gray-400 max-w-2xl leading-relaxed">
+        <p className="text-sand-1200 max-w-2xl leading-relaxed">
           The Orquestra API builds and serializes Solana transactions for you, returning them as a{' '}
-          <code className="text-primary font-mono text-sm bg-primary/10 px-1.5 py-0.5 rounded">base58</code>{' '}
+          <code className="text-sand-1500 font-mono text-sm bg-sand-100 px-1.5 py-0.5">base58</code>{' '}
           string. Your client only needs to decode it, attach a fresh blockhash, sign, and broadcast.
           Below are copy-paste examples for every major ecosystem.
         </p>
@@ -348,14 +354,14 @@ export default function SignAndSend(): JSX.Element {
         {STEPS.map((step, i) => (
           <div key={i} className="card p-5 flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-surface-elevated border border-white/5 flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 bg-sand-100 border border-border-low flex items-center justify-center flex-shrink-0">
                 {step.icon}
               </div>
-              <span className="text-xs text-gray-600 font-mono">step {i + 1}</span>
+              <span className="text-xs text-sand-1100 font-mono">step {i + 1}</span>
             </div>
             <div>
-              <p className="text-white font-semibold text-sm mb-1">{step.title}</p>
-              <p className="text-gray-500 text-xs leading-relaxed">{step.desc}</p>
+              <p className="text-sand-1600 font-semibold text-sm mb-1">{step.title}</p>
+              <p className="text-sand-1200 text-xs leading-relaxed">{step.desc}</p>
             </div>
           </div>
         ))}
@@ -365,11 +371,11 @@ export default function SignAndSend(): JSX.Element {
       <div className="card-static p-5 space-y-3">
         <div className="flex items-center gap-2">
           <BookOpenIcon className="w-4 h-4 text-secondary" />
-          <span className="text-sm font-semibold text-white">Build endpoint</span>
+          <span className="text-sm font-semibold text-sand-1600">Build endpoint</span>
         </div>
-        <div className="font-mono text-sm bg-surface-elevated border border-white/5 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2">
+        <div className="font-mono text-sm bg-sand-100 border border-border-low px-4 py-3 flex flex-wrap items-center gap-2">
           <span className="text-secondary font-bold">POST</span>
-          <span className="text-gray-300">
+          <span className="text-sand-1500">
             /api/v1/programs/<span className="text-primary">&#123;programId&#125;</span>/instructions/<span className="text-primary">&#123;instruction&#125;</span>/build
           </span>
         </div>
@@ -379,22 +385,22 @@ export default function SignAndSend(): JSX.Element {
             { label: 'accounts', desc: 'Map of account name → base58 pubkey' },
             { label: 'args', desc: 'Instruction arguments as JSON values' },
           ].map((f) => (
-            <div key={f.label} className="bg-surface-elevated rounded-lg p-3 border border-white/5">
+            <div key={f.label} className="bg-sand-100 p-3 border border-border-low">
               <p className="text-primary font-mono mb-0.5">{f.label}</p>
-              <p className="text-gray-500">{f.desc}</p>
+              <p className="text-sand-1200">{f.desc}</p>
             </div>
           ))}
         </div>
-        <p className="text-xs text-gray-500 leading-relaxed">
+        <p className="text-xs text-sand-1200 leading-relaxed">
           The response JSON includes a{' '}
-          <code className="text-primary font-mono bg-primary/10 px-1 rounded">transaction</code> field —
+          <code className="text-sand-1500 font-mono bg-sand-100 px-1">transaction</code> field —
           a base58-encoded, unsigned Solana transaction message ready for signing.
         </p>
       </div>
 
       {/* ── Code examples ─────────────────────────────────── */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-white">Code examples</h2>
+        <h2 className="text-xl font-semibold text-sand-1600">Code examples</h2>
 
         {/* Language selector */}
         <div className="flex gap-2 flex-wrap">
@@ -402,15 +408,15 @@ export default function SignAndSend(): JSX.Element {
             <button
               key={l}
               onClick={() => setLang(l)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all duration-200 ${
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border transition-all duration-200 ${
                 lang === l
-                  ? 'bg-primary/10 border-primary/40 text-primary'
-                  : 'bg-surface-elevated border-white/5 text-gray-400 hover:border-primary/20 hover:text-gray-200'
+                  ? 'bg-sand-1600 text-bg1 border-sand-1600'
+                  : 'bg-sand-100 border-border-low text-sand-1200 hover:border-border-medium hover:text-sand-1600'
               }`}
             >
               <span
-                className={`font-mono text-xs font-bold w-6 h-6 rounded flex items-center justify-center flex-shrink-0 ${
-                  lang === l ? 'bg-primary/20 text-primary' : 'bg-white/5 text-gray-500'
+                className={`font-mono text-xs font-bold w-6 h-6 flex items-center justify-center flex-shrink-0 ${
+                  lang === l ? 'bg-sand-200 text-sand-1600' : 'bg-sand-100 text-sand-1200'
                 }`}
               >
                 {LANG_META[l].badge}
@@ -422,25 +428,25 @@ export default function SignAndSend(): JSX.Element {
 
         {/* Dependencies pill */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-gray-600">{meta.depLabel}</span>
+          <span className="text-sand-1100">{meta.depLabel}</span>
           {meta.deps.map((d) => (
-            <span key={d} className="font-mono bg-surface-elevated border border-white/5 text-gray-300 px-2 py-1 rounded-lg">
+            <span key={d} className="font-mono bg-sand-100 border border-border-low text-sand-1500 px-2 py-1">
               {d}
             </span>
           ))}
         </div>
 
         {/* Code block */}
-        <div className="rounded-2xl border border-white/5 overflow-hidden">
+        <div className=" border border-border-low overflow-hidden">
           {/* Code block header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-surface-elevated border-b border-white/5">
+          <div className="flex items-center justify-between px-4 py-3 bg-sand-100 border-b border-border-low">
             <div className="flex items-center gap-2">
               <div className="flex gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-red-500/40" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/40" />
                 <div className="w-3 h-3 rounded-full bg-green-500/40" />
               </div>
-              <span className="text-gray-500 text-xs font-mono ml-2">
+              <span className="text-sand-1200 text-xs font-mono ml-2">
                 {lang === 'typescript' ? 'sign-and-send.ts' : lang === 'python' ? 'sign_and_send.py' : 'sign_and_send.rs'}
               </span>
             </div>
@@ -461,7 +467,7 @@ export default function SignAndSend(): JSX.Element {
       </div>
 
       {/* ── Security note ─────────────────────────────────── */}
-      <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-5 space-y-2">
+      <div className=" border border-yellow-500/20 bg-yellow-500/5 p-5 space-y-2">
         <p className="text-yellow-400 font-semibold text-sm">Security reminders</p>
         <ul className="text-yellow-200/60 text-xs space-y-1.5 leading-relaxed list-disc list-inside">
           <li>Never hardcode private keys. Load them from environment variables or a secure keystore.</li>
@@ -471,7 +477,7 @@ export default function SignAndSend(): JSX.Element {
             what you expect.
           </li>
           <li>
-            Keep your <code className="font-mono bg-yellow-500/10 px-1 rounded">X-API-Key</code> secret —
+            Keep your <code className="font-mono bg-yellow-500/10 px-1">X-API-Key</code> secret —
             treat it like a password and rotate it regularly.
           </li>
         </ul>
@@ -483,7 +489,7 @@ export default function SignAndSend(): JSX.Element {
           href="https://docs.solana.com/developing/clients/javascript-api"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-gray-500 hover:text-primary transition-colors underline underline-offset-4"
+          className="text-sm text-sand-1200 hover:text-sand-1600 transition-colors underline underline-offset-4"
         >
           @solana/web3.js docs ↗
         </a>
@@ -491,7 +497,7 @@ export default function SignAndSend(): JSX.Element {
           href="https://sola.rs/solana_sdk"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-gray-500 hover:text-primary transition-colors underline underline-offset-4"
+          className="text-sm text-sand-1200 hover:text-sand-1600 transition-colors underline underline-offset-4"
         >
           solana-sdk (Rust) docs ↗
         </a>
@@ -499,11 +505,12 @@ export default function SignAndSend(): JSX.Element {
           href="https://kevinheavey.github.io/solders/"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm text-gray-500 hover:text-primary transition-colors underline underline-offset-4"
+          className="text-sm text-sand-1200 hover:text-sand-1600 transition-colors underline underline-offset-4"
         >
           solders (Python) docs ↗
         </a>
       </div>
-    </div>
+      </div>
+    </DocsLayout>
   )
 }

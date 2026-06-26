@@ -41,7 +41,7 @@ function withStandardHeaders(response, extraHeaders = {}) {
 
 function markdownForPath(pathname) {
   const pages = {
-    '/': `# Orquestra\n\nBuild Solana APIs in seconds. Upload your Anchor IDL and get a REST API, AI-ready docs, and an MCP server.\n\n## Key capabilities\n\n- Search public Solana programs\n- Inspect instructions, accounts, and PDA schemas\n- Build unsigned base58 transactions\n- Connect the public MCP endpoint for agent workflows\n\n## Key links\n\n- API docs: ${SITE_ORIGIN}/docs/api\n- API catalog: ${SITE_ORIGIN}/.well-known/api-catalog\n- OpenAPI: ${API_ORIGIN}/openapi.json\n- MCP docs: ${SITE_ORIGIN}/docs/mcp\n- MCP server: ${API_ORIGIN}/mcp\n`,
+    '/': `# Orquestra\n\nBuild Solana API in seconds. Upload your Anchor IDL and get a API, AI-ready docs, and an MCP server.\n\n## Key capabilities\n\n- Search public Solana programs\n- Inspect instructions, accounts, and PDA schemas\n- Build unsigned base58 transactions\n- Connect the public MCP endpoint for agent workflows\n\n## Key links\n\n- API docs: ${SITE_ORIGIN}/docs/api\n- API catalog: ${SITE_ORIGIN}/.well-known/api-catalog\n- OpenAPI: ${API_ORIGIN}/openapi.json\n- MCP docs: ${SITE_ORIGIN}/docs/mcp\n- MCP server: ${API_ORIGIN}/mcp\n`,
     '/explorer': `# Explorer\n\nBrowse public programs indexed by Orquestra and inspect the generated API surface for each one.`,
     '/docs/api': `# API Docs\n\nSee the public Orquestra API at ${API_ORIGIN}.\n\n- OpenAPI: ${API_ORIGIN}/openapi.json\n- Health: ${API_ORIGIN}/health\n- API catalog: ${SITE_ORIGIN}/.well-known/api-catalog`,
     '/docs/cli': `# CLI Docs\n\nUse the Orquestra CLI to scan programs and check Anchor IDLs.`,

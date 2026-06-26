@@ -15,6 +15,7 @@ import {
   ShieldCheckIcon,
 } from 'lucide-react'
 import CodeBlock from '../components/CodeBlock'
+import { DocsLayout } from '@/ui/DocsLayout'
 
 type Client = 'claude' | 'claude-code' | 'cursor' | 'vscode'
 
@@ -183,7 +184,7 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-400 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-all duration-200 select-none"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-sand-100 border border-border-low text-sand-1200 hover:bg-sand-100 hover:border-border-medium hover:text-sand-1600 transition-all duration-200 select-none"
       title="Copy"
     >
       {copied ? (
@@ -206,20 +207,25 @@ export default function MCP(): JSX.Element {
   const current = CLIENT_CONFIGS[client]
 
   return (
-    <div className="animate-fade-in space-y-12">
+    <DocsLayout
+      title="MCP Server Integration Guide"
+      description="Connect Orquestra to MCP-capable assistants so agents can inspect Solana IDLs, derive PDAs, fetch accounts, and build unsigned transactions."
+      toc={['Endpoint', 'Clients', 'Tools', 'Scoped access']}
+    >
+      <div className="animate-fade-in space-y-12">
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <span className="badge badge-primary text-xs">Docs</span>
-          <span className="text-gray-600 text-xs">/</span>
-          <span className="text-gray-400 text-xs font-mono">mcp-server</span>
+          <span className="text-sand-1100 text-xs">/</span>
+          <span className="font-mono text-sand-1100 text-xs">mcp-server</span>
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-bold">
-          <span className="gradient-text">MCP Server</span>{' '}
-          <span className="text-white">Integration Guide</span>
+          <span className="text-sand-1600">MCP Server</span>{' '}
+          <span className="text-sand-1600">Integration Guide</span>
         </h1>
 
-        <p className="text-gray-400 max-w-2xl leading-relaxed">
+        <p className="text-sand-1200 max-w-2xl leading-relaxed">
           Connect Orquestra to any MCP-capable assistant and let your agent inspect Solana IDLs,
           derive PDAs, fetch live on-chain account data, and build unsigned transactions directly from prompts.
         </p>
@@ -229,14 +235,14 @@ export default function MCP(): JSX.Element {
         {STEPS.map((step, i) => (
           <div key={step.title} className="card p-5 flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-surface-elevated border border-white/5 flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 bg-sand-100 border border-border-low flex items-center justify-center flex-shrink-0">
                 {step.icon}
               </div>
-              <span className="text-xs text-gray-600 font-mono">step {i + 1}</span>
+              <span className="text-xs text-sand-1100 font-mono">step {i + 1}</span>
             </div>
             <div>
-              <p className="text-white font-semibold text-sm mb-1">{step.title}</p>
-              <p className="text-gray-500 text-xs leading-relaxed">{step.desc}</p>
+              <p className="text-sand-1600 font-semibold text-sm mb-1">{step.title}</p>
+              <p className="text-sand-1200 text-xs leading-relaxed">{step.desc}</p>
             </div>
           </div>
         ))}
@@ -245,31 +251,31 @@ export default function MCP(): JSX.Element {
       <div className="card-static p-5 space-y-3">
         <div className="flex items-center gap-2">
           <BookOpenIcon className="w-4 h-4 text-secondary" />
-          <span className="text-sm font-semibold text-white">Server endpoint</span>
+          <span className="text-sm font-semibold text-sand-1600">Server endpoint</span>
         </div>
-        <div className="font-mono text-sm bg-surface-elevated border border-white/5 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="font-mono text-sm bg-sand-50 border border-border-low px-4 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <BotIcon className="w-4 h-4 text-primary" />
-            <span className="text-gray-300">{MCP_ENDPOINT}</span>
+            <span className="text-sand-1500">{MCP_ENDPOINT}</span>
           </div>
           <CopyButton text={MCP_ENDPOINT} />
         </div>
       </div>
 
       <div className="card overflow-hidden">
-        <div className="flex items-center border-b border-white/5 overflow-x-auto">
+        <div className="flex items-center border-b border-border-low overflow-x-auto">
           {(Object.keys(CLIENT_CONFIGS) as Client[]).map((key) => (
             <button
               key={key}
               onClick={() => setClient(key)}
               className={`px-4 sm:px-5 py-3 text-sm font-medium whitespace-nowrap transition-all ${
                 client === key
-                  ? 'text-primary bg-primary/10 border-b-2 border-primary'
-                  : 'text-gray-400 hover:text-gray-200'
+                  ? 'text-sand-1600 bg-sand-200 border-b-2 border-sand-1600'
+                  : 'text-sand-1200 hover:text-sand-1600 hover:bg-sand-100'
               }`}
             >
               <span className="inline-flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-surface-elevated border border-white/5 text-[10px] flex items-center justify-center font-mono text-gray-300">
+                <span className="w-5 h-5 bg-sand-100 border border-border-low text-[10px] flex items-center justify-center font-mono text-sand-1500">
                   {CLIENT_CONFIGS[key].badge}
                 </span>
                 {CLIENT_CONFIGS[key].label}
@@ -286,24 +292,24 @@ export default function MCP(): JSX.Element {
             wrapLongLines
           />
 
-          <p className="text-xs text-gray-500">{current.hint}</p>
+          <p className="text-xs text-sand-1200">{current.hint}</p>
         </div>
       </div>
 
       <div className="card p-5 sm:p-6 space-y-4" id="tools">
-        <h2 className="text-xl sm:text-2xl font-bold text-white">Available MCP tools</h2>
-        <p className="text-sm text-gray-400">
+        <h2 className="text-xl sm:text-2xl font-bold text-sand-1600">Available MCP tools</h2>
+        <p className="text-sm text-sand-1200">
           These tools are read-oriented plus transaction building and live account fetching. Signing and broadcasting stay on your client side.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {TOOLS.map(({ icon: Icon, name, desc }) => (
-            <div key={name} className="bg-surface-elevated border border-white/5 rounded-xl p-4">
+            <div key={name} className="bg-sand-100 border border-border-low p-4">
               <div className="flex items-center gap-2 mb-1.5">
                 <Icon className="w-4 h-4 text-primary" />
                 <span className="text-sm font-mono text-primary">{name}</span>
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+              <p className="text-xs text-sand-1200 leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>
@@ -312,22 +318,22 @@ export default function MCP(): JSX.Element {
       <div className="card p-5 sm:p-6 space-y-4">
         <div className="flex items-center gap-2">
           <SparklesIcon className="w-4 h-4 text-secondary" />
-          <h2 className="text-lg sm:text-xl font-bold text-white">Try this prompt</h2>
+          <h2 className="text-lg sm:text-xl font-bold text-sand-1600">Try this prompt</h2>
         </div>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-sand-1200">
           Once the server is connected, paste either of these into your assistant.
           The full pipeline (research → resolve → build → simulate → sign) runs inside one prompt.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="bg-surface-elevated border border-white/5 rounded-xl p-4">
-            <p className="text-[11px] uppercase tracking-wider text-gray-500 font-mono mb-2">single tool call</p>
-            <p className="text-sm text-gray-200 leading-relaxed">
+          <div className="bg-sand-100 border border-border-low p-4">
+            <p className="text-[11px] uppercase tracking-wider text-sand-1200 font-mono mb-2">single tool call</p>
+            <p className="text-sm text-sand-1500 leading-relaxed">
               "Use orquestra to list every instruction on the Marinade program."
             </p>
           </div>
-          <div className="bg-surface-elevated border border-secondary/20 rounded-xl p-4">
+          <div className="bg-sand-100 border border-secondary/20 p-4">
             <p className="text-[11px] uppercase tracking-wider text-secondary font-mono mb-2">full conductor pipeline</p>
-            <p className="text-sm text-gray-200 leading-relaxed">
+            <p className="text-sm text-sand-1500 leading-relaxed">
               "Stake 1 SOL with Marinade. Simulate first, then ask me before signing."
             </p>
           </div>
@@ -335,7 +341,7 @@ export default function MCP(): JSX.Element {
       </div>
 
       <div className="card-static p-5 border border-yellow-500/20 bg-yellow-500/5">
-        <p className="text-sm text-gray-300 leading-relaxed">
+        <p className="text-sm text-sand-1500 leading-relaxed">
           <span className="text-yellow-300 font-semibold">Note:</span> MCP only exposes projects marked as public.
           Private projects remain inaccessible even if project IDs are known.
         </p>
@@ -345,10 +351,10 @@ export default function MCP(): JSX.Element {
       <div className="card p-5 sm:p-6 space-y-5">
         <div className="flex items-center gap-2">
           <KeyIcon className="w-4 h-4 text-primary" />
-          <h2 className="text-lg sm:text-xl font-bold text-white">Scope Keys</h2>
+          <h2 className="text-lg sm:text-xl font-bold text-sand-1600">Scope Keys</h2>
         </div>
-        <p className="text-sm text-gray-400 leading-relaxed">
-          Scope Keys let you restrict <code className="bg-white/10 px-1 rounded text-xs">search_programs</code>{' '}
+        <p className="text-sm text-sand-1200 leading-relaxed">
+          Scope Keys let you restrict <code className="bg-sand-100 border border-border-low px-1 rounded text-xs">search_programs</code>{' '}
           to a curated collection of programs you've saved in{' '}
           <a href="/lists" className="text-primary hover:underline">My Lists</a>.
           Without a scope key every public program is searchable — a scope key narrows results to only the programs
@@ -356,22 +362,22 @@ export default function MCP(): JSX.Element {
         </p>
 
         <div className="space-y-3">
-          <p className="text-sm font-medium text-gray-300">How to use a scope key:</p>
-          <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
+          <p className="text-sm font-medium text-sand-1500">How to use a scope key:</p>
+          <ol className="text-sm text-sand-1200 space-y-2 list-decimal list-inside">
             <li>
               Go to <a href="/lists" className="text-primary hover:underline">My Lists</a>, create a list, and
               add the programs you want to include.
             </li>
-            <li>Copy the scope key (<code className="bg-white/10 px-1 rounded text-xs">sk_…</code>) shown on the list.</li>
+            <li>Copy the scope key (<code className="bg-sand-100 border border-border-low px-1 rounded text-xs">sk_…</code>) shown on the list.</li>
             <li>Add it to your MCP client config as shown below.</li>
           </ol>
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm font-medium text-gray-300">Config examples with scope key:</p>
+          <p className="text-sm font-medium text-sand-1500">Config examples with scope key:</p>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <p className="text-xs text-gray-500 font-mono mb-1.5">Claude Code / Cursor</p>
+              <p className="text-xs text-sand-1200 font-mono mb-1.5">Claude Code / Cursor</p>
               <CodeBlock
                 code={JSON.stringify({
                   mcpServers: {
@@ -386,7 +392,7 @@ export default function MCP(): JSX.Element {
               />
             </div>
             <div>
-              <p className="text-xs text-gray-500 font-mono mb-1.5">Claude Desktop (via wrapper)</p>
+              <p className="text-xs text-sand-1200 font-mono mb-1.5">Claude Desktop (via wrapper)</p>
               <CodeBlock
                 code={JSON.stringify({
                   mcpServers: {
@@ -408,11 +414,12 @@ export default function MCP(): JSX.Element {
           </div>
         </div>
 
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-sand-1200">
           You can regenerate a scope key at any time from My Lists — the old key stops working immediately.
           Regeneration does not affect the programs in the list.
         </p>
       </div>
-    </div>
+      </div>
+    </DocsLayout>
   )
 }

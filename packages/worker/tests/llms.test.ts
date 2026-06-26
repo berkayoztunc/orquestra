@@ -56,7 +56,7 @@ function makeEnv(externalApiRows: any[] = []) {
 }
 
 describe('llms.txt external API section', () => {
-  test('includes owner-documented external APIs', async () => {
+  test('includes owner-documented external API', async () => {
     const res = await llmsApp.request('/project/proj_test/llms.txt', {}, makeEnv([
       {
         name: 'Indexer Account Lookup',
@@ -72,7 +72,7 @@ describe('llms.txt external API section', () => {
 
     const text = await res.text()
     expect(res.status).toBe(200)
-    expect(text).toContain('## External APIs')
+    expect(text).toContain('## External API')
     expect(text).toContain('/program-accounts/query')
     expect(text).toContain('accountType to auto-apply discriminator filters')
     expect(text).toContain('Orquestra does not execute or proxy them')
@@ -81,11 +81,11 @@ describe('llms.txt external API section', () => {
     expect(text).toContain('| address | Yes | Account public key |')
   })
 
-  test('omits the section when no external APIs are documented', async () => {
+  test('omits the section when no external API are documented', async () => {
     const res = await llmsApp.request('/project/proj_test/llms.txt', {}, makeEnv())
 
     const text = await res.text()
     expect(res.status).toBe(200)
-    expect(text).not.toContain('## External APIs')
+    expect(text).not.toContain('## External API')
   })
 })

@@ -2,12 +2,17 @@ import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
+import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
+import { generateDocumentation } from '../services/doc-generator'
+import { generateId } from '../utils/id'
 
 type Env = {
   Variables: Record<string, unknown>
   Bindings: {
     DB: any
     AI: Ai
+    CACHE: any
+    API_BASE_URL: string
     INGEST_API_KEY: string
   }
 }
@@ -166,6 +171,64 @@ app.post('/recategorize', ingestKeyMiddleware, async (c) => {
   )
 
   return c.json({ queued: uncategorized.length })
+})
+
+// ── Regenerate AI Analysis ────────────────────────────────────────────────────
+
+/**
+ * POST /api/admin/regenerate-analysis/:projectId
+ *
+ * Fetches the latest IDL version from DB, deletes the existing AI analysis,
+ * and regenerates it. Returns the new analysis.
+ */
+app.post('/regenerate-analysis/:projectId', ingestKeyMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const db = c.env?.DB
+  const ai = c.env?.AI
+
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  if (!ai) return c.json({ error: 'Workers AI binding not available' }, 500)
+
+  const project = await db
+    .prepare('SELECT name, program_id, is_public FROM projects WHERE id = ?')
+    .bind(projectId)
+    .first()
+
+  if (!project) return c.json({ error: 'Project not found' }, 404)
+
+  const idlRow = await db
+    .prepare('SELECT id, idl_json, cpi_md FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1')
+    .bind(projectId)
+    .first()
+
+  if (!idlRow) return c.json({ error: 'No IDL version found for project' }, 404)
+
+  const idl = JSON.parse(idlRow.idl_json as string)
+  const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
+
+  const docs = generateDocumentation(idl, project.program_id as string, apiBaseUrl, projectId, idlRow.cpi_md as string | null)
+
+  await db.prepare('DELETE FROM ai_analyses WHERE project_id = ?').bind(projectId).run()
+
+  const now = new Date().toISOString()
+  const analysis = await generateAndStoreAIAnalysis({
+    db,
+    ai,
+    id: generateId(),
+    projectId,
+    idlVersionId: idlRow.id as string,
+    idl,
+    docsText: docs.full,
+    programId: project.program_id as string,
+    projectName: project.name as string,
+    now,
+  })
+
+  if (c.env?.CACHE) {
+    await c.env.CACHE.delete(`docs:${projectId}`)
+  }
+
+  return c.json({ ok: true, projectId, analysisId: analysis.id, generatedAt: analysis.generatedAt })
 })
 
 export default app

@@ -153,8 +153,8 @@ export default function Lists(): JSX.Element {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">My Program Lists</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-3xl font-bold text-sand-1600">My Program Lists</h1>
+          <p className="text-sand-1100 mt-1">
             Curate named collections of Solana programs and generate scope keys for focused MCP search.
           </p>
         </div>
@@ -167,12 +167,12 @@ export default function Lists(): JSX.Element {
       </div>
 
       {/* Scope key explainer */}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-        <p className="text-sm text-gray-300">
+      <div className=" border border-primary/20 bg-primary/5 p-4">
+        <p className="text-sm text-sand-1400">
           <span className="font-semibold text-primary">Scope Keys</span> let you restrict MCP{' '}
-          <code className="bg-white/10 px-1 rounded text-xs">search_programs</code> to only the programs in a list.
+          <code className="bg-sand-100 px-1 text-xs">search_programs</code> to only the programs in a list.
           Pass the key in the{' '}
-          <code className="bg-white/10 px-1 rounded text-xs">X-Scope-Key</code> header when connecting to
+          <code className="bg-sand-100 px-1 text-xs">X-Scope-Key</code> header when connecting to
           the MCP server. Without a scope key, all public programs are searchable.
         </p>
       </div>
@@ -184,13 +184,13 @@ export default function Lists(): JSX.Element {
         </div>
       ) : lists.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
+          <div className="w-16 h-16 bg-primary/10 border border-primary/20 flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-white mb-2">No lists yet</h3>
-          <p className="text-gray-400 mb-6 max-w-sm">
+          <h3 className="text-xl font-semibold text-sand-1600 mb-2">No lists yet</h3>
+          <p className="text-sand-1100 mb-6 max-w-sm">
             Create your first list to curate a collection of Solana programs and generate a scope key for it.
           </p>
           <button onClick={() => setShowNewListModal(true)} className="btn-primary">
@@ -208,14 +208,14 @@ export default function Lists(): JSX.Element {
                     {editingListId === list.id ? (
                       <div className="space-y-2">
                         <input
-                          className="input w-full text-white font-semibold"
+                          className="input w-full text-sand-1600 font-semibold"
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit(list.id)}
                           autoFocus
                         />
                         <input
-                          className="input w-full text-sm text-gray-400"
+                          className="input w-full text-sm text-sand-1100"
                           value={editDescription}
                           onChange={(e) => setEditDescription(e.target.value)}
                           placeholder="Description (optional)"
@@ -226,7 +226,7 @@ export default function Lists(): JSX.Element {
                           </button>
                           <button
                             onClick={() => setEditingListId(null)}
-                            className="text-sm text-gray-400 hover:text-white transition-colors"
+                            className="text-sm text-sand-1100 hover:text-sand-1600 transition-colors"
                           >
                             Cancel
                           </button>
@@ -235,15 +235,15 @@ export default function Lists(): JSX.Element {
                     ) : (
                       <>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-white">{list.name}</h3>
+                          <h3 className="text-lg font-semibold text-sand-1600">{list.name}</h3>
                           {list.is_default && (
                             <span className="badge badge-primary text-xs">Default</span>
                           )}
                         </div>
                         {list.description && (
-                          <p className="text-sm text-gray-400 mt-0.5">{list.description}</p>
+                          <p className="text-sm text-sand-1100 mt-0.5">{list.description}</p>
                         )}
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-sand-1100 mt-1">
                           {list.item_count} program{list.item_count !== 1 ? 's' : ''} ·{' '}
                           Created {new Date(list.created_at).toLocaleDateString()}
                         </p>
@@ -259,7 +259,7 @@ export default function Lists(): JSX.Element {
                           setEditName(list.name)
                           setEditDescription(list.description ?? '')
                         }}
-                        className="text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5"
+                        className="text-sand-1100 hover:text-sand-1600 transition-colors p-1.5 hover:bg-sand-100"
                         title="Rename"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -268,7 +268,7 @@ export default function Lists(): JSX.Element {
                       </button>
                       <button
                         onClick={() => setDeletingListId(list.id)}
-                        className="text-gray-400 hover:text-red-400 transition-colors p-1.5 rounded-lg hover:bg-white/5"
+                        className="text-sand-1100 hover:text-red-400 transition-colors p-1.5 hover:bg-sand-100"
                         title="Delete list"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -281,14 +281,14 @@ export default function Lists(): JSX.Element {
 
                 {/* Scope key row */}
                 <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                  <span className="text-xs text-gray-500 font-medium shrink-0">Scope Key:</span>
-                  <code className="flex-1 text-xs font-mono text-primary bg-primary/5 border border-primary/15 rounded-lg px-3 py-1.5 truncate">
+                  <span className="text-xs text-sand-1100 font-medium shrink-0">Scope Key:</span>
+                  <code className="flex-1 text-xs font-mono text-primary bg-primary/5 border border-primary/15 px-3 py-1.5 truncate">
                     {maskKey(list.scope_key)}
                   </code>
                   <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleCopyScopeKey(list.id, list.scope_key)}
-                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors border border-white/10 rounded-lg px-2.5 py-1.5 hover:bg-white/5"
+                      className="flex items-center gap-1.5 text-xs text-sand-1100 hover:text-sand-1600 transition-colors border border-border-low px-2.5 py-1.5 hover:bg-sand-100"
                     >
                       {copiedKeyId === list.id ? (
                         <>
@@ -309,7 +309,7 @@ export default function Lists(): JSX.Element {
                     <button
                       onClick={() => setConfirmRegenerateId(list.id)}
                       disabled={regeneratingId === list.id}
-                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-yellow-400 transition-colors border border-white/10 rounded-lg px-2.5 py-1.5 hover:bg-white/5 disabled:opacity-50"
+                      className="flex items-center gap-1.5 text-xs text-sand-1100 hover:text-[#b75000] transition-colors border border-border-low px-2.5 py-1.5 hover:bg-sand-100 disabled:opacity-50"
                       title="Regenerate scope key (old key will stop working)"
                     >
                       {regeneratingId === list.id ? (
@@ -327,7 +327,7 @@ export default function Lists(): JSX.Element {
                 {/* Expand / collapse programs */}
                 <button
                   onClick={() => handleExpandList(list.id)}
-                  className="mt-3 flex items-center gap-1.5 text-xs text-gray-400 hover:text-primary transition-colors"
+                  className="mt-3 flex items-center gap-1.5 text-xs text-sand-1100 hover:text-primary transition-colors"
                 >
                   <svg
                     className={`w-3.5 h-3.5 transition-transform ${expandedListId === list.id ? 'rotate-90' : ''}`}
@@ -343,29 +343,29 @@ export default function Lists(): JSX.Element {
 
               {/* Expanded programs */}
               {expandedListId === list.id && (
-                <div className="border-t border-white/5 bg-dark-900/40">
+                <div className="border-t border-border-low bg-bg1">
                   {loadingItems === list.id ? (
                     <div className="flex items-center justify-center py-8">
                       <div className="w-6 h-6 rounded-full border border-primary/30 border-t-primary animate-spin" />
                     </div>
                   ) : !listItems[list.id] || listItems[list.id].length === 0 ? (
-                    <div className="py-8 text-center text-sm text-gray-500">
+                    <div className="py-8 text-center text-sm text-sand-1100">
                       No programs in this list yet.{' '}
-                      <span className="text-gray-400">Browse the Explorer and use the + button to add programs.</span>
+                      <span className="text-sand-1100">Browse the Explorer and use the + button to add programs.</span>
                     </div>
                   ) : (
-                    <div className="divide-y divide-white/5">
+                    <div className="divide-y divide-border-low">
                       {listItems[list.id].map((item) => (
-                        <div key={item.item_id} className="flex items-center justify-between px-5 py-3 hover:bg-white/[0.02] transition-colors">
+                        <div key={item.item_id} className="flex items-center justify-between px-5 py-3 hover:bg-sand-50 transition-colors">
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{item.name}</p>
-                            <code className="text-xs text-gray-500 font-mono">
+                            <p className="text-sm font-medium text-sand-1600 truncate">{item.name}</p>
+                            <code className="text-xs text-sand-1100 font-mono">
                               {item.program_id.slice(0, 8)}…{item.program_id.slice(-4)}
                             </code>
                           </div>
                           <button
                             onClick={() => handleRemoveItem(list.id, item.project_id)}
-                            className="ml-4 text-xs text-gray-500 hover:text-red-400 transition-colors flex items-center gap-1 shrink-0"
+                            className="ml-4 text-xs text-sand-1100 hover:text-red-400 transition-colors flex items-center gap-1 shrink-0"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -387,10 +387,10 @@ export default function Lists(): JSX.Element {
       {showNewListModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="card w-full max-w-md p-6 space-y-4">
-            <h2 className="text-xl font-semibold text-white">New List</h2>
+            <h2 className="text-xl font-semibold text-sand-1600">New List</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Name *</label>
+                <label className="block text-sm text-sand-1100 mb-1">Name *</label>
                 <input
                   className="input w-full"
                   placeholder="e.g. My DeFi Programs"
@@ -402,7 +402,7 @@ export default function Lists(): JSX.Element {
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Description</label>
+                <label className="block text-sm text-sand-1100 mb-1">Description</label>
                 <input
                   className="input w-full"
                   placeholder="Optional"
@@ -414,7 +414,7 @@ export default function Lists(): JSX.Element {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 onClick={() => { setShowNewListModal(false); setNewListName(''); setNewListDescription('') }}
-                className="text-sm text-gray-400 hover:text-white transition-colors"
+                className="text-sm text-sand-1100 hover:text-sand-1600 transition-colors"
               >
                 Cancel
               </button>
@@ -434,14 +434,14 @@ export default function Lists(): JSX.Element {
       {deletingListId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="card w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-xl font-semibold text-white">Delete List?</h2>
-            <p className="text-sm text-gray-400">
+            <h2 className="text-xl font-semibold text-sand-1600">Delete List?</h2>
+            <p className="text-sm text-sand-1100">
               This list and all its programs will be removed. The scope key will stop working. This cannot be undone.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setDeletingListId(null)}
-                className="text-sm text-gray-400 hover:text-white transition-colors"
+                className="text-sm text-sand-1100 hover:text-sand-1600 transition-colors"
               >
                 Cancel
               </button>
@@ -460,21 +460,21 @@ export default function Lists(): JSX.Element {
       {confirmRegenerateId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="card w-full max-w-sm p-6 space-y-4">
-            <h2 className="text-xl font-semibold text-white">Regenerate Scope Key?</h2>
-            <p className="text-sm text-gray-400">
+            <h2 className="text-xl font-semibold text-sand-1600">Regenerate Scope Key?</h2>
+            <p className="text-sm text-sand-1100">
               The current scope key will immediately stop working. Any MCP clients using it will need to be updated
               with the new key.
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setConfirmRegenerateId(null)}
-                className="text-sm text-gray-400 hover:text-white transition-colors"
+                className="text-sm text-sand-1100 hover:text-sand-1600 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleRegenerateScopeKey(confirmRegenerateId)}
-                className="bg-yellow-500 hover:bg-yellow-400 text-black font-medium text-sm px-4 py-2 rounded-lg transition-colors"
+                className="bg-yellow-500 hover:bg-yellow-400 text-black font-medium text-sm px-4 py-2 transition-colors"
               >
                 Regenerate
               </button>

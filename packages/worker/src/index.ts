@@ -6,6 +6,9 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 // MCP
 import { handleMcpRequest } from './routes/mcp'
 
+// Scheduled
+import { runDailyIdlSync } from './services/idl-sync'
+
 // Middleware
 import { errorHandler } from './middleware/error-handler'
 import { apiRateLimit } from './middleware/rate-limit'
@@ -100,5 +103,9 @@ export default {
       return handleMcpRequest(request, env as any, ctx)
     }
     return app.fetch(request, env, ctx)
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runDailyIdlSync(env))
   },
 }

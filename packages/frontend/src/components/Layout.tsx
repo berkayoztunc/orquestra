@@ -1,21 +1,21 @@
 import { Outlet } from 'react-router-dom'
-import { useEffect } from 'react'
 import Header from './Header'
 import Footer from './Footer'
-import { registerWebMcpTools } from '@/lib/webmcp'
+import { TopFade } from '@/ui/HeroDecor'
 
 export default function Layout(): JSX.Element {
-  // useEffect(() => {
-  //   return registerWebMcpTools()
-  // }, [])
-
   return (
-    <div className="min-h-screen flex flex-col bg-surface">
-      <Header />
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8 pt-24">
-        <Outlet />
-      </main>
-      <Footer />
+    <div className="relative min-h-screen overflow-x-clip bg-bg1 text-sand-1500">
+      <TopFade />
+      <div className="relative z-10">
+        <Header />
+        <main className="px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto min-h-[calc(100vh-180px)] w-full max-w-7xl border-x border-border-low">
+            <Outlet />
+          </div>
+        </main>
+        <Footer />
+      </div>
     </div>
   )
 }

@@ -8,13 +8,11 @@ import { autoSeedCategory } from '../services/program-auto-detect'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
 import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
+import { deleteIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-summary'
+import { generateId } from '../utils/id'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
-
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-}
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -158,12 +156,23 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       await kv.put(`idl:${projectId}:latest`, idlStr, { expirationTtl: 604800 }) // 7 days
       await kv.put(`idl:${projectId}:1`, idlStr, { expirationTtl: 604800 })
     }
-
     // Generate documentation and cache
     const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
     const docs = generateDocumentation(body.idl, body.programId, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+    try {
+      await writeIdlSummaryCache({
+        kv: c.env?.IDLS,
+        projectId,
+        programId: body.programId,
+        version: 1,
+        idl: body.idl,
+        docs,
+      })
+    } catch (err) {
+      console.error('[idl] Failed to cache IDL summary:', err)
     }
 
     if (c.env?.AI && db) {
@@ -359,12 +368,23 @@ app.put('/:projectId', authMiddleware, async (c) => {
       await kv.put(`idl:${projectId}:latest`, idlStr, { expirationTtl: 604800 })
       await kv.put(`idl:${projectId}:${newVersion}`, idlStr, { expirationTtl: 604800 })
     }
-
     // Regenerate docs
     const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
     const docs = generateDocumentation(body.idl, project.program_id as string, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+    }
+    try {
+      await writeIdlSummaryCache({
+        kv,
+        projectId,
+        programId: project.program_id as string,
+        version: newVersion,
+        idl: body.idl,
+        docs,
+      })
+    } catch (err) {
+      console.error('[idl] Failed to cache IDL summary:', err)
     }
 
     if (c.env?.AI && db) {
@@ -427,6 +447,11 @@ app.delete('/:projectId', authMiddleware, async (c) => {
       }, 400)
     }
 
+    const versions = await db
+      ?.prepare('SELECT version FROM idl_versions WHERE project_id = ?')
+      .bind(projectId)
+      .all()
+
     // Delete cascading (foreign keys handle related records)
     await db?.prepare('DELETE FROM known_addresses WHERE project_id = ?').bind(projectId).run()
     await db?.prepare('DELETE FROM api_keys WHERE project_id = ?').bind(projectId).run()
@@ -438,6 +463,8 @@ app.delete('/:projectId', authMiddleware, async (c) => {
     const kv = c.env?.IDLS
     if (kv) {
       await kv.delete(`idl:${projectId}:latest`)
+      await deleteIdlSummaryCache(kv, projectId)
+      await Promise.all((versions?.results || []).map((row: any) => kv.delete(`idl-summary:${projectId}:${row.version}`)))
     }
     if (c.env?.CACHE) {
       await c.env.CACHE.delete(`docs:${projectId}`)

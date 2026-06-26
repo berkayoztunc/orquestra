@@ -1,9 +1,14 @@
 import { Link } from 'react-router-dom'
+import { ArrowRight, Braces, FileText, Network, ShieldCheck, Terminal } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import { getGitHubLoginUrl } from '../api/client'
 import CodeBlock from '../components/CodeBlock'
 import TwitterWall from '../components/TwitterWall'
 import TryItPanel from '../components/TryItPanel'
+import { buttonClassName } from '@/ui/Button'
+import { Card } from '@/ui/Card'
+import { Section } from '@/ui/Section'
+import { HeroDecor } from '@/ui/HeroDecor'
 
 const proofStats = [
   { value: '30s', label: 'IDL to hosted API' },
@@ -11,70 +16,69 @@ const proofStats = [
   { value: '0', label: 'client SDKs required' },
 ]
 
-const chips = ['IDL -> API', 'MCP tools', 'AI docs', 'Base58 tx']
-
 const workflow = [
   {
     step: '01',
     title: 'Upload IDL',
-    desc: 'Anchor interface becomes indexed instructions, accounts, errors, PDAs, and typed args.',
+    desc: 'Anchor interfaces become indexed instructions, accounts, errors, PDAs, and typed args.',
+    icon: FileText,
   },
   {
     step: '02',
     title: 'Generate surfaces',
     desc: 'Orquestra publishes REST endpoints, Markdown docs, MCP tools, and transaction builders.',
+    icon: Braces,
   },
   {
     step: '03',
-    title: 'Connect apps + AI',
+    title: 'Connect apps + agents',
     desc: 'Backends, mobile apps, Claude, Cursor, and agents call Solana programs through HTTP.',
+    icon: Network,
   },
 ]
 
-const capabilities = [
+type SurfaceVisual = 'api' | 'mcp' | 'docs' | 'pda'
+
+const capabilities: Array<{
+  visual: SurfaceVisual
+  title: string
+  eyebrow: string
+  desc: string
+  code: string
+}> = [
   {
-    title: 'Hosted REST API',
-    eyebrow: 'For backend teams',
-    desc: 'Call any indexed Anchor instruction with JSON. Orquestra handles Borsh layout, discriminators, and serialization.',
+    visual: 'api',
+    title: 'Hosted API',
+    eyebrow: 'Backend teams',
+    desc: 'Call indexed Anchor instructions with JSON while Orquestra handles Borsh layouts, discriminators, and serialization.',
     code: 'POST /api/<project>/instructions/deposit/build',
   },
   {
+    visual: 'mcp',
     title: 'MCP registry',
-    eyebrow: 'For AI agents',
-    desc: 'Expose search, docs, PDA derivation, account reads, simulation, and tx building to Claude or Cursor.',
+    eyebrow: 'AI agents',
+    desc: 'Expose search, docs, PDA derivation, account reads, simulation, and transaction building to agent clients.',
     code: 'build_instruction({ program, instruction, args })',
   },
   {
+    visual: 'docs',
     title: 'AI-ready docs',
-    eyebrow: 'For context windows',
-    desc: 'Generate compact Markdown from IDLs so humans and agents understand accounts, args, and errors fast.',
+    eyebrow: 'Context windows',
+    desc: 'Generate compact Markdown from IDLs so humans and agents understand accounts, args, and errors quickly.',
     code: 'GET /project/<program>/llms.txt',
   },
   {
+    visual: 'pda',
     title: 'PDA + account data',
-    eyebrow: 'For integrations',
+    eyebrow: 'Integrations',
     desc: 'Derive addresses, fetch account data, and decode program state without shipping Solana tooling client-side.',
     code: 'derive_pda({ seeds, programId })',
   },
 ]
 
-const mcpConfig = `{
-  "mcpServers": {
-    "orquestra": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/client-streamable-http",
-        "https://api.orquestra.dev/mcp"
-      ]
-    }
-  }
-}`
-
 const curlExample = `API=https://api.orquestra.dev
 
 curl -X POST "$API/api/marinade/instructions/deposit/build" \\
-  -H "X-API-Key: orq_live_xxxx" \\
   -H "Content-Type: application/json" \\
   -d '{
     "accounts": { "state": "8szGk...", "user": "9xTy..." },
@@ -84,300 +88,420 @@ curl -X POST "$API/api/marinade/instructions/deposit/build" \\
 
 # -> { "transaction": "AQAAAAAAAAAAAA..." }`
 
+const mcpConfig = `{
+  "mcpServers": {
+    "orquestra": {
+			"url": "https://api.orquestra.dev/mcp",
+			"type": "http"
+		}
+  }
+}`
+
 function CtaButtons(): JSX.Element {
   const { isAuthenticated } = useAuthStore()
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row">
+    <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
       {isAuthenticated ? (
-        <Link to="/dashboard" className="btn-primary min-h-11 px-6 py-3 text-center text-sm">
-          Go to Dashboard
+        <Link to="/dashboard" className={buttonClassName({ size: 'lg' })}>
+          Go to dashboard
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       ) : (
-        <a href={getGitHubLoginUrl()} className="btn-primary min-h-11 px-6 py-3 text-center text-sm">
-          Start Free
+        <a href={getGitHubLoginUrl()} className={buttonClassName({ size: 'lg' })}>
+          Start building
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </a>
       )}
-      <Link to="/explorer" className="btn-secondary min-h-11 px-6 py-3 text-center text-sm">
-        Browse Programs
+      <Link to="/explorer" className={buttonClassName({ variant: 'secondary', size: 'lg' })}>
+        Browse programs
       </Link>
     </div>
   )
 }
 
-function SystemFlowGraphic(): JSX.Element {
-  const nodeClass = 'rounded-2xl border border-white/10 bg-surface-card/95 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur'
-  const smallNodeClass = 'rounded-xl border border-white/10 bg-surface-elevated/95 px-3 py-2 text-xs text-gray-300 shadow-[0_12px_40px_rgba(0,0,0,0.28)]'
+function SurfaceIllustration({ type }: { type: SurfaceVisual }): JSX.Element {
+  const stroke = 'rgb(var(--rgb-sand-800))'
+  const soft = 'rgb(var(--rgb-border-medium))'
+  const faint = 'rgb(var(--rgb-border-low))'
+  const ink = 'rgb(var(--rgb-sand-1500))'
+  const paper = 'rgb(var(--rgb-sand-50))'
 
-  return (
-    <div className="relative mx-auto w-full max-w-[560px] overflow-hidden rounded-[2rem] border border-white/10 bg-surface-elevated/55 p-4 md:p-6">
-      <div className="absolute inset-0 bg-grid-pattern bg-grid opacity-70" />
-      <div className="absolute -left-20 top-0 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
-      <div className="absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-secondary/10 blur-3xl" />
-
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 560 420" fill="none" aria-hidden="true">
-        <path className="motion-safe:animate-draw-line" d="M116 102 C190 102 194 185 260 185" stroke="url(#flowA)" strokeWidth="2" strokeDasharray="8 10" strokeLinecap="round" />
-        <path className="motion-safe:animate-draw-line [animation-delay:150ms]" d="M300 185 C376 105 414 96 476 96" stroke="url(#flowB)" strokeWidth="2" strokeDasharray="8 10" strokeLinecap="round" />
-        <path className="motion-safe:animate-draw-line [animation-delay:300ms]" d="M304 205 C374 205 402 208 472 208" stroke="url(#flowA)" strokeWidth="2" strokeDasharray="8 10" strokeLinecap="round" />
-        <path className="motion-safe:animate-draw-line [animation-delay:450ms]" d="M300 226 C374 302 414 324 476 324" stroke="url(#flowB)" strokeWidth="2" strokeDasharray="8 10" strokeLinecap="round" />
+  if (type === 'api') {
+    return (
+      <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="Hosted API diagram">
         <defs>
-          <linearGradient id="flowA" x1="96" y1="100" x2="476" y2="100" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#14F195" stopOpacity="0.05" />
-            <stop offset="0.55" stopColor="#14F195" stopOpacity="0.8" />
-            <stop offset="1" stopColor="#00D9FF" stopOpacity="0.25" />
-          </linearGradient>
-          <linearGradient id="flowB" x1="260" y1="150" x2="506" y2="330" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#00D9FF" stopOpacity="0.05" />
-            <stop offset="0.55" stopColor="#00D9FF" stopOpacity="0.8" />
-            <stop offset="1" stopColor="#14F195" stopOpacity="0.25" />
+          <linearGradient id="apiFade" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={paper} stopOpacity="0.2" />
+            <stop offset="1" stopColor={paper} stopOpacity="1" />
           </linearGradient>
         </defs>
-      </svg>
-
-      <div className="relative grid min-h-[340px] grid-cols-[1fr_1.08fr_1fr] items-center gap-3 md:gap-5">
-        <div className="space-y-3">
-          <div className={`${nodeClass} motion-safe:animate-stagger-in`}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">Input</p>
-            <p className="mt-2 text-sm font-bold text-white">Anchor IDL</p>
-            <p className="mt-1 font-mono text-[10px] text-gray-500">IDL.json</p>
-          </div>
-          <div className="rounded-xl border border-primary/20 bg-primary/10 px-3 py-2 text-[11px] text-primary motion-safe:animate-node-pulse">
-            Live schema detected
-          </div>
-        </div>
-
-        <div className={`${nodeClass} text-center motion-safe:animate-stagger-in [animation-delay:100ms]`}>
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 shadow-[0_0_40px_rgba(20,241,149,0.15)]">
-            <svg className="h-7 w-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3l7.5 4.5v9L12 21l-7.5-4.5v-9L12 3z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v8m-4-6l4 2 4-2" />
-            </svg>
-          </div>
-          <p className="mt-3 text-base font-bold text-white">Orquestra core</p>
-          <p className="mt-1 text-xs leading-relaxed text-gray-400">Parse, document, serialize, simulate, expose.</p>
-        </div>
-
-        <div className="space-y-3">
-          {['REST API', 'MCP tools', 'AI docs', 'Base58 tx'].map((label, index) => (
-            <div key={label} className={`${smallNodeClass} motion-safe:animate-stagger-in`} style={{ animationDelay: `${180 + index * 70}ms` }}>
-              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle shadow-[0_0_12px_rgba(20,241,149,0.8)]" />
-              {label}
-            </div>
+        <g fill="none" stroke={faint} strokeWidth="1">
+          {[80, 170, 390, 480].map((x, index) => (
+            <path key={x} d={`M${x} ${index % 2 ? 46 : 28}l58 33-58 33-58-33z`} opacity={index === 0 || index === 3 ? 0.35 : 0.8} />
           ))}
-        </div>
-      </div>
-
-      <div className="relative mt-3 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs md:grid-cols-4">
-        {['Python apps', 'Go services', 'Claude', 'Cursor'].map((item) => (
-          <div key={item} className="rounded-lg bg-white/[0.03] px-3 py-2 text-center text-gray-400">
-            {item}
-          </div>
+          {[78, 190, 370, 486].map((x, index) => (
+            <circle key={x} cx={x} cy={index % 2 ? 196 : 178} r="24" opacity={index === 0 || index === 3 ? 0.28 : 0.65} />
+          ))}
+        </g>
+        <g fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M280 80v44" />
+          <path d="M280 168v42" />
+          <path d="M236 145H154" />
+          <path d="M324 145h82" />
+          <path d="M248 116l-64-42" />
+          <path d="M312 116l64-42" />
+          <path d="M248 174l-64 42" />
+          <path d="M312 174l64 42" />
+        </g>
+        {[
+          [280, 52],
+          [280, 232],
+          [132, 145],
+          [428, 145],
+          [164, 60],
+          [396, 60],
+          [164, 230],
+          [396, 230],
+        ].map(([x, y]) => (
+          <g key={`${x}-${y}`}>
+            <rect x={x - 35} y={y - 18} width="70" height="36" rx="18" fill={paper} stroke={soft} />
+            <text x={x} y={y + 4} textAnchor="middle" fill={stroke} fontSize="11" fontFamily="monospace" letterSpacing="1.5">
+              HTTP
+            </text>
+          </g>
         ))}
-      </div>
-    </div>
+        <g>
+          <rect x="232" y="104" width="96" height="82" rx="18" fill={paper} stroke={stroke} strokeWidth="2" />
+          <rect x="252" y="125" width="56" height="40" rx="8" fill={ink} opacity="0.92" />
+          <text x="280" y="150" textAnchor="middle" fill={paper} fontSize="15" fontFamily="monospace" fontWeight="700">
+            API
+          </text>
+        </g>
+      </svg>
+    )
+  }
+
+  if (type === 'mcp') {
+    return (
+      <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="MCP registry network">
+        <defs>
+          <linearGradient id="mcpFade" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={paper} stopOpacity="0" />
+            <stop offset="1" stopColor={paper} stopOpacity="0.95" />
+          </linearGradient>
+        </defs>
+
+        <g fill="none" stroke={faint} strokeWidth="1">
+          <path d="M64 60h432M64 132h432M64 204h432" opacity="0.32" />
+          <path d="M104 36v188M280 36v188M456 36v188" opacity="0.2" />
+        </g>
+
+        <g fill="none" stroke={stroke} strokeLinecap="round" strokeLinejoin="round" opacity="0.82">
+          <path d="M186 96H236" strokeWidth="2" />
+          <path d="M324 96H374" strokeWidth="2" />
+          <path d="M280 130v42" strokeWidth="2" />
+          <path d="M104 172h352" strokeWidth="1.5" />
+          <path d="M152 172v-36M408 172v-36" strokeWidth="1.5" />
+          <path d="M222 172v28M338 172v28" strokeWidth="1.5" strokeDasharray="5 8" />
+        </g>
+
+        <g transform="translate(236 62)">
+          <rect width="88" height="68" rx="14" fill={paper} stroke={stroke} strokeWidth="2" />
+          <text x="44" y="37" textAnchor="middle" fill={ink} fontSize="17" fontFamily="monospace" fontWeight="700" letterSpacing="1.8">
+            MCP
+          </text>
+          <text x="44" y="53" textAnchor="middle" fill={stroke} fontSize="8" fontFamily="monospace" letterSpacing="1.2">
+            registry
+          </text>
+        </g>
+
+        <g transform="translate(80 60)">
+          <rect width="112" height="72" rx="14" fill={paper} stroke={soft} />
+          <image
+            href="/brand/integrations/claude-color.svg"
+            x="18"
+            y="18"
+            width="36"
+            height="36"
+            preserveAspectRatio="xMidYMid meet"
+          />
+          <text x="78" y="42" textAnchor="middle" fill={ink} fontSize="11" fontFamily="monospace" letterSpacing="1">
+            Claude
+          </text>
+        </g>
+
+        <g transform="translate(368 60)">
+          <rect width="112" height="72" rx="14" fill={paper} stroke={soft} />
+          <image
+            href="/brand/integrations/codex.svg"
+            x="18"
+            y="16"
+            width="40"
+            height="40"
+            preserveAspectRatio="xMidYMid meet"
+          />
+          <text x="80" y="42" textAnchor="middle" fill={ink} fontSize="11" fontFamily="monospace" letterSpacing="1">
+            Codex
+          </text>
+        </g>
+
+        {[
+          { x: 78, label: 'search' },
+          { x: 194, label: 'docs' },
+          { x: 310, label: 'pda' },
+          { x: 426, label: 'build' },
+        ].map((node) => (
+          <g key={node.label} transform={`translate(${node.x} 190)`}>
+            <rect width="64" height="30" rx="15" fill={paper} stroke={soft} />
+            <circle cx="15" cy="15" r="3.5" fill={stroke} />
+            <text x="38" y="18.5" textAnchor="middle" fill={stroke} fontSize="9" fontFamily="monospace" letterSpacing="0.8">
+              {node.label}
+            </text>
+          </g>
+        ))}
+
+        <g fill={paper} stroke={stroke} strokeWidth="1.4">
+          <circle cx="186" cy="96" r="4.5" />
+          <circle cx="236" cy="96" r="4.5" />
+          <circle cx="324" cy="96" r="4.5" />
+          <circle cx="374" cy="96" r="4.5" />
+          <circle cx="152" cy="136" r="4.5" />
+          <circle cx="408" cy="136" r="4.5" />
+          <circle cx="280" cy="172" r="4.5" />
+        </g>
+      </svg>
+    )
+  }
+
+  if (type === 'docs') {
+    return (
+      <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="AI-ready documents">
+        <g fill="none" stroke={faint} strokeWidth="1">
+          <path d="M78 66h404" opacity="0.5" />
+          <path d="M120 214h320" opacity="0.35" />
+          <path d="M170 28v208" opacity="0.25" />
+          <path d="M390 28v208" opacity="0.25" />
+        </g>
+        {[
+          { x: 118, y: 60, o: 0.45, s: 0.9 },
+          { x: 206, y: 36, o: 0.75, s: 1 },
+          { x: 298, y: 72, o: 1, s: 1.05 },
+        ].map((doc, index) => (
+          <g key={doc.x} opacity={doc.o} transform={`translate(${doc.x} ${doc.y}) scale(${doc.s})`}>
+            <path d="M0 0h90l28 28v118H0z" fill={paper} stroke={stroke} strokeWidth="2" />
+            <path d="M90 0v28h28" fill="none" stroke={stroke} strokeWidth="2" />
+            <path d="M20 52h68M20 76h78M20 100h46" stroke={soft} strokeWidth="8" strokeLinecap="round" />
+            <circle cx="88" cy="112" r="22" fill={index === 2 ? ink : paper} stroke={stroke} />
+            <path d="M78 111l8 8 15-18" stroke={index === 2 ? paper : stroke} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        ))}
+        <g transform="translate(120 192)">
+          <rect width="320" height="34" rx="17" fill={paper} stroke={soft} />
+          <text x="160" y="22" textAnchor="middle" fill={stroke} fontSize="12" fontFamily="monospace" letterSpacing="1.4">
+            llms.txt / markdown / schema
+          </text>
+        </g>
+      </svg>
+    )
+  }
+
+  return (
+    <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="PDA and account data boxes">
+      <g fill="none" stroke={faint} strokeWidth="1">
+        <path d="M112 58l80 45-80 45-80-45z" opacity="0.42" />
+        <path d="M448 58l80 45-80 45-80-45z" opacity="0.42" />
+        <path d="M280 146l80 45-80 45-80-45z" opacity="0.5" />
+      </g>
+      <g fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M148 126l90 48" />
+        <path d="M412 126l-90 48" />
+        <path d="M280 70v88" strokeDasharray="5 8" />
+      </g>
+      {[
+        { x: 88, y: 86, label: 'seed' },
+        { x: 424, y: 86, label: 'acct' },
+        { x: 256, y: 42, label: 'PDA' },
+        { x: 256, y: 166, label: 'data' },
+      ].map((box, index) => (
+        <g key={box.label} transform={`translate(${box.x} ${box.y})`}>
+          <path d="M24 0l64 36v72l-64 36-64-36V36z" fill={paper} stroke={index === 2 ? stroke : soft} strokeWidth={index === 2 ? 2 : 1.5} />
+          <path d="M-40 36l64 36 64-36M24 72v72" stroke={soft} strokeWidth="1.5" fill="none" />
+          <text x="24" y="82" textAnchor="middle" fill={index === 2 ? ink : stroke} fontSize="12" fontFamily="monospace" fontWeight={index === 2 ? 700 : 500} letterSpacing="1">
+            {box.label}
+          </text>
+        </g>
+      ))}
+      <g transform="translate(202 204)">
+        <rect width="156" height="36" rx="18" fill={ink} opacity="0.9" />
+        <text x="78" y="23" textAnchor="middle" fill={paper} fontSize="12" fontFamily="monospace" letterSpacing="1.2">
+          account data
+        </text>
+      </g>
+    </svg>
   )
 }
 
 export default function Home(): JSX.Element {
   return (
-    <div className="space-y-14 md:space-y-18">
-      <section className="relative overflow-hidden pb-2 pt-10 md:pt-16">
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-primary/5 blur-[110px]" />
-          <div className="absolute right-0 top-28 h-[360px] w-[360px] rounded-full bg-secondary/5 blur-[100px]" />
-        </div>
-
-        <div className="relative grid items-center gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="max-w-2xl motion-safe:animate-stagger-in">
-            <h1 className="text-balance text-4xl font-light leading-[1.02] tracking-[-0.045em] text-white sm:text-5xl lg:text-6xl">
-              Turn Solana program IDLs into{' '}
-              <span className="gradient-text font-black">
-                APIs for AI agents
-              </span>
-              <span className="font-light text-gray-200"> and developer apps.</span>
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-gray-400 md:text-lg">
-              Orquestra converts Anchor programs into hosted REST endpoints, AI-ready docs, MCP tools, PDA resolution, and wallet-ready transactions.
-            </p>
-
-            <div className="mt-6 flex flex-wrap gap-2">
-              {chips.map((chip) => (
-                <span key={chip} className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-medium text-gray-300">
-                  {chip}
-                </span>
-              ))}
-            </div>
-
-            <div className="mt-7">
-              <CtaButtons />
-            </div>
-
-            <div className="mt-8 grid max-w-lg grid-cols-3 divide-x divide-white/10 rounded-2xl border border-white/10 bg-surface-elevated/60 p-4">
-              {proofStats.map((stat) => (
-                <div key={stat.label} className="px-3 first:pl-0 last:pr-0">
-                  <p className="text-2xl font-bold text-white">{stat.value}</p>
-                  <p className="mt-1 text-xs leading-snug text-gray-500">{stat.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="motion-safe:animate-stagger-in [animation-delay:120ms]">
-            <SystemFlowGraphic />
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        {workflow.map((item, index) => (
-          <div key={item.step} className="group rounded-2xl border border-white/10 bg-surface-card/70 p-5 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-1" style={{ animationDelay: `${index * 80}ms` }}>
-            <div className="mb-4 flex items-center justify-between">
-              <span className="font-mono text-xs text-primary">{item.step}</span>
-              <span className="h-px flex-1 bg-gradient-to-r from-primary/30 to-transparent ml-4" />
-            </div>
-            <h2 className="text-lg font-bold text-white">{item.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-gray-400">{item.desc}</p>
-          </div>
-        ))}
-      </section>
-
-      <section className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-start">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Platform surfaces</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">One IDL. Four production interfaces.</h2>
-          <p className="mt-4 text-sm leading-6 text-gray-400 md:text-base">
-            Orquestra is not another SDK generator. It hosts callable infrastructure so Solana-native teams, web2 backends, and AI agents share one source of truth.
+    <div className="relative">
+      {/* Hero — centered with hatch icon + animated pulse lines */}
+      <section className="relative px-4 pb-20 pt-24 sm:pt-28">
+        <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center">
+          <HeroDecor />
+          <h1 className="mt-6 text-balance text-4xl font-semibold tracking-tight text-sand-1600 sm:text-5xl md:text-6xl lg:text-[64px] lg:leading-[1.05]">
+            API and MCP layer 
+            <br />
+            for Solana programs.
+          </h1>
+          <p className="mt-6 max-w-2xl text-base leading-7 text-sand-1200 sm:text-lg">
+            Orquestra converts Anchor programs into hosted REST endpoints, AI-ready docs, MCP tools,
+            PDA resolution, and wallet-ready transactions.
           </p>
-          <div className="mt-6 hidden lg:block">
+          <div className="mt-10">
             <CtaButtons />
           </div>
-        </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          {capabilities.map((capability) => (
-            <article key={capability.title} className="rounded-2xl border border-white/10 bg-surface-elevated/70 p-5 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-secondary">{capability.eyebrow}</p>
-              <h3 className="mt-2 text-lg font-bold text-white">{capability.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-gray-400">{capability.desc}</p>
-              <code className="mt-4 block overflow-hidden text-ellipsis whitespace-nowrap rounded-lg border border-white/10 bg-dark-950 px-3 py-2 font-mono text-[11px] text-primary">
-                {capability.code}
-              </code>
-            </article>
-          ))}
+          <div className="mt-16 grid w-full max-w-2xl grid-cols-3 divide-x divide-border-low border-y border-border-low">
+            {proofStats.map((stat) => (
+              <div key={stat.label} className="px-4 py-5">
+                <p className="font-mono text-2xl text-sand-1600">{stat.value}</p>
+                <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.1em] text-sand-1100">
+                  {stat.label}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
-      <section className="grid min-w-0 gap-5 lg:grid-cols-2">
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-surface-elevated/60 p-3 sm:p-4 md:p-5">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">REST transaction build</p>
-              <h2 className="mt-1 text-lg font-bold leading-tight text-white sm:text-xl">HTTP in, base58 transaction out.</h2>
+      {/* Products section header */}
+      <div className="border-t border-border-low" />
+
+      <div className="space-y-24 px-6 py-20 sm:px-8">
+        <Section
+          eyebrow="Products"
+          title="One IDL becomes the operating layer for apps and agents."
+          align="center"
+        >
+          <div className="grid gap-px overflow-hidden border border-border-low bg-border-low md:grid-cols-3">
+            {workflow.map((item) => {
+              const Icon = item.icon
+              return (
+                <div
+                  key={item.step}
+                  className="group flex flex-col gap-6 bg-bg1 p-6 transition-colors hover:bg-sand-100"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
+                      {item.step}
+                    </span>
+                    <div
+                      className="flex size-9 items-center justify-center border border-border-low bg-sand-50"
+                      style={{
+                        backgroundImage:
+                          'repeating-linear-gradient(-45deg, transparent, transparent 4px, rgb(var(--rgb-border-low) / 0.7) 4px, rgb(var(--rgb-border-low) / 0.7) 5px)',
+                      }}
+                    >
+                      <Icon className="size-4 text-sand-1500" aria-hidden="true" />
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-sand-1600">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-6 text-sand-1200">{item.desc}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Section>
+
+        <Section
+          eyebrow="Platform surfaces"
+          title="One source of truth. Four production interfaces."
+        >
+          <div className="grid gap-px overflow-hidden border border-border-low bg-border-low sm:grid-cols-2">
+            {capabilities.map((capability) => (
+              <div
+                key={capability.title}
+                className="flex min-h-[520px] flex-col bg-bg1 transition-colors hover:bg-sand-100"
+              >
+                <div className="h-64 overflow-hidden border-b border-border-low bg-sand-50">
+                  <SurfaceIllustration type={capability.visual} />
+                </div>
+                <div className="flex flex-1 flex-col gap-3 p-6">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
+                    {capability.eyebrow}
+                  </p>
+                  <h3 className="text-lg font-semibold text-sand-1600">{capability.title}</h3>
+                  <p className="text-sm leading-6 text-sand-1200">{capability.desc}</p>
+                  <code className="mt-auto block overflow-hidden text-ellipsis whitespace-nowrap border border-border-low bg-sand-100 px-3 py-2 font-mono text-xs text-sand-1500">
+                    {capability.code}
+                  </code>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        <section className="grid min-w-0 gap-5 lg:grid-cols-2">
+          <Card className="min-w-0 overflow-hidden p-5 md:p-6" tone="sand">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
+                  REST transaction build
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-sand-1600">
+                  HTTP in, base58 transaction out.
+                </h2>
+              </div>
+              <Terminal className="size-5 text-sand-1100" aria-hidden="true" />
             </div>
-            <span className="w-fit rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs text-primary">No SDK</span>
-          </div>
-          <div className="min-w-0 [&_pre]:!text-[11px] sm:[&_pre]:!text-xs">
-            <CodeBlock language="bash" code={curlExample} copyable={false} wrapLongLines maxHeightClassName="max-h-[340px]" />
-          </div>
-        </div>
+            <CodeBlock
+              language="bash"
+              code={curlExample}
+              copyable={false}
+              wrapLongLines
+              maxHeightClassName="max-h-[340px]"
+            />
+          </Card>
 
-        <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-surface-elevated/60 p-3 sm:p-4 md:p-5">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-secondary">AI agent setup</p>
-              <h2 className="mt-1 text-lg font-bold leading-tight text-white sm:text-xl">Give Claude program-level Solana tools.</h2>
+          <Card className="min-w-0 overflow-hidden p-5 md:p-6" tone="sand">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
+                  AI agent setup
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-sand-1600">
+                  Give Claude program-level Solana tools.
+                </h2>
+              </div>
+              <ShieldCheck className="size-5 text-sand-1100" aria-hidden="true" />
             </div>
-            <span className="w-fit rounded-full border border-secondary/20 bg-secondary/10 px-3 py-1 text-xs text-secondary">MCP</span>
-          </div>
-          <div className="min-w-0 [&_pre]:!text-[11px] sm:[&_pre]:!text-xs">
-            <CodeBlock language="json" code={mcpConfig} copyable={false} wrapLongLines maxHeightClassName="max-h-[340px]" />
-          </div>
-        </div>
-      </section>
+            <CodeBlock
+              language="json"
+              code={mcpConfig}
+              copyable={false}
+              wrapLongLines
+              maxHeightClassName="max-h-[340px]"
+            />
+          </Card>
+        </section>
 
-      <section className="rounded-[2rem] border border-primary/15 bg-gradient-to-br from-primary/10 via-surface-elevated to-secondary/10 p-4 md:p-6">
-        <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-end">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Live proof</p>
-            <h2 className="mt-2 text-2xl font-bold text-white md:text-3xl">Build a real transaction at edge speed.</h2>
-          </div>
-          <Link to="/docs/api" className="inline-flex min-h-10 items-center rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm font-medium text-gray-300 transition-colors duration-150 hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface">
-            Read API docs
-          </Link>
-        </div>
-        <TryItPanel />
-      </section>
+        <Section eyebrow="Live proof" title="Build a real transaction at edge speed.">
+          <Card className="p-5 md:p-6" tone="default">
+            <TryItPanel />
+          </Card>
+        </Section>
 
-      <section className="space-y-6">
-        <div className="text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-secondary">Builder signal</p>
-          <h2 className="mt-2 text-2xl font-bold text-white md:text-3xl">Built for teams shipping Solana integrations.</h2>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-            Protocol docs, transaction building, MCP discovery, and program APIs converge into one developer platform.
-          </p>
-        </div>
-        <TwitterWall />
-      </section>
-
-      <section className="relative overflow-hidden pb-8 pt-4">
-        <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
-        <div className="absolute left-1/2 top-10 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl" />
-        <div className="relative grid items-center gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Ship faster</p>
-            <h2 className="mt-3 text-balance text-3xl font-light leading-[1.03] tracking-[-0.04em] text-white md:text-5xl">
-              Make every Solana program{' '}
-              <span className="gradient-text font-black">callable by apps and agents.</span>
-            </h2>
-            <p className="mt-5 max-w-xl text-sm leading-6 text-gray-400 md:text-base">
-              Upload an IDL, then demo production-ready REST APIs, MCP tools, docs, and transaction builders before the hackathon clock runs out.
-            </p>
-            <div className="mt-7">
-              <CtaButtons />
-            </div>
-          </div>
-
-          <div className="relative min-h-[260px]">
-            <svg className="h-full min-h-[260px] w-full" viewBox="0 0 560 300" fill="none" aria-hidden="true">
-              <defs>
-                <linearGradient id="ctaLine" x1="78" y1="150" x2="482" y2="150" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#14F195" stopOpacity="0" />
-                  <stop offset="0.5" stopColor="#14F195" stopOpacity="0.85" />
-                  <stop offset="1" stopColor="#00D9FF" stopOpacity="0" />
-                </linearGradient>
-                <radialGradient id="ctaCore" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(280 150) rotate(90) scale(72)">
-                  <stop stopColor="#14F195" stopOpacity="0.28" />
-                  <stop offset="1" stopColor="#14F195" stopOpacity="0" />
-                </radialGradient>
-              </defs>
-              <circle cx="280" cy="150" r="78" fill="url(#ctaCore)" />
-              <ellipse cx="280" cy="150" rx="180" ry="74" stroke="url(#ctaLine)" strokeWidth="1.5" strokeDasharray="7 11" className="motion-safe:animate-draw-line" />
-              <ellipse cx="280" cy="150" rx="124" ry="116" stroke="url(#ctaLine)" strokeWidth="1.5" strokeDasharray="7 11" className="motion-safe:animate-draw-line [animation-delay:250ms]" transform="rotate(-18 280 150)" />
-
-              {[
-                { x: 280, y: 150, label: 'IDL', fill: 'fill-primary', text: 'text-dark-950' },
-                { x: 92, y: 150, label: 'REST', fill: 'fill-surface-card', text: 'text-primary' },
-                { x: 468, y: 150, label: 'MCP', fill: 'fill-surface-card', text: 'text-secondary' },
-                { x: 222, y: 52, label: 'Docs', fill: 'fill-surface-card', text: 'text-primary' },
-                { x: 344, y: 248, label: 'Tx', fill: 'fill-surface-card', text: 'text-secondary' },
-              ].map((node, index) => (
-                <g key={node.label} className="motion-safe:animate-stagger-in" style={{ animationDelay: `${index * 90}ms` }}>
-                  <circle cx={node.x} cy={node.y} r={node.label === 'IDL' ? 36 : 30} className={node.fill} stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-                  <circle cx={node.x} cy={node.y} r={node.label === 'IDL' ? 44 : 37} stroke={node.label === 'IDL' ? 'rgba(20,241,149,0.28)' : 'rgba(255,255,255,0.08)'} strokeWidth="1" />
-                  <text x={node.x} y={node.y + 4} textAnchor="middle" className={`${node.text} fill-current text-[13px] font-bold`}>
-                    {node.label}
-                  </text>
-                </g>
-              ))}
-
-              <path d="M129 150H244" stroke="url(#ctaLine)" strokeWidth="2" strokeLinecap="round" />
-              <path d="M316 150H431" stroke="url(#ctaLine)" strokeWidth="2" strokeLinecap="round" />
-              <path d="M258 118L233 78" stroke="url(#ctaLine)" strokeWidth="2" strokeLinecap="round" />
-              <path d="M303 181L332 220" stroke="url(#ctaLine)" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </div>
-        </div>
-      </section>
+        <Section
+          eyebrow="Builder signal"
+          title="Built for teams shipping Solana integrations."
+          align="center"
+        >
+          <TwitterWall />
+        </Section>
+      </div>
     </div>
   )
 }

@@ -98,49 +98,49 @@ function PDACard({
   }
 
   return (
-    <div className={`rounded-xl transition-all duration-200 overflow-hidden bg-surface-card ${open ? 'ring-1 ring-primary/30 shadow-lg shadow-primary/5' : 'ring-1 ring-white/5 hover:ring-white/10'}`}>
+    <div className={`transition-all duration-200 overflow-hidden border bg-bg1 ${open ? 'border-border-medium' : 'border-border-low hover:border-border-medium'}`}>
       {/* ── Accordion Header ── */}
       <button
         onClick={handleToggle}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left bg-surface-card hover:bg-surface-elevated transition-colors"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left bg-bg1 hover:bg-sand-100 transition-colors"
       >
         {/* POST badge */}
-        <span className="flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-md bg-violet-500/15 text-violet-400 border border-violet-500/25 font-mono tracking-wide">
+        <span className="flex-shrink-0 font-mono text-[11px] font-bold px-2.5 py-1 bg-[#b75000]/10 text-[#b75000] border border-[#b75000]/20 tracking-wide">
           POST
         </span>
 
         {/* Short endpoint */}
-        <span className="flex-shrink-0 text-xs font-mono text-gray-500 hidden sm:block">
+        <span className="flex-shrink-0 text-xs font-mono text-sand-1100 hidden sm:block">
           /pda/derive
         </span>
 
         {/* Account name */}
-        <span className="font-mono font-semibold text-sm text-white truncate flex-1">
+        <span className="font-mono font-semibold text-sm text-sand-1600 truncate flex-1">
           {pda.account}
         </span>
 
         {/* CPI badge — only shown when this PDA is shared across multiple instructions */}
         {pda.instructions.length > 1 && (
-          <span className="text-[11px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2 py-0.5 rounded-md flex-shrink-0 font-mono">
+          <span className="text-[11px] font-bold text-sand-1500 bg-sand-100 border border-border-low px-2 py-0.5 flex-shrink-0 font-mono">
             CPI ×{pda.instructions.length}
           </span>
         )}
 
         {/* Seed count */}
-        <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded-md font-mono flex-shrink-0">
+        <span className="text-[11px] text-sand-1100 bg-sand-100 px-2 py-0.5 font-mono flex-shrink-0">
           {pda.seeds.length} seed{pda.seeds.length !== 1 ? 's' : ''}
         </span>
 
         {/* Custom program indicator */}
         {pda.customProgram && (
-          <span className="text-[11px] text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-md flex-shrink-0 hidden lg:block">
+          <span className="text-[11px] text-[#b75000] bg-[#b75000]/10 px-2 py-0.5 flex-shrink-0 hidden lg:block">
             cross-program
           </span>
         )}
 
         {/* Chevron */}
         <svg
-          className={`w-4 h-4 text-gray-500 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-sand-1100 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -149,21 +149,21 @@ function PDACard({
 
       {/* ── Expanded Body ── */}
       {open && (
-        <div className="border-t border-black/30">
+        <div className="border-t border-border-low">
           <div className="flex flex-col lg:flex-row">
 
             {/* ── LEFT: Seed Schema ── */}
-            <div className="lg:w-[45%] p-5 space-y-5 bg-surface-card border-r border-black/30">
+            <div className="lg:w-[45%] p-5 space-y-5 bg-sand-50 border-r border-border-low">
               {/* Endpoint + copy */}
-              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-black/20">
-                <span className="text-[11px] font-bold text-violet-400 font-mono bg-violet-500/10 px-2 py-0.5 rounded flex-shrink-0">POST</span>
-                <code className="text-xs font-mono text-gray-300 truncate flex-1">{apiBase}{endpoint}</code>
+              <div className="flex items-center gap-2 p-2.5 bg-sand-100 border border-border-low">
+                <span className="text-[11px] font-bold text-[#b75000] font-mono bg-[#b75000]/10 px-2 py-0.5 flex-shrink-0">POST</span>
+                <code className="text-xs font-mono text-sand-1500 truncate flex-1">{apiBase}{endpoint}</code>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(`${apiBase}${endpoint}`)
                     showToast('Endpoint copied', 'success')
                   }}
-                  className="flex-shrink-0 text-gray-500 hover:text-primary transition-colors"
+                  className="flex-shrink-0 text-sand-1100 hover:text-sand-1600 transition-colors"
                   title="Copy endpoint"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -175,10 +175,10 @@ function PDACard({
               {/* Instructions using this PDA */}
               {pda.instructions.length > 0 && (
                 <div className="space-y-1.5">
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-500">Used by</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-sand-1100">Used by</p>
                   <div className="flex flex-wrap gap-1.5">
                     {pda.instructions.map((ix) => (
-                      <span key={ix} className="text-[11px] font-mono text-gray-400 bg-white/5 px-2 py-1 rounded-md">
+                      <span key={ix} className="text-[11px] font-mono text-sand-1200 bg-sand-100 border border-border-low px-2 py-1">
                         {ix}
                       </span>
                     ))}
@@ -186,56 +186,50 @@ function PDACard({
                 </div>
               )}
 
-              <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Seeds</h4>
+              <h4 className="text-xs font-bold uppercase tracking-widest text-sand-1100">Seeds</h4>
 
               {/* Seed schema list */}
-              <div className="rounded-lg overflow-hidden bg-black/20">
+              <div className="overflow-hidden bg-bg1 border border-border-low">
                 {constSeeds.map((s, i) => (
-                  <div key={`c-${i}`} className="flex items-center justify-between px-3 py-2.5 border-b border-black/20 last:border-0">
+                  <div key={`c-${i}`} className="flex items-center justify-between px-3 py-2.5 border-b border-border-low last:border-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm text-gray-400 italic">"{s.description}"</span>
+                      <span className="font-mono text-sm text-sand-1200 italic">"{s.description}"</span>
                     </div>
-                    <span className="text-[11px] text-gray-500 bg-white/5 px-1.5 py-0.5 rounded font-mono">const</span>
+                    <span className="text-[11px] text-sand-1100 bg-sand-100 border border-border-low px-1.5 py-0.5 font-mono">const</span>
                   </div>
                 ))}
                 {userSeeds.map((s) => (
-                  <div key={s.name} className="flex items-center justify-between px-3 py-2.5 border-b border-black/20 last:border-0">
-                    <span className="font-mono text-sm text-white">{s.name}</span>
+                  <div key={s.name} className="flex items-center justify-between px-3 py-2.5 border-b border-border-low last:border-0">
+                    <span className="font-mono text-sm text-sand-1600">{s.name}</span>
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded border ${
-                        s.kind === 'arg'
-                          ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
-                          : isNumericSeed(s)
-                          ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-                          : 'text-purple-400 bg-purple-500/10 border-purple-500/20'
-                      }`}>
+                      <span className="text-[11px] font-mono px-1.5 py-0.5 border text-sand-1500 bg-sand-100 border-border-low">
                         {seedTypeLabel(s)}
                       </span>
-                      <span className="text-[11px] text-gray-600 font-mono bg-white/5 px-1.5 py-0.5 rounded">{s.kind}</span>
+                      <span className="text-[11px] text-sand-1100 font-mono bg-sand-100 px-1.5 py-0.5">{s.kind}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
               {pda.customProgram && (
-                <div className="flex items-center gap-2 text-xs p-2.5 bg-yellow-500/5 rounded-lg">
-                  <svg className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex items-center gap-2 text-xs p-2.5 bg-[#b75000]/5">
+                  <svg className="w-3.5 h-3.5 text-[#b75000] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-yellow-400">Cross-program: <code className="font-mono">{pda.customProgram.slice(0, 8)}…</code></span>
+                  <span className="text-[#b75000]">Cross-program: <code className="font-mono">{pda.customProgram.slice(0, 8)}…</code></span>
                 </div>
               )}
 
               {/* cURL example */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-widest text-gray-500">cURL Example</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-sand-1100">cURL Example</p>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(generateCurlSnippet())
                       showToast('cURL copied to clipboard', 'success')
                     }}
-                    className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-primary transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] text-sand-1100 hover:text-sand-1600 transition-colors"
                   >
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -243,29 +237,27 @@ function PDACard({
                     Copy
                   </button>
                 </div>
-                <pre className="text-[11px] font-mono text-gray-400 bg-black/30 rounded-lg p-3 whitespace-pre-wrap leading-relaxed overflow-x-auto">{generateCurlSnippet()}</pre>
+                <pre className="text-[11px] font-mono text-sand-1200 bg-sand-50 border border-border-low p-3 whitespace-pre-wrap leading-relaxed overflow-x-auto">{generateCurlSnippet()}</pre>
               </div>
             </div>
 
             {/* ── RIGHT: Try It Out ── */}
             <div className="lg:flex-1 p-5 space-y-5">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-gray-500">Try it out</h4>
+              <h4 className="text-xs font-bold uppercase tracking-widest text-sand-1100">Try it out</h4>
 
               {userSeeds.length === 0 ? (
-                <p className="text-xs text-gray-600 italic">No inputs required — all seeds are constants</p>
+                <p className="text-xs text-sand-1100 italic">No inputs required — all seeds are constants</p>
               ) : (
                 <div className="space-y-3">
                   {userSeeds.map((s) => (
                     <div key={s.name} className="space-y-1">
-                      <label className="flex items-center gap-2 text-xs font-mono text-gray-400">
+                      <label className="flex items-center gap-2 text-xs font-mono text-sand-1200">
                         {s.name}
-                        <span className="text-red-400">*</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        <span className="text-[#b75000]">*</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 ${
                           s.kind === 'arg'
-                            ? 'text-blue-400 bg-blue-400/10'
-                            : isNumericSeed(s)
-                            ? 'text-amber-400 bg-amber-400/10'
-                            : 'text-purple-400 bg-purple-400/10'
+                            ? 'text-[#b75000] bg-[#b75000]/10'
+                            : 'text-sand-1500 bg-sand-100'
                         }`}>
                           {seedTypeLabel(s)}
                         </span>
@@ -313,20 +305,20 @@ function PDACard({
 
               {/* Result */}
               {result && (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-emerald-500/15">
+                <div className="border border-border-medium bg-sand-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-border-low">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 rounded-md">
+                      <span className="font-mono text-[11px] text-sand-1600 bg-sand-100 border border-border-medium px-2 py-0.5">
                         200 OK
                       </span>
-                      <span className="text-xs text-gray-500">PDA derived</span>
+                      <span className="text-xs text-sand-1100">PDA derived</span>
                     </div>
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(result.pda)
                         showToast('Copied PDA address', 'success')
                       }}
-                      className="text-xs text-primary hover:text-secondary transition-colors"
+                      className="text-xs text-sand-1200 hover:text-sand-1600 transition-colors"
                     >
                       Copy address
                     </button>
@@ -335,44 +327,38 @@ function PDACard({
                   <div className="p-4 space-y-4">
                     {/* PDA address */}
                     <div>
-                      <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">PDA Address</p>
-                      <code className="text-primary font-mono text-sm break-all">{result.pda}</code>
+                      <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">PDA Address</p>
+                      <code className="text-sand-1600 font-mono text-sm break-all">{result.pda}</code>
                     </div>
 
                     {/* Bump + program */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Bump</p>
-                        <span className="text-white font-mono font-bold text-lg">{result.bump}</span>
+                        <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">Bump</p>
+                        <span className="text-sand-1600 font-mono font-bold text-lg">{result.bump}</span>
                       </div>
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-1">Program</p>
-                        <code className="text-gray-400 font-mono text-xs break-all">{result.programId}</code>
+                        <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-1">Program</p>
+                        <code className="text-sand-1200 font-mono text-xs break-all">{result.programId}</code>
                       </div>
                     </div>
 
                     {/* Seeds breakdown */}
                     {result.seeds?.length > 0 && (
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase tracking-wider mb-2">Seed Bytes</p>
-                        <div className="rounded-lg overflow-hidden bg-black/20">
+                        <p className="text-[11px] text-sand-1100 uppercase tracking-wider mb-2">Seed Bytes</p>
+                        <div className="overflow-hidden bg-bg1 border border-border-low">
                           {result.seeds.map((s: any, i: number) => (
-                            <div key={i} className="flex items-center gap-3 px-3 py-2 border-b border-black/20 last:border-0 text-xs">
-                              <span className="text-gray-600 font-mono w-4 flex-shrink-0">{i + 1}</span>
-                              <span className={`px-1.5 py-0.5 rounded font-mono flex-shrink-0 ${
-                                s.kind === 'const'
-                                  ? 'bg-gray-700/50 text-gray-400'
-                                  : s.kind === 'arg'
-                                  ? 'bg-blue-500/10 text-blue-400'
-                                  : 'bg-purple-500/10 text-purple-400'
-                              }`}>{s.kind}</span>
-                              <span className="font-mono text-gray-300 truncate flex-1">
+                            <div key={i} className="flex items-center gap-3 px-3 py-2 border-b border-border-low last:border-0 text-xs">
+                              <span className="text-sand-1100 font-mono w-4 flex-shrink-0">{i + 1}</span>
+                              <span className="px-1.5 py-0.5 font-mono flex-shrink-0 text-sand-1200 bg-sand-100 border border-border-low">{s.kind}</span>
+                              <span className="font-mono text-sand-1500 truncate flex-1">
                                 {s.description || s.name || '-'}
                                 {s.value !== undefined && s.kind !== 'const' && (
-                                  <span className="text-gray-500 ml-1">= {String(s.value)}</span>
+                                  <span className="text-sand-1100 ml-1">= {String(s.value)}</span>
                                 )}
                               </span>
-                              <span className="font-mono text-gray-600 text-[10px] break-all max-w-[120px] truncate">{s.hex}</span>
+                              <span className="font-mono text-sand-1100 text-[10px] break-all max-w-[120px] truncate">{s.hex}</span>
                             </div>
                           ))}
                         </div>
@@ -398,7 +384,7 @@ export default function PDAExplorer({
   if (pdaAccounts.length === 0) {
     return (
       <div className="card-static p-8 text-center">
-        <p className="text-gray-400">No PDA accounts found in this IDL</p>
+        <p className="text-sand-1200">No PDA accounts found in this IDL</p>
       </div>
     )
   }
@@ -427,5 +413,4 @@ export default function PDAExplorer({
     </div>
   )
 }
-
 

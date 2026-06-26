@@ -45,6 +45,40 @@ function fenced(value: string): string {
   return `${fence}\n${value}\n${fence}`
 }
 
+type AiAnalysisMini = {
+  instructionFlows?: Array<{ name: string; steps: string[]; description: string }>
+  crossProgramAccounts?: Array<{ account: string; program: string; note: string }>
+} | null
+
+function buildInstructionFlowsSection(aiAnalysis: AiAnalysisMini): string[] {
+  if (!aiAnalysis?.instructionFlows?.length) return []
+  const lines: string[] = ['## Instruction Flows', '(generated from AI analysis)', '']
+  for (const flow of aiAnalysis.instructionFlows) {
+    lines.push(`### ${flow.name}`, '')
+    lines.push('Steps:')
+    for (const step of flow.steps) {
+      lines.push(step)
+    }
+    if (flow.description) {
+      lines.push('', `> Why: ${flow.description}`)
+    }
+    lines.push('')
+  }
+  return lines
+}
+
+function buildCrossProgramSection(aiAnalysis: AiAnalysisMini): string[] {
+  if (!aiAnalysis?.crossProgramAccounts?.length) return []
+  const lines: string[] = ['## Cross-Program Account Dependencies', '']
+  lines.push('| Account | External Program | Note |')
+  lines.push('|---------|-----------------|------|')
+  for (const dep of aiAnalysis.crossProgramAccounts) {
+    lines.push(`| \`${dep.account}\` | \`${dep.program}\` | ${dep.note} |`)
+  }
+  lines.push('')
+  return lines
+}
+
 app.get('/project/:projectId/llms.txt', async (c) => {
   const projectId = c.req.param('projectId')
 
@@ -102,6 +136,17 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       }
     }
 
+    const aiAnalysisRow = await db
+      ?.prepare('SELECT detailed_analysis_json FROM ai_analyses WHERE project_id = ? ORDER BY generated_at DESC LIMIT 1')
+      .bind(projectId)
+      .first()
+    const aiAnalysis: {
+      instructionFlows?: Array<{ name: string; steps: string[]; description: string }>
+      crossProgramAccounts?: Array<{ account: string; program: string; note: string }>
+    } | null = aiAnalysisRow
+      ? (() => { try { return JSON.parse(aiAnalysisRow.detailed_analysis_json as string) } catch { return null } })()
+      : null
+
     const knownAddresses = await db
       ?.prepare(
         'SELECT label, address, description FROM known_addresses WHERE project_id = ? ORDER BY label ASC'
@@ -133,8 +178,8 @@ app.get('/project/:projectId/llms.txt', async (c) => {
 
     const externalApisSection: string[] = []
     if (externalApis?.results?.length) {
-      externalApisSection.push('## External APIs', '')
-      externalApisSection.push('These are third-party/external APIs documented by the project owner. Orquestra does not execute or proxy them.', '')
+      externalApisSection.push('## External API', '')
+      externalApisSection.push('These are third-party/external API documented by the project owner. Orquestra does not execute or proxy them.', '')
 
       for (const row of externalApis.results as CustomApiRow[]) {
         externalApisSection.push(`### ${row.name}`, '')
@@ -197,9 +242,13 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       '- For Helius RPC URLs, program account queries use getProgramAccountsV2 pagination automatically; pass paginationKey from a prior response to fetch the next page.',
       '- Dynamic account fields such as string, vec, bytes, and variable arrays may require explicit dataSize or raw memcmp offsets.',
       '- If details are missing or ambiguous, ask for clarification or fetch the relevant endpoint.',
+      '- When building multi-step transactions, prefer documented instruction flows below — they capture required ordering and dependencies.',
+      '- For cross-program accounts (those with a fixed external program address), pass the documented program ID as the account pubkey.',
       '',
       ...knownAddressesSection,
       ...externalApisSection,
+      ...buildInstructionFlowsSection(aiAnalysis),
+      ...buildCrossProgramSection(aiAnalysis),
       '---',
       '',
       docsText,

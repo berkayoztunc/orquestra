@@ -251,9 +251,9 @@ app.get('/sync/status', async (c) => {
   try {
     const latest = await db
       .prepare(
-        `SELECT id, started_at, completed_at, total_checked, total_programs,
-                updated_count, unchanged_count, skipped_count,
-                error_count, trigger, status
+        `SELECT id, started_at, completed_at, total_checked,
+                updated_count, unchanged_count, skipped_count, error_count, trigger,
+                total_programs, status, candidates_checked, candidates_imported
          FROM sync_runs
          ORDER BY started_at DESC
          LIMIT 1`,
@@ -261,8 +261,9 @@ app.get('/sync/status', async (c) => {
       .first()
 
     return c.json({ run: latest ?? null })
-  } catch {
-    return c.json({ error: 'Failed to fetch sync status' }, 500)
+  } catch (err) {
+    console.error('[admin] sync/status error:', err)
+    return c.json({ error: 'Failed to fetch sync status', details: String(err) }, 500)
   }
 })
 
@@ -281,34 +282,39 @@ app.get('/sync/history', async (c) => {
   const offset = (page - 1) * limit
 
   try {
-    const [rows, countRow] = await Promise.all([
-      db
-        .prepare(
-          `SELECT ul.id, ul.project_id, ul.program_id, ul.program_name,
-                  ul.old_version, ul.new_version, ul.old_hash, ul.new_hash,
-                  ul.detected_at, p.name AS project_name
-           FROM update_logs ul
-           LEFT JOIN projects p ON p.id = ul.project_id
-           ORDER BY ul.detected_at DESC
-           LIMIT ? OFFSET ?`,
-        )
-        .bind(limit, offset)
-        .all(),
-      db.prepare('SELECT COUNT(*) AS total FROM update_logs').first(),
-    ])
+    // Sequential queries — D1 can have issues with concurrent .all() + .first()
+    const rows = await db
+      .prepare(
+        `SELECT ul.id, ul.project_id, ul.program_id, ul.program_name,
+                ul.old_version, ul.new_version, ul.old_hash, ul.new_hash,
+                ul.detected_at, p.name AS project_name
+         FROM update_logs ul
+         LEFT JOIN projects p ON p.id = ul.project_id
+         ORDER BY ul.detected_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .bind(limit, offset)
+      .all()
 
-    const total = countRow?.total ?? 0
+    const countRow = await db
+      .prepare('SELECT COUNT(*) AS total FROM update_logs')
+      .first()
+
+    // D1 may return BigInt for COUNT — coerce explicitly
+    const total = Number((countRow as any)?.total ?? 0)
+
     return c.json({
       updates: rows.results ?? [],
       pagination: {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: total > 0 ? Math.ceil(total / limit) : 0,
       },
     })
-  } catch {
-    return c.json({ error: 'Failed to fetch sync history' }, 500)
+  } catch (err) {
+    console.error('[admin] sync/history error:', err)
+    return c.json({ error: 'Failed to fetch sync history', details: String(err) }, 500)
   }
 })
 
@@ -341,8 +347,9 @@ app.get('/sync/discovery', async (c) => {
       .all()
 
     return c.json({ programs: rows.results ?? [], days })
-  } catch {
-    return c.json({ error: 'Failed to fetch discovery feed' }, 500)
+  } catch (err) {
+    console.error('[admin] sync/discovery error:', err)
+    return c.json({ error: 'Failed to fetch discovery feed', details: String(err) }, 500)
   }
 })
 
@@ -403,8 +410,9 @@ app.get('/sync/candidates', async (c) => {
     return c.json({
       stats: stats ?? { total: 0, pending: 0, has_idl: 0, no_idl: 0 },
     })
-  } catch {
-    return c.json({ error: 'Failed to fetch candidate stats' }, 500)
+  } catch (err) {
+    console.error('[admin] sync/candidates error:', err)
+    return c.json({ error: 'Failed to fetch candidate stats', details: String(err) }, 500)
   }
 })
 

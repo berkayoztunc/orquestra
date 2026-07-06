@@ -2,6 +2,9 @@
  * On-chain Anchor IDL Fetcher
  * Fetches Anchor IDL from Solana on-chain accounts.
  * Pure Web Crypto — no Node.js deps, Workers-compatible.
+ *
+ * Also exports fetchIdlWithSource() which uses @solana/idl for
+ * full PMP + Anchor support (tries PMP first, falls back to Anchor).
  */
 
 import { validateIDL } from './idl-parser'
@@ -306,5 +309,45 @@ export async function fetchAnchorIDLFromChain(
     return { idl, idlJson: JSON.stringify(idl) }
   } catch {
     return null
+  }
+}
+
+// ── PMP + Anchor fetcher via @solana/idl ─────────────────────────────────────
+
+/**
+ * Fetch the IDL for a program using the @solana/idl package, which tries
+ * the Solana Program Metadata Program (PMP) first, then falls back to the
+ * legacy Anchor IDL account. Returns the source ('pmp' | 'anchor') alongside
+ * the raw IDL. Falls back to fetchAnchorIDLFromChain on any import/runtime error.
+ */
+export async function fetchIdlWithSource(
+  programId: string,
+  rpcUrl: string,
+): Promise<{ idlJson: string; idl: any; source: 'pmp' | 'anchor' } | null> {
+  try {
+    // Dynamic imports for graceful fallback if bundling has issues in Workers
+    const { fetchIdlWrapped } = await import('@solana/idl')
+    const { createSolanaRpc, address } = await import('@solana/kit')
+
+    const rpc = createSolanaRpc(rpcUrl)
+    const result = await fetchIdlWrapped(rpc, address(programId))
+
+    if (result.status !== 'ok') return null
+
+    try {
+      const idl = JSON.parse(result.content)
+      return {
+        idlJson: result.content,
+        idl,
+        source: (result.source ?? 'anchor') as 'pmp' | 'anchor',
+      }
+    } catch {
+      return null
+    }
+  } catch (err) {
+    console.warn('[idl-fetcher] @solana/idl unavailable, falling back to Anchor fetcher:', err)
+    const fallback = await fetchAnchorIDLFromChain(programId, rpcUrl)
+    if (!fallback) return null
+    return { ...fallback, source: 'anchor' as const }
   }
 }

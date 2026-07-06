@@ -158,6 +158,7 @@ async function processIngest(
       aiAnalysisJson,
       aiModelUsed,
       aiGeneratedAt,
+      idlSource: r.idlSource ?? 'anchor',
     },
     apiOpts,
   )

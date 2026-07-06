@@ -17,6 +17,8 @@ export interface IngestPayload {
   aiAnalysisJson: string | null
   aiModelUsed: string | null
   aiGeneratedAt: string | null
+  /** Whether the IDL was sourced from PMP or legacy Anchor account */
+  idlSource?: 'pmp' | 'anchor'
 }
 
 export interface IngestResult {

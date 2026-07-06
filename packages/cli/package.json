@@ -13,6 +13,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@solana/idl": "^0.2.0",
+    "@solana/kit": "^6.4.0",
     "@solana/web3.js": "^1.87.6",
     "bs58": "^5.0.0"
   },

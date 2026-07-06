@@ -29,6 +29,8 @@ export interface IdlCheckResult {
   /** Decoded IDL JSON object when available */
   idlData: Record<string, any> | null
   error: string | null
+  /** Whether the IDL was sourced from PMP or legacy Anchor account */
+  idlSource?: 'pmp' | 'anchor'
 }
 
 /**
@@ -213,6 +215,7 @@ export async function checkIdlBatch(
               idlAccount: newExists ? d.newIdlAddress : null,
               idlData: null,
               error: newErr || null,
+              idlSource: 'anchor',
             })
           } else {
             const oldBase64 = oldExists ? oldInfo?.data?.[0] ?? null : null
@@ -227,6 +230,7 @@ export async function checkIdlBatch(
                 idlAccount: d.oldIdlAddress,
                 idlData: oldIdlData,
                 error: null,
+                idlSource: 'anchor',
               })
             } else if (newIdlData) {
               results.push({
@@ -235,6 +239,7 @@ export async function checkIdlBatch(
                 idlAccount: d.newIdlAddress,
                 idlData: newIdlData,
                 error: null,
+                idlSource: 'anchor',
               })
             } else if (oldExists) {
               results.push({
@@ -243,6 +248,7 @@ export async function checkIdlBatch(
                 idlAccount: d.oldIdlAddress,
                 idlData: null,
                 error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
+                idlSource: 'anchor',
               })
             } else if (newExists) {
               results.push({
@@ -251,6 +257,7 @@ export async function checkIdlBatch(
                 idlAccount: d.newIdlAddress,
                 idlData: null,
                 error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
+                idlSource: 'anchor',
               })
             } else {
               results.push({
@@ -259,6 +266,7 @@ export async function checkIdlBatch(
                 idlAccount: d.oldIdlAddress,
                 idlData: null,
                 error: oldErr || newErr || null,
+                idlSource: 'anchor',
               })
             }
           }
@@ -273,6 +281,7 @@ export async function checkIdlBatch(
           idlAccount: d.oldIdlAddress,
           idlData: null,
           error: `Batch RPC error: ${err.message}`,
+          idlSource: 'anchor',
         })
       }
     }

@@ -57,6 +57,7 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       aiAnalysisJson?: string | null
       aiModelUsed?: string | null
       aiGeneratedAt?: string | null
+      idlSource?: 'pmp' | 'anchor'
     }>()
 
     if (!body.programId || !body.idl || !body.idlHash) {
@@ -165,11 +166,12 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       idlVersionId = generateId()
       const nextVersion = existingVersionNum + 1
       const idlStandard = detectIDLFormat(body.idl)
+      const idlSource = body.idlSource ?? 'anchor'
       await db
         .prepare(
-          'INSERT INTO idl_versions (id, project_id, idl_json, idl_hash, version, created_at, idl_standard) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO idl_versions (id, project_id, idl_json, idl_hash, version, created_at, idl_standard, idl_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         )
-        .bind(idlVersionId, projectId, idlStr, body.idlHash, nextVersion, now, idlStandard)
+        .bind(idlVersionId, projectId, idlStr, body.idlHash, nextVersion, now, idlStandard, idlSource)
         .run()
 
       // Cache in KV

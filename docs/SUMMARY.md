@@ -9,5 +9,6 @@
 - [Agent Skills](agent-skills.md)
 - [User CLI](user-cli.md)
 - [CLI Discovery Tools](cli-discovery.md)
+- [IDL Sync System](idl-sync.md)
 - [Deployment](deployment.md)
 - [Data Model](data-model.md)

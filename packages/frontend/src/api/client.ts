@@ -605,4 +605,71 @@ export async function regenerateScopeKey(listId: string): Promise<{ scope_key: s
   return res.data
 }
 
+// ─── Sync Dashboard ──────────────────────────────────────────────────────────
+
+export interface SyncRun {
+  id: string
+  started_at: string
+  completed_at: string | null
+  total_checked: number
+  total_programs: number
+  updated_count: number
+  unchanged_count: number
+  skipped_count: number
+  error_count: number
+  trigger: 'cron' | 'manual'
+  status: 'running' | 'complete' | 'partial'
+}
+
+export interface SyncUpdate {
+  id: string
+  project_id: string
+  program_id: string
+  program_name: string | null
+  project_name: string | null
+  old_version: number | null
+  new_version: number
+  old_hash: string | null
+  new_hash: string
+  detected_at: string
+}
+
+export interface DiscoveredProgram {
+  id: string
+  name: string
+  program_id: string
+  created_at: string
+  category: string | null
+  tags: string | null
+}
+
+export async function getSyncStatus(): Promise<{ run: SyncRun | null }> {
+  const res = await api.get('/admin/sync/status')
+  return res.data
+}
+
+export async function getSyncHistory(params?: {
+  page?: number
+  limit?: number
+}): Promise<{
+  updates: SyncUpdate[]
+  pagination: { page: number; limit: number; total: number; totalPages: number }
+}> {
+  const res = await api.get('/admin/sync/history', { params })
+  return res.data
+}
+
+export async function getDiscoveryFeed(params?: {
+  days?: number
+  limit?: number
+}): Promise<{ programs: DiscoveredProgram[]; days: number }> {
+  const res = await api.get('/admin/sync/discovery', { params })
+  return res.data
+}
+
+export async function triggerSync(): Promise<{ triggered: boolean; message: string }> {
+  const res = await api.post('/admin/sync/trigger')
+  return res.data
+}
+
 export default api

@@ -5,6 +5,7 @@ import { setCategoryAndAliases } from '../services/search'
 import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import { generateDocumentation } from '../services/doc-generator'
 import { generateId } from '../utils/id'
+import { runDailyIdlSync } from '../services/idl-sync'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -12,8 +13,11 @@ type Env = {
     DB: any
     AI: Ai
     CACHE: any
+    IDLS: any
     API_BASE_URL: string
     INGEST_API_KEY: string
+    SOLANA_RPC_URL: string
+    SOLANA_MAINNET_RPC_URL?: string
   }
 }
 
@@ -229,6 +233,146 @@ app.post('/regenerate-analysis/:projectId', ingestKeyMiddleware, async (c) => {
   }
 
   return c.json({ ok: true, projectId, analysisId: analysis.id, generatedAt: analysis.generatedAt })
+})
+
+// ── IDL Sync Status ───────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/sync/status
+ *
+ * Returns the most recent sync_runs row so the frontend can display
+ * when the last sync ran and how many programs were updated.
+ * Public read — no auth required.
+ */
+app.get('/sync/status', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+
+  try {
+    const latest = await db
+      .prepare(
+        `SELECT id, started_at, completed_at, total_checked, total_programs,
+                updated_count, unchanged_count, skipped_count,
+                error_count, trigger, status
+         FROM sync_runs
+         ORDER BY started_at DESC
+         LIMIT 1`,
+      )
+      .first()
+
+    return c.json({ run: latest ?? null })
+  } catch {
+    return c.json({ error: 'Failed to fetch sync status' }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/history?page=1&limit=20
+ *
+ * Paginated log of IDL version changes detected during sync runs.
+ * Public read — no auth required.
+ */
+app.get('/sync/history', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+
+  const page = Math.max(1, parseInt(c.req.query('page') ?? '1'))
+  const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') ?? '20')))
+  const offset = (page - 1) * limit
+
+  try {
+    const [rows, countRow] = await Promise.all([
+      db
+        .prepare(
+          `SELECT ul.id, ul.project_id, ul.program_id, ul.program_name,
+                  ul.old_version, ul.new_version, ul.old_hash, ul.new_hash,
+                  ul.detected_at, p.name AS project_name
+           FROM update_logs ul
+           LEFT JOIN projects p ON p.id = ul.project_id
+           ORDER BY ul.detected_at DESC
+           LIMIT ? OFFSET ?`,
+        )
+        .bind(limit, offset)
+        .all(),
+      db.prepare('SELECT COUNT(*) AS total FROM update_logs').first(),
+    ])
+
+    const total = countRow?.total ?? 0
+    return c.json({
+      updates: rows.results ?? [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    })
+  } catch {
+    return c.json({ error: 'Failed to fetch sync history' }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/discovery?days=7&limit=50
+ *
+ * Programs added to the registry recently (via sync or CLI ingest).
+ * Public read — no auth required.
+ */
+app.get('/sync/discovery', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+
+  const days = Math.min(90, Math.max(1, parseInt(c.req.query('days') ?? '7')))
+  const limit = Math.min(200, Math.max(1, parseInt(c.req.query('limit') ?? '50')))
+
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT p.id, p.name, p.program_id, p.created_at,
+                pc.category, pc.tags
+         FROM projects p
+         LEFT JOIN program_categories pc ON pc.project_id = p.id
+         WHERE p.is_public = 1
+           AND p.created_at >= datetime('now', ? || ' days')
+         ORDER BY p.created_at DESC
+         LIMIT ?`,
+      )
+      .bind(`-${days}`, limit)
+      .all()
+
+    return c.json({ programs: rows.results ?? [], days })
+  } catch {
+    return c.json({ error: 'Failed to fetch discovery feed' }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger
+ *
+ * Manually trigger an IDL sync run in the background.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger', ingestKeyMiddleware, async (c) => {
+  const env = c.env
+
+  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+
+  // Fire sync in the background — don't block the response
+  c.executionCtx.waitUntil(
+    runDailyIdlSync(
+      {
+        DB: env.DB,
+        IDLS: env.IDLS,
+        CACHE: env.CACHE,
+        AI: env.AI as any,
+        SOLANA_RPC_URL: env.SOLANA_RPC_URL,
+        SOLANA_MAINNET_RPC_URL: env.SOLANA_MAINNET_RPC_URL,
+      },
+      'manual',
+    ),
+  )
+
+  return c.json({ triggered: true, message: 'IDL sync started in background' })
 })
 
 export default app

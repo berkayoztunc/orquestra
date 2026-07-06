@@ -110,19 +110,25 @@ export default function Sync(): JSX.Element {
   // Fetch sync status + discovery on mount (and every 30 s)
   const fetchStatus = useCallback(async () => {
     try {
-      const [statusData, discoveryData, candidateData] = await Promise.all([
+      const [statusData, discoveryData] = await Promise.all([
         getSyncStatus(),
         getDiscoveryFeed({ days: 7, limit: 30 }),
-        getCandidateStats(),
       ])
       setRun(statusData.run)
       setDiscovery(discoveryData.programs)
-      setCandidates(candidateData.stats)
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err?.message ?? 'Failed to load sync status')
-    } finally {
-      setLoading(false)
     }
+
+    // Fetch candidates stats separately — table may not exist yet (migration 018)
+    try {
+      const candidateData = await getCandidateStats()
+      setCandidates(candidateData.stats)
+    } catch {
+      // program_candidates table not created yet — show empty state, not an error
+    }
+
+    setLoading(false)
   }, [])
 
   const fetchUpdates = useCallback(async (page = 1) => {
@@ -207,28 +213,28 @@ export default function Sync(): JSX.Element {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <StatCard
                 label="Programs Checked"
-                value={`${run.total_checked.toLocaleString()}${run.total_programs > 0 && run.total_programs !== run.total_checked ? ` / ${run.total_programs.toLocaleString()}` : ''}`}
+                value={`${(run.total_checked ?? 0).toLocaleString()}${(run.total_programs ?? 0) > 0 && run.total_programs !== run.total_checked ? ` / ${(run.total_programs ?? 0).toLocaleString()}` : ''}`}
                 sub={run.status === 'partial' ? 'partial — resumed next run' : 'this run'}
               />
               <StatCard
                 label="Updated"
-                value={run.updated_count.toLocaleString()}
+                value={(run.updated_count ?? 0).toLocaleString()}
                 sub="new IDL versions"
               />
               <StatCard
                 label="Unchanged"
-                value={run.unchanged_count.toLocaleString()}
+                value={(run.unchanged_count ?? 0).toLocaleString()}
                 sub="no changes"
               />
               <StatCard
                 label="Skipped"
-                value={run.skipped_count.toLocaleString()}
+                value={(run.skipped_count ?? 0).toLocaleString()}
                 sub="no on-chain IDL"
               />
               <StatCard
                 label="Errors"
-                value={run.error_count.toLocaleString()}
-                sub={run.error_count > 0 ? 'check logs' : 'clean run'}
+                value={(run.error_count ?? 0).toLocaleString()}
+                sub={(run.error_count ?? 0) > 0 ? 'check logs' : 'clean run'}
               />
               <StatCard
                 label="Duration"

@@ -611,12 +611,12 @@ export interface SyncRun {
   id: string
   started_at: string
   completed_at: string | null
-  total_checked: number
-  total_programs: number
-  updated_count: number
-  unchanged_count: number
-  skipped_count: number
-  error_count: number
+  total_checked: number | null
+  total_programs: number | null
+  updated_count: number | null
+  unchanged_count: number | null
+  skipped_count: number | null
+  error_count: number | null
   trigger: 'cron' | 'manual'
   status: 'running' | 'complete' | 'partial'
 }

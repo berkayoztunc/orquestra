@@ -253,7 +253,7 @@ app.get('/sync/status', async (c) => {
       .prepare(
         `SELECT id, started_at, completed_at, total_checked,
                 updated_count, unchanged_count, skipped_count, error_count, trigger,
-                total_programs, status, candidates_checked, candidates_imported
+                total_programs, status
          FROM sync_runs
          ORDER BY started_at DESC
          LIMIT 1`,

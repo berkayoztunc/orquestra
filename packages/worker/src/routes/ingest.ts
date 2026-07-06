@@ -241,4 +241,74 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
   }
 })
 
+// ── Program Discovery Queue ───────────────────────────────────────────────────
+
+/**
+ * POST /api/ingest/candidates
+ *
+ * Bulk-add Solana program IDs to the discovery queue (`program_candidates`).
+ * The cron then checks each one for an on-chain IDL and auto-imports those
+ * that have one; programs with no IDL are marked 'no_idl' and skipped forever.
+ *
+ * Auth: X-Ingest-Key
+ * Body: { programIds: string[], source?: 'cli' | 'api' | 'manual' }
+ * Returns: { queued: number, skipped: number }
+ *   queued  — IDs submitted this request (may include already-queued ones)
+ *   skipped — IDs that failed basic validation (not a 32-44 char base58 string)
+ */
+app.post('/candidates', ingestKeyMiddleware, async (c) => {
+  try {
+    const body = await c.req.json<{
+      programIds: unknown
+      source?: 'cli' | 'api' | 'manual'
+    }>()
+
+    if (!Array.isArray(body.programIds) || body.programIds.length === 0) {
+      return c.json({ error: 'programIds must be a non-empty array' }, 400)
+    }
+    if (body.programIds.length > 5000) {
+      return c.json({ error: 'Maximum 5000 program IDs per request' }, 400)
+    }
+
+    const db = c.env?.DB
+    if (!db) return c.json({ error: 'Database not available' }, 500)
+
+    const source = body.source ?? 'api'
+
+    // Basic validation: Solana addresses are 32–44 base58 chars
+    const valid: string[] = []
+    let skipped = 0
+    for (const id of body.programIds) {
+      if (typeof id === 'string' && id.length >= 32 && id.length <= 44) {
+        valid.push(id)
+      } else {
+        skipped++
+      }
+    }
+
+    if (valid.length === 0) {
+      return c.json({ queued: 0, skipped }, 400)
+    }
+
+    // INSERT OR IGNORE in batches to avoid bind-parameter limits
+    const BATCH = 100
+    for (let i = 0; i < valid.length; i += BATCH) {
+      const slice = valid.slice(i, i + BATCH)
+      const placeholders = slice.map(() => '(?, ?, ?)').join(', ')
+      const values = slice.flatMap((id) => [id, 'pending', source])
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO program_candidates (program_id, status, source) VALUES ${placeholders}`,
+        )
+        .bind(...values)
+        .run()
+    }
+
+    return c.json({ queued: valid.length, skipped })
+  } catch (err) {
+    console.error('[ingest/candidates] Error:', err)
+    return c.json({ error: 'Failed to queue candidates', details: (err as Error).message }, 500)
+  }
+})
+
 export default app

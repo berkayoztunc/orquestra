@@ -5,6 +5,7 @@
  * Usage:
  *   bun run packages/cli/src/index.ts scan [options]        — Discover all programs on cluster
  *   bun run packages/cli/src/index.ts check-idl [options]   — Check Anchor IDL for each program
+ *   bun run packages/cli/src/index.ts queue [options]        — Queue program IDs for cron auto-import
  *   bun run packages/cli/src/index.ts full [options]         — Run scan + check-idl sequentially
  *
  * Options:
@@ -27,6 +28,7 @@
 import { scanPrograms, type ScanProgramsOptions } from './commands/scan-programs'
 import { checkIdl, type CheckIdlOptions } from './commands/check-idl'
 import { analysis, type AnalysisOptions } from './commands/analysis'
+import { queuePrograms, type QueueProgramsOptions } from './commands/queue-programs'
 
 // ─── Argument Parsing ────────────────────────────────────────────────
 function parseArgs(argv: string[]): { command: string; flags: Record<string, string | boolean> } {
@@ -96,6 +98,7 @@ USAGE:
 COMMANDS:
   scan        Discover all executable programs on the cluster → programs.csv
   check-idl   Check on-chain Anchor IDL for each program → program_idl_status.csv
+  queue       Queue all program IDs from programs.csv for cron auto-import (fast!)
   full        Run scan + check-idl sequentially
   analysis    Print summary stats from existing output CSVs (no RPC needed)
 
@@ -219,6 +222,16 @@ async function main() {
     case 'analysis': {
       const analysisOpts: AnalysisOptions = { outDir }
       await analysis(analysisOpts)
+      break
+    }
+
+    case 'queue': {
+      const queueOpts: QueueProgramsOptions = {
+        outDir,
+        inputFile,
+        batchSize: parseInt((flags['batch-size'] as string) || '500', 10),
+      }
+      await queuePrograms(queueOpts)
       break
     }
 

@@ -23,6 +23,7 @@
     "cli:scan": "bun run packages/cli/src/index.ts scan",
     "cli:check-idl": "bun run packages/cli/src/index.ts check-idl",
     "cli:check-idl:fast": "bun run packages/cli/src/index.ts check-idl --fast",
+    "cli:queue": "bun run packages/cli/src/index.ts queue",
     "cli:full": "bun run packages/cli/src/index.ts full",
     "cli:analysis": "bun run packages/cli/src/index.ts analysis",
     "lint": "eslint packages/*/src --ext .ts,.tsx",
@@ -31,6 +32,8 @@
     "format": "prettier --write \"packages/**/src/**/*.(ts|tsx|json|css)\"",
     "db:migrate": "wrangler d1 migrations apply DB --remote",
     "db:migrate:dev": "wrangler d1 migrations apply DB --local",
+    "db:migrate:018": "wrangler d1 execute DB --remote --file ./migrations/018_program_candidates.sql",
+    "db:migrate:018:dev": "wrangler d1 execute DB --local --file ./migrations/018_program_candidates.sql",
     "db:seed": "wrangler d1 execute DB --local --file ./seed/dev.sql",
     "db:reset": "wrangler d1 execute DB --local --command \"DROP TABLE IF EXISTS projects_fts; DROP TABLE IF EXISTS program_categories; DROP TABLE IF EXISTS ai_analyses; DROP TABLE IF EXISTS known_addresses; DROP TABLE IF EXISTS project_socials; DROP TABLE IF EXISTS api_keys; DROP TABLE IF EXISTS idl_versions; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS users; DROP TABLE IF EXISTS d1_migrations;\"",
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"

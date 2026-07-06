@@ -51,6 +51,9 @@ const MAX_AI_PER_RUN = 100
 /** KV key storing the continuation cursor for partial runs */
 const CHECKPOINT_KEY = 'sync:progress:cursor'
 
+/** How many pending candidates to verify + auto-import per cron run */
+const CANDIDATES_PER_RUN = 200
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function hashIdl(idlJson: string): Promise<string> {
@@ -167,6 +170,148 @@ async function syncProject(
   ])
 
   return { ...base, status: 'updated', isFirstVersion, idl: onChain.idl, version: newVersion }
+}
+
+// ── Phase 2: Auto-discover new programs from candidates queue ─────────────────
+
+interface CandidateRow {
+  program_id: string
+}
+
+/**
+ * Process up to CANDIDATES_PER_RUN pending rows from `program_candidates`.
+ *
+ * For each candidate:
+ *  - Call fetchIdlWithSource (with per-program timeout)
+ *  - IDL found AND program not yet in projects:
+ *      create project + idl_versions + project_socials → mark 'has_idl'
+ *  - IDL found AND program already imported:
+ *      Phase 1 handles future updates; just mark 'has_idl'
+ *  - No IDL:
+ *      mark 'no_idl' — never imported, never checked again
+ */
+async function processCandidates(
+  db: D1Database,
+  rpcUrl: string,
+  ai: any,
+  wallStart: number,
+  aiCallCount: number,
+): Promise<{ checked: number; imported: number; aiCallsUsed: number }> {
+  const { results: candidates } = await db
+    .prepare(
+      'SELECT program_id FROM program_candidates WHERE status = ? ORDER BY added_at ASC LIMIT ?',
+    )
+    .bind('pending', CANDIDATES_PER_RUN)
+    .all<CandidateRow>()
+
+  if (!candidates || candidates.length === 0) {
+    return { checked: 0, imported: 0, aiCallsUsed: 0 }
+  }
+
+  let checked = 0
+  let imported = 0
+  let aiUsed = 0
+
+  for (const candidate of candidates) {
+    // Stop early if wall-clock limit is close
+    if (Date.now() - wallStart > MAX_RUNTIME_MS) break
+
+    const onChain = await withTimeout(
+      fetchIdlWithSource(candidate.program_id, rpcUrl),
+      PROGRAM_TIMEOUT_MS,
+    )
+    checked++
+
+    if (!onChain) {
+      // No on-chain IDL — mark permanently, never import
+      await db
+        .prepare(
+          'UPDATE program_candidates SET status = ?, last_checked_at = CURRENT_TIMESTAMP WHERE program_id = ?',
+        )
+        .bind('no_idl', candidate.program_id)
+        .run()
+      continue
+    }
+
+    // On-chain IDL exists — check whether we already have this program
+    const existing = await db
+      .prepare('SELECT id FROM projects WHERE program_id = ? LIMIT 1')
+      .bind(candidate.program_id)
+      .first<{ id: string }>()
+
+    if (!existing) {
+      // Auto-create project and import first IDL version
+      const programName = (
+        (typeof onChain.idl?.name === 'string' && onChain.idl.name) ||
+        (typeof onChain.idl?.metadata?.name === 'string' && onChain.idl.metadata.name) ||
+        (typeof onChain.idl?.program?.name === 'string' && onChain.idl.program.name) ||
+        candidate.program_id
+      ).trim() || candidate.program_id
+
+      const projectId = generateId()
+      const idlHash = await hashIdl(onChain.idlJson)
+
+      await db
+        .prepare(
+          'INSERT INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+        )
+        .bind(projectId, 'system', programName, '', candidate.program_id)
+        .run()
+
+      await db
+        .prepare(
+          'INSERT INTO idl_versions (id, project_id, idl_json, idl_hash, version, idl_standard, idl_source) VALUES (?, ?, ?, ?, 1, ?, ?)',
+        )
+        .bind(generateId(), projectId, onChain.idlJson, idlHash, 'anchor', onChain.source)
+        .run()
+
+      await db
+        .prepare(
+          'INSERT INTO project_socials (id, project_id, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+        )
+        .bind(generateId(), projectId)
+        .run()
+
+      // AI categorization for newly discovered programs
+      if (ai && onChain.idl && aiCallCount + aiUsed < MAX_AI_PER_RUN) {
+        aiUsed++
+        try {
+          const catResult = await categorizeProgramWithAI(ai, {
+            name: programName,
+            description: null,
+            programId: candidate.program_id,
+            instructions: extractInstructionNames(onChain.idl),
+            accounts: extractAccountNames(onChain.idl),
+          })
+          await setCategoryAndAliases(
+            db,
+            projectId,
+            catResult.category,
+            catResult.tags,
+            catResult.aliases,
+          )
+        } catch (err) {
+          console.error(
+            `[idl-sync] AI categorization failed for candidate ${candidate.program_id}:`,
+            err,
+          )
+        }
+      }
+
+      imported++
+      console.log(`[idl-sync] Auto-imported candidate: ${programName} (${candidate.program_id})`)
+    }
+    // else: project already exists — Phase 1 keeps its IDL updated
+
+    await db
+      .prepare(
+        'UPDATE program_candidates SET status = ?, last_checked_at = CURRENT_TIMESTAMP WHERE program_id = ?',
+      )
+      .bind('has_idl', candidate.program_id)
+      .run()
+  }
+
+  return { checked, imported, aiCallsUsed: aiUsed }
 }
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -331,19 +476,47 @@ export async function runDailyIdlSync(
     }
   }
 
+  // ── Phase 2: auto-import new programs from discovery queue ────────────────
+  let candidatesChecked = 0
+  let candidatesImported = 0
+
+  if (!timedOut) {
+    try {
+      const result = await processCandidates(
+        env.DB,
+        rpcUrl,
+        env.AI,
+        wallStart,
+        aiCallCount,
+      )
+      candidatesChecked = result.checked
+      candidatesImported = result.imported
+      aiCallCount += result.aiCallsUsed
+      if (candidatesChecked > 0) {
+        console.log(
+          `[idl-sync] Candidates: checked=${candidatesChecked}, imported=${candidatesImported}`,
+        )
+      }
+    } catch (err) {
+      console.error('[idl-sync] Phase 2 candidates error:', err)
+    }
+  }
+
   // ── DB: mark run complete ─────────────────────────────────────────────────
   const finalStatus = timedOut ? 'partial' : 'complete'
   await env.DB
     .prepare(
       `UPDATE sync_runs
-       SET completed_at  = CURRENT_TIMESTAMP,
-           status        = ?,
-           total_checked = ?,
-           total_programs = ?,
-           updated_count = ?,
-           unchanged_count = ?,
-           skipped_count = ?,
-           error_count   = ?
+       SET completed_at          = CURRENT_TIMESTAMP,
+           status                = ?,
+           total_checked         = ?,
+           total_programs        = ?,
+           updated_count         = ?,
+           unchanged_count       = ?,
+           skipped_count         = ?,
+           error_count           = ?,
+           candidates_checked    = ?,
+           candidates_imported   = ?
        WHERE id = ?`,
     )
     .bind(
@@ -354,6 +527,8 @@ export async function runDailyIdlSync(
       unchanged,
       skipped,
       errors,
+      candidatesChecked,
+      candidatesImported,
       runId,
     )
     .run()
@@ -362,6 +537,7 @@ export async function runDailyIdlSync(
   console.log(
     `[idl-sync] ${finalStatus} in ${elapsed}s — ` +
     `updated: ${updated}, unchanged: ${unchanged}, skipped: ${skipped}, errors: ${errors}` +
+    (candidatesChecked > 0 ? ` | candidates: ${candidatesImported} imported of ${candidatesChecked} checked` : '') +
     (timedOut ? ` | partial: ${processedCount}/${allProjects.length} this run` : ''),
   )
 }

@@ -672,4 +672,16 @@ export async function triggerSync(): Promise<{ triggered: boolean; message: stri
   return res.data
 }
 
+export interface CandidateStats {
+  total: number
+  pending: number
+  has_idl: number
+  no_idl: number
+}
+
+export async function getCandidateStats(): Promise<{ stats: CandidateStats }> {
+  const res = await api.get('/admin/sync/candidates')
+  return res.data
+}
+
 export default api

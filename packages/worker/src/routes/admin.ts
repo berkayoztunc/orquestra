@@ -375,4 +375,37 @@ app.post('/sync/trigger', ingestKeyMiddleware, async (c) => {
   return c.json({ triggered: true, message: 'IDL sync started in background' })
 })
 
+// ── Candidates Queue Stats ────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/sync/candidates
+ *
+ * Returns counts of program_candidates by status so the dashboard can show
+ * how many programs are in the queue, verified, or skipped.
+ * Public read — no auth required.
+ */
+app.get('/sync/candidates', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+
+  try {
+    const stats = await db
+      .prepare(
+        `SELECT
+           COUNT(*) AS total,
+           SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END) AS pending,
+           SUM(CASE WHEN status = 'has_idl'  THEN 1 ELSE 0 END) AS has_idl,
+           SUM(CASE WHEN status = 'no_idl'   THEN 1 ELSE 0 END) AS no_idl
+         FROM program_candidates`,
+      )
+      .first()
+
+    return c.json({
+      stats: stats ?? { total: 0, pending: 0, has_idl: 0, no_idl: 0 },
+    })
+  } catch {
+    return c.json({ error: 'Failed to fetch candidate stats' }, 500)
+  }
+})
+
 export default app

@@ -4,9 +4,11 @@ import {
   getSyncStatus,
   getSyncHistory,
   getDiscoveryFeed,
+  getCandidateStats,
   type SyncRun,
   type SyncUpdate,
   type DiscoveredProgram,
+  type CandidateStats,
 } from '@/api/client'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -100,6 +102,7 @@ export default function Sync(): JSX.Element {
   const [updates, setUpdates] = useState<SyncUpdate[]>([])
   const [updatesPagination, setUpdatesPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 })
   const [discovery, setDiscovery] = useState<DiscoveredProgram[]>([])
+  const [candidates, setCandidates] = useState<CandidateStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [updatesLoading, setUpdatesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -107,12 +110,14 @@ export default function Sync(): JSX.Element {
   // Fetch sync status + discovery on mount (and every 30 s)
   const fetchStatus = useCallback(async () => {
     try {
-      const [statusData, discoveryData] = await Promise.all([
+      const [statusData, discoveryData, candidateData] = await Promise.all([
         getSyncStatus(),
         getDiscoveryFeed({ days: 7, limit: 30 }),
+        getCandidateStats(),
       ])
       setRun(statusData.run)
       setDiscovery(discoveryData.programs)
+      setCandidates(candidateData.stats)
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err?.message ?? 'Failed to load sync status')
     } finally {
@@ -370,6 +375,56 @@ export default function Sync(): JSX.Element {
         )}
       </section>
 
+      {/* Candidates Queue */}
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
+          Discovery Queue
+        </h2>
+        {loading ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
+                <div className="mb-2 h-3 w-16 rounded bg-sand-200" />
+                <div className="h-6 w-12 rounded bg-sand-300" />
+              </div>
+            ))}
+          </div>
+        ) : candidates ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                label="Total Queued"
+                value={candidates.total.toLocaleString()}
+                sub="unique program IDs"
+              />
+              <StatCard
+                label="Pending"
+                value={candidates.pending.toLocaleString()}
+                sub="awaiting cron check"
+              />
+              <StatCard
+                label="Has IDL"
+                value={candidates.has_idl.toLocaleString()}
+                sub="verified + imported"
+              />
+              <StatCard
+                label="No IDL"
+                value={candidates.no_idl.toLocaleString()}
+                sub="no on-chain IDL, skipped"
+              />
+            </div>
+            <p className="mt-2 text-xs text-sand-900">
+              Add new program IDs: <code className="font-mono">bun run cli:queue</code>
+            </p>
+          </>
+        ) : (
+          <EmptyState
+            title="No candidates queued yet"
+            desc="Run bun run cli:scan then bun run cli:queue to populate the discovery queue."
+          />
+        )}
+      </section>
+
       {/* Footer info */}
       <section className="border-t border-border-low pt-6 text-xs text-sand-900 space-y-1">
         <p>
@@ -395,8 +450,10 @@ export default function Sync(): JSX.Element {
         </p>
         <p>
           <span className="font-medium text-sand-1100">Bulk discovery:</span> Run{' '}
-          <code className="font-mono">bun run cli:check-idl -- --enable-ingest</code> to scan all
-          Solana programs and ingest new IDLs
+          <code className="font-mono">bun run cli:scan</code> to find all Solana programs, then{' '}
+          <code className="font-mono">bun run cli:queue</code> to add them to the discovery queue.
+          The cron verifies each for an on-chain IDL and auto-imports programs that have one.
+          Programs without an IDL are permanently marked <em>no_idl</em> and never imported.
         </p>
       </section>
     </div>

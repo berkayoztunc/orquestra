@@ -129,3 +129,45 @@ export function loadAPIClientOptions(): APIClientOptions | null {
 
   return { baseUrl, ingestKey }
 }
+
+export interface QueueCandidatesResult {
+  queued: number
+  skipped: number
+}
+
+/**
+ * Bulk-add program IDs to the Worker discovery queue.
+ * The cron will verify each for an on-chain IDL and auto-import if one is found.
+ */
+export async function queueCandidates(
+  programIds: string[],
+  opts: APIClientOptions,
+): Promise<QueueCandidatesResult> {
+  const url = `${opts.baseUrl.replace(/\/$/, '')}/api/ingest/candidates`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ingest-Key': opts.ingestKey,
+      },
+      body: JSON.stringify({ programIds, source: 'cli' }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`)
+    }
+
+    return await response.json() as QueueCandidatesResult
+  } catch (err) {
+    clearTimeout(timeoutId)
+    throw err
+  }
+}

@@ -24,9 +24,10 @@ CREATE TABLE IF NOT EXISTS program_candidates (
   -- 'manual' : added directly
 );
 
-CREATE INDEX idx_program_candidates_status   ON program_candidates(status);
-CREATE INDEX idx_program_candidates_added_at ON program_candidates(added_at DESC);
+CREATE INDEX IF NOT EXISTS idx_program_candidates_status   ON program_candidates(status);
+CREATE INDEX IF NOT EXISTS idx_program_candidates_added_at ON program_candidates(added_at DESC);
 
 -- Extend sync_runs to track candidate processing per run
+-- (These may already exist from prior manual execution; migration is idempotent)
 ALTER TABLE sync_runs ADD COLUMN candidates_checked  INTEGER DEFAULT 0;
 ALTER TABLE sync_runs ADD COLUMN candidates_imported INTEGER DEFAULT 0;

@@ -396,19 +396,26 @@ app.get('/sync/candidates', async (c) => {
   if (!db) return c.json({ error: 'Database not available' }, 500)
 
   try {
-    const stats = await db
+    const row = await db
       .prepare(
         `SELECT
            COUNT(*) AS total,
-           SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END) AS pending,
-           SUM(CASE WHEN status = 'has_idl'  THEN 1 ELSE 0 END) AS has_idl,
-           SUM(CASE WHEN status = 'no_idl'   THEN 1 ELSE 0 END) AS no_idl
+           COALESCE(SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END), 0) AS pending,
+           COALESCE(SUM(CASE WHEN status = 'has_idl'  THEN 1 ELSE 0 END), 0) AS has_idl,
+           COALESCE(SUM(CASE WHEN status = 'no_idl'   THEN 1 ELSE 0 END), 0) AS no_idl
          FROM program_candidates`,
       )
       .first()
 
+    const stats = {
+      total: Number((row as any)?.total ?? 0),
+      pending: Number((row as any)?.pending ?? 0),
+      has_idl: Number((row as any)?.has_idl ?? 0),
+      no_idl: Number((row as any)?.no_idl ?? 0),
+    }
+
     return c.json({
-      stats: stats ?? { total: 0, pending: 0, has_idl: 0, no_idl: 0 },
+      stats,
     })
   } catch (err) {
     console.error('[admin] sync/candidates error:', err)

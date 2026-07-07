@@ -259,9 +259,9 @@ export default function Sync(): JSX.Element {
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
           Recent IDL Updates
-          {updatesPagination.total > 0 && (
+          {(updatesPagination.total ?? 0) > 0 && (
             <span className="ml-2 font-normal text-sand-900">
-              ({updatesPagination.total.toLocaleString()} total)
+              ({(updatesPagination.total ?? 0).toLocaleString()} total)
             </span>
           )}
         </h2>
@@ -400,22 +400,22 @@ export default function Sync(): JSX.Element {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard
                 label="Total Queued"
-                value={candidates.total.toLocaleString()}
+                value={(candidates.total ?? 0).toLocaleString()}
                 sub="unique program IDs"
               />
               <StatCard
                 label="Pending"
-                value={candidates.pending.toLocaleString()}
+                value={(candidates.pending ?? 0).toLocaleString()}
                 sub="awaiting cron check"
               />
               <StatCard
                 label="Has IDL"
-                value={candidates.has_idl.toLocaleString()}
+                value={(candidates.has_idl ?? 0).toLocaleString()}
                 sub="verified + imported"
               />
               <StatCard
                 label="No IDL"
-                value={candidates.no_idl.toLocaleString()}
+                value={(candidates.no_idl ?? 0).toLocaleString()}
                 sub="no on-chain IDL, skipped"
               />
             </div>

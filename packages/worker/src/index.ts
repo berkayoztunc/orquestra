@@ -39,6 +39,8 @@ type Env = {
     JWT_SECRET: string
     SOLANA_RPC_URL: string
     SOLANA_MAINNET_RPC_URL?: string
+    SOLANA_FALLBACK_RPC_URLS?: string
+    SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
     SOLANA_DEVNET_RPC_URL?: string
     SOLANA_TESTNET_RPC_URL?: string
     FRONTEND_URL: string

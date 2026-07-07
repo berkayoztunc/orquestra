@@ -115,6 +115,9 @@ CORS_ORIGIN = "http://localhost:5173"
 #   JWT_SECRET          — JWT signing secret
 #   GITHUB_OAUTH_SECRET — GitHub OAuth app secret
 #   INGEST_API_KEY      — Service key for CLI bulk IDL ingest (X-Ingest-Key header)
+# Optional secrets for RPC failover:
+#   SOLANA_MAINNET_FALLBACK_RPC_URLS — comma-separated backup mainnet RPC URLs
+#   SOLANA_FALLBACK_RPC_URLS         — comma-separated generic backup RPC URLs
 #
 # Set with: wrangler secret put INGEST_API_KEY --env production
 

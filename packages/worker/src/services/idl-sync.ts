@@ -3,6 +3,7 @@ import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount } from './idl-fetch
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, toTitleCase } from './ai-categorization'
 import { setCategoryAndAliases } from './search'
 import { generateId } from '../utils/id'
+import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
 
 export interface SyncEnv {
   DB: D1Database
@@ -12,6 +13,8 @@ export interface SyncEnv {
   AI?: any
   SOLANA_RPC_URL: string
   SOLANA_MAINNET_RPC_URL?: string
+  SOLANA_FALLBACK_RPC_URLS?: string
+  SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
 }
 
 interface ProjectRow {
@@ -100,7 +103,7 @@ interface SyncProjectResult {
 async function syncProject(
   db: D1Database,
   cache: KVNamespace,
-  rpcUrl: string,
+  rpcUrls: string[],
   project: ProjectRow,
 ): Promise<SyncProjectResult> {
   const base = {
@@ -116,7 +119,7 @@ async function syncProject(
   let onChain: { idl: any; idlJson: string; source: 'pmp' | 'anchor' } | null
   try {
     onChain = await withTimeout(
-      fetchIdlWithSource(project.program_id, rpcUrl),
+      fetchIdlWithSource(project.program_id, rpcUrls),
       PROGRAM_TIMEOUT_MS,
     )
   } catch {
@@ -212,14 +215,14 @@ interface ProcessOneCandidateResult {
 
 async function processOneCandidate(
   db: D1Database,
-  rpcUrl: string,
+  rpcUrls: string[],
   ai: any,
   programId: string,
   aiCallCount: number,
   aiUsedRef: { value: number },
 ): Promise<ProcessOneCandidateResult> {
   const onChain = await withTimeout(
-    fetchIdlWithSource(programId, rpcUrl),
+    fetchIdlWithSource(programId, rpcUrls),
     PROGRAM_TIMEOUT_MS,
   )
 
@@ -230,7 +233,7 @@ async function processOneCandidate(
 
   // Only import when the IDL is Anchor-sourced and account ownership matches the program.
   const ownerCheck = await withTimeout(
-    hasProgramOwnedAnchorIdlAccount(programId, rpcUrl),
+    hasProgramOwnedAnchorIdlAccount(programId, rpcUrls),
     PROGRAM_TIMEOUT_MS,
   )
   const isVerifiedOwned = onChain.source === 'anchor' && ownerCheck === true
@@ -350,7 +353,7 @@ async function processOneCandidate(
  */
 async function processCandidates(
   db: D1Database,
-  rpcUrl: string,
+  rpcUrls: string[],
   ai: any,
   wallStart: number,
   aiCallCount: number,
@@ -407,7 +410,7 @@ async function processCandidates(
 
       const programId = uniqueProgramIds[idx]
       try {
-        const result = await processOneCandidate(db, rpcUrl, ai, programId, aiCallCount, aiUsedRef)
+        const result = await processOneCandidate(db, rpcUrls, ai, programId, aiCallCount, aiUsedRef)
         checked += result.checked
         imported += result.imported
       } catch (err) {
@@ -437,7 +440,7 @@ async function processCandidates(
  * AI generates human-readable names + descriptions for all auto-imported programs.
  */
 export async function runCandidatesBurst(env: SyncEnv): Promise<void> {
-  const rpcUrl = env.SOLANA_MAINNET_RPC_URL || env.SOLANA_RPC_URL
+  const rpcUrls = buildMainnetRpcUrlList(env)
   const wallStart = Date.now()
 
   const runId = generateId()
@@ -454,7 +457,7 @@ export async function runCandidatesBurst(env: SyncEnv): Promise<void> {
   let candidatesImported = 0
 
   try {
-    const result = await processCandidates(env.DB, rpcUrl, env.AI, wallStart, 0, CANDIDATES_BURST_LIMIT)
+    const result = await processCandidates(env.DB, rpcUrls, env.AI, wallStart, 0, CANDIDATES_BURST_LIMIT)
     candidatesChecked = result.checked
     candidatesImported = result.imported
   } catch (err) {
@@ -500,7 +503,7 @@ export async function runDailyIdlSync(
   env: SyncEnv,
   trigger: 'cron' | 'manual' = 'cron',
 ): Promise<void> {
-  const rpcUrl = env.SOLANA_MAINNET_RPC_URL || env.SOLANA_RPC_URL
+  const rpcUrls = buildMainnetRpcUrlList(env)
   const wallStart = Date.now()
 
   // ── Checkpoint: resume from last saved position ───────────────────────────
@@ -587,7 +590,7 @@ export async function runDailyIdlSync(
 
     const batch = projects.slice(i, i + CONCURRENCY)
     const results = await Promise.allSettled(
-      batch.map((p) => syncProject(env.DB, env.CACHE, rpcUrl, p)),
+      batch.map((p) => syncProject(env.DB, env.CACHE, rpcUrls, p)),
     )
 
     for (const r of results) {
@@ -647,7 +650,7 @@ export async function runDailyIdlSync(
     try {
       const result = await processCandidates(
         env.DB,
-        rpcUrl,
+        rpcUrls,
         env.AI,
         wallStart,
         aiCallCount,

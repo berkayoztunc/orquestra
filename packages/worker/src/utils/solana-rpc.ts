@@ -8,8 +8,30 @@ export type ResolvedCluster = 'mainnet-beta' | 'devnet' | 'testnet' | 'custom'
 export type SolanaRpcEnv = {
   SOLANA_RPC_URL?: string
   SOLANA_MAINNET_RPC_URL?: string
+  SOLANA_FALLBACK_RPC_URLS?: string
+  SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
   SOLANA_DEVNET_RPC_URL?: string
   SOLANA_TESTNET_RPC_URL?: string
+}
+
+export function parseRpcUrlList(raw?: string | null): string[] {
+  if (!raw) return []
+  return raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+}
+
+export function buildMainnetRpcUrlList(env: SolanaRpcEnv): string[] {
+  const urls = [
+    env.SOLANA_MAINNET_RPC_URL,
+    env.SOLANA_RPC_URL,
+    ...parseRpcUrlList(env.SOLANA_MAINNET_FALLBACK_RPC_URLS),
+    ...parseRpcUrlList(env.SOLANA_FALLBACK_RPC_URLS),
+    'https://api.mainnet-beta.solana.com',
+  ].filter((value): value is string => Boolean(value && value.trim()))
+
+  return [...new Set(urls)]
 }
 
 /**

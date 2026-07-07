@@ -9,6 +9,19 @@
 
 import { validateIDL } from './idl-parser'
 
+function normalizeRpcUrls(rpcUrl: string | string[]): string[] {
+  return Array.isArray(rpcUrl) ? rpcUrl : [rpcUrl]
+}
+
+function shouldTryNextRpc(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return message.includes('429') ||
+    message.includes('Too Many Requests') ||
+    message.includes('fetch failed') ||
+    message.includes('network') ||
+    message.includes('timed out')
+}
+
 // ── Base58 helpers (self-contained) ──────────────────
 
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
@@ -254,71 +267,80 @@ async function decompressData(data: Uint8Array): Promise<string> {
 
 export async function fetchAnchorIDLFromChain(
   programId: string,
-  rpcUrl: string,
+  rpcUrl: string | string[],
 ): Promise<{ idl: any; idlJson: string } | null> {
-  try {
-    // 1. Compute IDL account address
-    const idlAddress = await getIdlAccountAddress(programId)
-
-    // 2. Fetch account data via RPC
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getAccountInfo',
-        params: [
-          idlAddress,
-          { encoding: 'base64', commitment: 'confirmed' },
-        ],
-      }),
-    })
-
-    const rpcResult = await response.json() as any
-
-    if (!rpcResult.result?.value?.data) {
-      return null // No IDL account found
-    }
-
-    // 3. Decode base64 account data
-    const base64Data = rpcResult.result.value.data[0]
-    const rawBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0))
-
-    // 4. Skip Anchor discriminator (8 bytes) + authority pubkey (32 bytes)
-    //    Then read u32 LE data length
-    if (rawBytes.length < 44) {
-      return null // Too short to be a valid IDL account
-    }
-
-    const dataOffset = 8 + 32 // discriminator + authority
-    const dataLength = rawBytes[dataOffset] |
-      (rawBytes[dataOffset + 1] << 8) |
-      (rawBytes[dataOffset + 2] << 16) |
-      (rawBytes[dataOffset + 3] << 24)
-
-    const compressedData = rawBytes.slice(dataOffset + 4, dataOffset + 4 + dataLength)
-
-    // 5. Decompress
-    const idlJson = await decompressData(compressedData)
-
-    // 6. Parse and validate
-    let idl: any
+  const rpcUrls = normalizeRpcUrls(rpcUrl)
+  for (const url of rpcUrls) {
     try {
-      idl = JSON.parse(idlJson)
-    } catch {
-      return null // Invalid JSON
-    }
+      // 1. Compute IDL account address
+      const idlAddress = await getIdlAccountAddress(programId)
 
-    const validation = validateIDL(idl)
-    if (!validation.valid) {
-      return null // Invalid IDL structure
-    }
+      // 2. Fetch account data via RPC
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getAccountInfo',
+          params: [
+            idlAddress,
+            { encoding: 'base64', commitment: 'confirmed' },
+          ],
+        }),
+      })
 
-    return { idl, idlJson: JSON.stringify(idl) }
-  } catch {
-    return null
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const rpcResult = await response.json() as any
+
+      if (!rpcResult.result?.value?.data) {
+        return null // No IDL account found
+      }
+
+      // 3. Decode base64 account data
+      const base64Data = rpcResult.result.value.data[0]
+      const rawBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0))
+
+      // 4. Skip Anchor discriminator (8 bytes) + authority pubkey (32 bytes)
+      //    Then read u32 LE data length
+      if (rawBytes.length < 44) {
+        return null // Too short to be a valid IDL account
+      }
+
+      const dataOffset = 8 + 32 // discriminator + authority
+      const dataLength = rawBytes[dataOffset] |
+        (rawBytes[dataOffset + 1] << 8) |
+        (rawBytes[dataOffset + 2] << 16) |
+        (rawBytes[dataOffset + 3] << 24)
+
+      const compressedData = rawBytes.slice(dataOffset + 4, dataOffset + 4 + dataLength)
+
+      // 5. Decompress
+      const idlJson = await decompressData(compressedData)
+
+      // 6. Parse and validate
+      let idl: any
+      try {
+        idl = JSON.parse(idlJson)
+      } catch {
+        return null // Invalid JSON
+      }
+
+      const validation = validateIDL(idl)
+      if (!validation.valid) {
+        return null // Invalid IDL structure
+      }
+
+      return { idl, idlJson: JSON.stringify(idl) }
+    } catch (err) {
+      if (!shouldTryNextRpc(err)) return null
+    }
   }
+
+  return null
 }
 
 // ── PMP + Anchor fetcher via @solana/idl ─────────────────────────────────────
@@ -331,34 +353,49 @@ export async function fetchAnchorIDLFromChain(
  */
 export async function fetchIdlWithSource(
   programId: string,
-  rpcUrl: string,
+  rpcUrl: string | string[],
 ): Promise<{ idlJson: string; idl: any; source: 'pmp' | 'anchor' } | null> {
-  try {
-    // Dynamic imports for graceful fallback if bundling has issues in Workers
-    const { fetchIdlWrapped } = await import('@solana/idl')
-    const { createSolanaRpc, address } = await import('@solana/kit')
+  const rpcUrls = normalizeRpcUrls(rpcUrl)
+  let lastError: unknown = null
 
-    const rpc = createSolanaRpc(rpcUrl)
-    const result = await fetchIdlWrapped(rpc, address(programId))
-
-    if (result.status !== 'ok') return null
-
+  for (const url of rpcUrls) {
     try {
-      const idl = JSON.parse(result.content)
-      return {
-        idlJson: result.content,
-        idl,
-        source: (result.source ?? 'anchor') as 'pmp' | 'anchor',
+      // Dynamic imports for graceful fallback if bundling has issues in Workers
+      const { fetchIdlWrapped } = await import('@solana/idl')
+      const { createSolanaRpc, address } = await import('@solana/kit')
+
+      const rpc = createSolanaRpc(url)
+      const result = await fetchIdlWrapped(rpc, address(programId))
+
+      if (result.status !== 'ok') return null
+
+      try {
+        const idl = JSON.parse(result.content)
+        return {
+          idlJson: result.content,
+          idl,
+          source: (result.source ?? 'anchor') as 'pmp' | 'anchor',
+        }
+      } catch {
+        return null
       }
-    } catch {
-      return null
+    } catch (err) {
+      lastError = err
+      if (!shouldTryNextRpc(err)) {
+        console.warn('[idl-fetcher] @solana/idl unavailable, falling back to Anchor fetcher:', err)
+        const fallback = await fetchAnchorIDLFromChain(programId, rpcUrls)
+        if (!fallback) return null
+        return { ...fallback, source: 'anchor' as const }
+      }
     }
-  } catch (err) {
-    console.warn('[idl-fetcher] @solana/idl unavailable, falling back to Anchor fetcher:', err)
-    const fallback = await fetchAnchorIDLFromChain(programId, rpcUrl)
-    if (!fallback) return null
-    return { ...fallback, source: 'anchor' as const }
   }
+
+  if (lastError) {
+    console.warn('[idl-fetcher] All preferred RPCs failed, falling back to Anchor fetcher:', lastError)
+  }
+  const fallback = await fetchAnchorIDLFromChain(programId, rpcUrls)
+  if (!fallback) return null
+  return { ...fallback, source: 'anchor' as const }
 }
 
 /**
@@ -367,35 +404,44 @@ export async function fetchIdlWithSource(
  */
 export async function hasProgramOwnedAnchorIdlAccount(
   programId: string,
-  rpcUrl: string,
+  rpcUrl: string | string[],
 ): Promise<boolean> {
-  try {
-    const oldStyle = await getIdlAccountAddress(programId)
-    const newStyle = await getAnchorIdlPdaAddress(programId)
+  const rpcUrls = normalizeRpcUrls(rpcUrl)
+  for (const url of rpcUrls) {
+    try {
+      const oldStyle = await getIdlAccountAddress(programId)
+      const newStyle = await getAnchorIdlPdaAddress(programId)
 
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getMultipleAccounts',
-        params: [[oldStyle, newStyle], { commitment: 'confirmed' }],
-      }),
-    })
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getMultipleAccounts',
+          params: [[oldStyle, newStyle], { commitment: 'confirmed' }],
+        }),
+      })
 
-    const rpcResult = await response.json() as any
-    const accounts = rpcResult?.result?.value
-    if (!Array.isArray(accounts)) return false
-
-    for (const account of accounts) {
-      if (account && typeof account.owner === 'string' && account.owner === programId) {
-        return true
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
       }
-    }
 
-    return false
-  } catch {
-    return false
+      const rpcResult = await response.json() as any
+      const accounts = rpcResult?.result?.value
+      if (!Array.isArray(accounts)) return false
+
+      for (const account of accounts) {
+        if (account && typeof account.owner === 'string' && account.owner === programId) {
+          return true
+        }
+      }
+
+      return false
+    } catch (err) {
+      if (!shouldTryNextRpc(err)) return false
+    }
   }
+
+  return false
 }

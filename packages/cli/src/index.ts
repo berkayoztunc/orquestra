@@ -157,9 +157,10 @@ async function main() {
     process.exit(0)
   }
 
-  // Resolve RPC URL (not required for the 'analysis' command)
+  // Resolve RPC URL (required only for scan/check-idl/full)
   const rpcUrl = (flags['rpc-url'] as string) || process.env.SOLANA_RPC_URL
-  if (!rpcUrl && command !== 'analysis') {
+  const rpcRequiredCommands = new Set(['scan', 'check-idl', 'full'])
+  if (!rpcUrl && rpcRequiredCommands.has(command)) {
     console.error('Error: --rpc-url is required or set SOLANA_RPC_URL environment variable')
     process.exit(1)
   }

@@ -147,6 +147,15 @@ async function getIdlAccountAddress(programIdStr: string): Promise<string> {
   return base58Encode(idlAddress)
 }
 
+async function getAnchorIdlPdaAddress(programIdStr: string): Promise<string> {
+  const programIdBytes = base58Decode(programIdStr)
+  const [pda] = await findProgramAddress(
+    [new TextEncoder().encode('anchor:idl'), programIdBytes],
+    programIdBytes,
+  )
+  return base58Encode(pda)
+}
+
 // ── Decompress on-chain IDL data ──
 
 async function decompressData(data: Uint8Array): Promise<string> {
@@ -349,5 +358,44 @@ export async function fetchIdlWithSource(
     const fallback = await fetchAnchorIDLFromChain(programId, rpcUrl)
     if (!fallback) return null
     return { ...fallback, source: 'anchor' as const }
+  }
+}
+
+/**
+ * Returns true when at least one canonical Anchor IDL account address exists
+ * and the account owner equals the program id.
+ */
+export async function hasProgramOwnedAnchorIdlAccount(
+  programId: string,
+  rpcUrl: string,
+): Promise<boolean> {
+  try {
+    const oldStyle = await getIdlAccountAddress(programId)
+    const newStyle = await getAnchorIdlPdaAddress(programId)
+
+    const response = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getMultipleAccounts',
+        params: [[oldStyle, newStyle], { commitment: 'confirmed' }],
+      }),
+    })
+
+    const rpcResult = await response.json() as any
+    const accounts = rpcResult?.result?.value
+    if (!Array.isArray(accounts)) return false
+
+    for (const account of accounts) {
+      if (account && typeof account.owner === 'string' && account.owner === programId) {
+        return true
+      }
+    }
+
+    return false
+  } catch {
+    return false
   }
 }

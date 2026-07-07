@@ -1,5 +1,5 @@
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
-import { fetchIdlWithSource } from './idl-fetcher'
+import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount } from './idl-fetcher'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, toTitleCase } from './ai-categorization'
 import { setCategoryAndAliases } from './search'
 import { generateId } from '../utils/id'
@@ -190,6 +190,7 @@ interface CandidateRow {
  *
  * For each candidate:
  *  - Call fetchIdlWithSource (with per-program timeout)
+ *  - Accept only verified + program-owned Anchor IDLs
  *  - IDL found AND program not yet in projects:
  *      AI generates display_name + short_description → create project + idl_versions + project_socials → mark 'has_idl'
  *  - IDL found AND program already imported:
@@ -253,6 +254,21 @@ async function processCandidates(
 
     if (!onChain) {
       // No on-chain IDL — mark with 30-day recheck window
+      await db
+        .prepare(
+          "UPDATE program_candidates SET status = 'no_idl', last_checked_at = CURRENT_TIMESTAMP, recheck_after = datetime('now', '+30 days') WHERE program_id = ?",
+        )
+        .bind(candidate.program_id)
+        .run()
+      continue
+    }
+
+    // Only import when the IDL is Anchor-sourced and account ownership matches the program.
+    const isVerifiedOwned =
+      onChain.source === 'anchor' &&
+      await hasProgramOwnedAnchorIdlAccount(candidate.program_id, rpcUrl)
+
+    if (!isVerifiedOwned) {
       await db
         .prepare(
           "UPDATE program_candidates SET status = 'no_idl', last_checked_at = CURRENT_TIMESTAMP, recheck_after = datetime('now', '+30 days') WHERE program_id = ?",

@@ -6,11 +6,13 @@ import {
   getDiscoveryFeed,
   getCandidateStats,
   getScanMetadata,
+  getVerifiedBuildMetadata,
   type SyncRun,
   type SyncUpdate,
   type DiscoveredProgram,
   type CandidateStats,
   type ScanMetadata,
+  type VerifiedBuildMetadata,
 } from '@/api/client'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,6 +108,7 @@ export default function Sync(): JSX.Element {
   const [discovery, setDiscovery] = useState<DiscoveredProgram[]>([])
   const [candidates, setCandidates] = useState<CandidateStats | null>(null)
   const [scanMeta, setScanMeta] = useState<ScanMetadata | null>(null)
+  const [verifiedBuildMeta, setVerifiedBuildMeta] = useState<VerifiedBuildMetadata | null>(null)
   const [loading, setLoading] = useState(true)
   const [updatesLoading, setUpdatesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -135,6 +138,14 @@ export default function Sync(): JSX.Element {
     try {
       const scanData = await getScanMetadata()
       setScanMeta(scanData.metadata)
+    } catch {
+      // non-fatal
+    }
+
+    // Fetch verified-build metadata from funnel stage — non-critical, from KV
+    try {
+      const verifiedData = await getVerifiedBuildMetadata()
+      setVerifiedBuildMeta(verifiedData.metadata)
     } catch {
       // non-fatal
     }
@@ -247,6 +258,51 @@ export default function Sync(): JSX.Element {
             </p>
             <p className="mt-3 font-mono text-xs text-sand-800">
               Or trigger manually: <code>bun run cli:scan && bun run cli:queue</code>
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Last Verified Build Scan */}
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
+          Last Verified Build Scan
+        </h2>
+        {loading ? (
+          <div className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
+            <div className="mb-2 h-3 w-36 rounded bg-sand-200" />
+            <div className="h-5 w-52 rounded bg-sand-300" />
+          </div>
+        ) : verifiedBuildMeta ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              label="Programs Checked"
+              value={(verifiedBuildMeta.total_programs ?? 0).toLocaleString()}
+              sub="valid Solana programs"
+            />
+            <StatCard
+              label="Verified Build"
+              value={(verifiedBuildMeta.verified_programs ?? 0).toLocaleString()}
+              sub="latest funnel run"
+            />
+            <StatCard
+              label="Verification Errors"
+              value={(verifiedBuildMeta.verification_errors ?? 0).toLocaleString()}
+              sub={(verifiedBuildMeta.verification_errors ?? 0) > 0 ? 'retry suggested' : 'clean run'}
+            />
+            <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-5 py-4">
+              <span className="text-xs font-medium uppercase tracking-wider text-sand-1000">Scanned At</span>
+              <span className="text-lg font-bold text-sand-1600">{formatDate(verifiedBuildMeta.scanned_at)}</span>
+              <span className="text-xs text-sand-900">
+                {verifiedBuildMeta.source} · {formatRelative(verifiedBuildMeta.scanned_at)}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="border border-border-low px-6 py-8 text-center">
+            <p className="font-medium text-sand-1200">No verified-build data yet</p>
+            <p className="mt-1 text-sm text-sand-900">
+              Run funnel once to publish verified-build totals to this dashboard.
             </p>
           </div>
         )}

@@ -451,4 +451,46 @@ app.post('/scan-metadata', ingestKeyMiddleware, async (c) => {
   }
 })
 
+// ── Verified Build Metadata ─────────────────────────────────────────────────
+
+/**
+ * POST /api/ingest/verified-build-metadata
+ *
+ * Called by the CLI funnel after verified-build stage completes.
+ * Stores latest verified-build counts in KV for the Sync dashboard.
+ *
+ * Auth: X-Ingest-Key
+ * Body: { total_programs: number, verified_programs: number, verification_errors: number, source?: string }
+ */
+app.post('/verified-build-metadata', ingestKeyMiddleware, async (c) => {
+  const cache = c.env?.CACHE
+  if (!cache) return c.json({ error: 'Cache KV not available' }, 500)
+
+  try {
+    const body = await c.req.json<{
+      total_programs: number
+      verified_programs: number
+      verification_errors: number
+      source?: string
+    }>()
+
+    const metadata = {
+      total_programs: Number(body.total_programs ?? 0),
+      verified_programs: Number(body.verified_programs ?? 0),
+      verification_errors: Number(body.verification_errors ?? 0),
+      source: String(body.source || 'osec-verify'),
+      scanned_at: new Date().toISOString(),
+    }
+
+    await cache.put('verified-build:metadata', JSON.stringify(metadata), {
+      expirationTtl: 8 * 24 * 60 * 60,
+    })
+
+    return c.json({ ok: true, metadata })
+  } catch (err) {
+    console.error('[ingest/verified-build-metadata] Error:', err)
+    return c.json({ error: 'Failed to store verified-build metadata', details: (err as Error).message }, 500)
+  }
+})
+
 export default app

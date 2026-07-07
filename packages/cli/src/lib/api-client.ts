@@ -135,6 +135,24 @@ export interface QueueCandidatesResult {
   skipped: number
 }
 
+export interface VerifiedBuildMetadataPayload {
+  total_programs: number
+  verified_programs: number
+  verification_errors: number
+  source?: string
+}
+
+export interface VerifiedBuildMetadataResult {
+  ok: boolean
+  metadata: {
+    total_programs: number
+    verified_programs: number
+    verification_errors: number
+    source: string
+    scanned_at: string
+  }
+}
+
 /**
  * Bulk-add program IDs to the Worker discovery queue.
  * The cron will verify each for an on-chain IDL and auto-import if one is found.
@@ -166,6 +184,42 @@ export async function queueCandidates(
     }
 
     return await response.json() as QueueCandidatesResult
+  } catch (err) {
+    clearTimeout(timeoutId)
+    throw err
+  }
+}
+
+/**
+ * Store verified-build summary so the Sync dashboard can display latest count.
+ */
+export async function postVerifiedBuildMetadata(
+  payload: VerifiedBuildMetadataPayload,
+  opts: APIClientOptions,
+): Promise<VerifiedBuildMetadataResult> {
+  const url = `${opts.baseUrl.replace(/\/$/, '')}/api/ingest/verified-build-metadata`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Ingest-Key': opts.ingestKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`)
+    }
+
+    return await response.json() as VerifiedBuildMetadataResult
   } catch (err) {
     clearTimeout(timeoutId)
     throw err

@@ -25,6 +25,7 @@
     "cli:check-idl:fast": "bun run packages/cli/src/index.ts check-idl --fast",
     "cli:queue": "bun run packages/cli/src/index.ts queue",
     "cli:full": "bun run packages/cli/src/index.ts full",
+    "cli:funnel": "bun run packages/cli/src/index.ts funnel",
     "cli:analysis": "bun run packages/cli/src/index.ts analysis",
     "lint": "eslint packages/*/src --ext .ts,.tsx",
     "lint:fix": "eslint packages/*/src --ext .ts,.tsx --fix",

@@ -696,4 +696,17 @@ export async function getScanMetadata(): Promise<{ metadata: ScanMetadata | null
   return res.data
 }
 
+export interface VerifiedBuildMetadata {
+  total_programs: number
+  verified_programs: number
+  verification_errors: number
+  source: string
+  scanned_at: string
+}
+
+export async function getVerifiedBuildMetadata(): Promise<{ metadata: VerifiedBuildMetadata | null }> {
+  const res = await api.get('/admin/sync/verified-build-metadata')
+  return res.data
+}
+
 export default api

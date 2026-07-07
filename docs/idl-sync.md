@@ -252,6 +252,15 @@ Check the wrangler dev console for the `[idl-sync]` log output.
 The sync cron only updates **already-indexed** programs. To discover and ingest
 **new** programs from the chain, use the CLI:
 
+Funnel used by `check-idl`:
+- Stage A: all programs (`output/programs.csv`)
+- Stage B: verified programs (`output/programs_verified.csv`) where
+  `verified_build=true` and `verified_owned=true`
+- Stage C: IDL save/ingest only for Stage B programs
+
+Default verification source used by the CLI:
+`https://verify.osec.io/status/{programId}`
+
 ```bash
 # 1. Scan all Solana programs (writes output/programs.csv)
 bun run cli:scan
@@ -260,7 +269,7 @@ bun run cli:scan
 #    Requires ORQUESTRA_API_URL and ORQUESTRA_INGEST_KEY env vars
 ORQUESTRA_API_URL=https://api.orquestra.dev \
 ORQUESTRA_INGEST_KEY=YOUR_INGEST_API_KEY \
-bun run cli:check-idl -- --enable-ingest
+bun run cli:check-idl -- --enable-ingest --verified-build-source osec-verify
 
 # 2a. Fast mode — skip IDL decode, only check PDA existence (2× faster)
 bun run cli:check-idl -- --fast
@@ -273,6 +282,15 @@ bun run cli:check-idl -- --enable-ingest --skip-ai
 
 # 2d. Point at a specific program list JSON file
 bun run cli:check-idl -- --enable-ingest --input-file ./my-programs.json
+
+# 2e. Increase verification source concurrency
+bun run cli:check-idl -- --verified-build-concurrency 20
+
+# 2f. Override the verified-program API endpoint if needed
+bun run cli:check-idl -- --verified-build-api-url 'https://verify.osec.io/status/{programId}'
+
+# 2g. Reduce verified endpoint request rate to avoid rate-limit false negatives
+bun run cli:check-idl -- --verified-build-rps 2
 ```
 
 All CLI commands read from `output/` by default. Set `--out-dir` to override.

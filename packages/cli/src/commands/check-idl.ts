@@ -13,6 +13,7 @@ import { resolve } from 'node:path'
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { generateDescription, loadAIClientOptions, type AIClientOptions } from '../lib/ai-client'
 import { ingestIDL, loadAPIClientOptions, type APIClientOptions } from '../lib/api-client'
+import { checkVerifiedBuildBatch } from '../lib/verified-build'
 import { createHash } from 'node:crypto'
 
 export interface CheckIdlOptions {
@@ -32,6 +33,16 @@ export interface CheckIdlOptions {
   ingestConcurrency: number
   /** Fast mode: only check new-style PDA, skip IDL decode — much faster, no idlData saved */
   fast: boolean
+  /** Verified-build endpoint template, must include {programId} placeholder */
+  verifiedBuildApiUrl: string
+  /** Source label used in reporting */
+  verifiedBuildSource: string
+  /** Optional bearer token for verified-build endpoint */
+  verifiedBuildApiToken: string
+  /** Max concurrent verified-build requests */
+  verifiedBuildConcurrency: number
+  /** Skip verified-build API lookups (use when input list is already verified) */
+  skipVerifiedBuildCheck?: boolean
 }
 
 function sanitizeFilePart(value: string): string {
@@ -170,7 +181,29 @@ async function processIngest(
 }
 
 export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
-  const { rpcUrl, outDir, inputFile, batchSize, concurrency, resume, requestsPerSecond, enableIngest, skipAi, ingestConcurrency } = opts
+  const {
+    rpcUrl,
+    outDir,
+    inputFile,
+    batchSize,
+    concurrency,
+    resume,
+    requestsPerSecond,
+    enableIngest,
+    skipAi,
+    ingestConcurrency,
+    verifiedBuildApiUrl,
+    verifiedBuildSource,
+    verifiedBuildApiToken,
+    verifiedBuildConcurrency,
+    skipVerifiedBuildCheck,
+  } = opts
+
+  if (!skipVerifiedBuildCheck && !verifiedBuildApiUrl) {
+    console.error('Error: verified build source is required.')
+    console.error('Set --verified-build-api-url or SOLANA_VERIFIED_BUILD_API_URL.')
+    process.exit(1)
+  }
 
   // Validate ingest config early
   let aiOpts: AIClientOptions | null = null
@@ -202,6 +235,8 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
   console.log(`  Batch Size  : ${batchSize}`)
   console.log(`  Concurrency : ${concurrency}`)
   console.log(`  Rate Limit  : ${requestsPerSecond} req/s`)
+  console.log(`  Verify Src  : ${skipVerifiedBuildCheck ? 'skipped (pre-verified input)' : verifiedBuildSource}`)
+  console.log(`  Verify Con. : ${verifiedBuildConcurrency}`)
   console.log(`  Ingest      : ${enableIngest ? 'enabled' : 'disabled'}`)
   console.log('═══════════════════════════════════════════════════')
   console.log()
@@ -247,7 +282,27 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
 
   // CSV writers
   const csvPath = resolve(outDir, 'program_idl_status.csv')
-  const csv = new CsvWriter(csvPath, ['program_id', 'has_onchain_idl', 'verified_owned', 'idl_account', 'error'])
+  const csv = new CsvWriter(csvPath, [
+    'program_id',
+    'has_onchain_idl',
+    'verified_build',
+    'verified_owned',
+    'eligible_for_stage_c',
+    'verification_source',
+    'verification_error',
+    'idl_account',
+    'error',
+  ])
+
+  const stageCCsvPath = resolve(outDir, 'programs_stage_c.csv')
+  const stageCCsv = new CsvWriter(stageCCsvPath, [
+    'program_id',
+    'verified_build',
+    'verified_owned',
+    'eligible_for_stage_c',
+    'verification_source',
+    'idl_account',
+  ])
 
   const publishCsvPath = resolve(outDir, 'program_publish_status.csv')
   const publishCsv = enableIngest
@@ -268,6 +323,8 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
   let processedCount = 0
   let savedIdlCount = 0
   let verifiedOwnedCount = 0
+  let verifiedBuildCount = 0
+  let verifiedProgramCount = 0
   let ingestedCount = 0
   let aiGeneratedCount = 0
   let ingestErrorCount = 0
@@ -292,24 +349,69 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
     batchSize,
     concurrency,
     async (results: IdlCheckResult[], batchIndex: number) => {
+      const buildChecks = skipVerifiedBuildCheck
+        ? new Map(results.map((r) => [
+            r.programId,
+            {
+              programId: r.programId,
+              isVerifiedBuild: true,
+              source: 'pre-verified-input',
+              error: null,
+            },
+          ]))
+        : await checkVerifiedBuildBatch(
+            results.map((r) => r.programId),
+            {
+              endpointTemplate: verifiedBuildApiUrl,
+              apiToken: verifiedBuildApiToken || undefined,
+              concurrency: verifiedBuildConcurrency,
+              sourceName: verifiedBuildSource,
+            },
+          )
+
       // Write batch to IDL status CSV
       csv.writeRows(
-        results.map((r) => ({
-          program_id: r.programId,
-          has_onchain_idl: r.hasOnchainIdl ? 'true' : 'false',
-          verified_owned: r.isVerifiedOwned ? 'true' : 'false',
-          idl_account: r.idlAccount ?? '',
-          error: r.error ?? '',
-        }))
+        results.map((r) => {
+          const build = buildChecks.get(r.programId)
+          const verifiedBuild = build?.isVerifiedBuild === true
+          const eligible = verifiedBuild && r.isVerifiedOwned
+
+          if (verifiedBuild) verifiedBuildCount++
+          if (r.isVerifiedOwned) verifiedOwnedCount++
+          if (eligible) verifiedProgramCount++
+
+          if (eligible) {
+            stageCCsv.writeRow({
+              program_id: r.programId,
+              verified_build: 'true',
+              verified_owned: r.isVerifiedOwned ? 'true' : 'false',
+              eligible_for_stage_c: 'true',
+              verification_source: build?.source ?? verifiedBuildSource,
+              idl_account: r.idlAccount ?? '',
+            })
+          }
+
+          return {
+            program_id: r.programId,
+            has_onchain_idl: r.hasOnchainIdl ? 'true' : 'false',
+            verified_build: verifiedBuild ? 'true' : 'false',
+            verified_owned: r.isVerifiedOwned ? 'true' : 'false',
+            eligible_for_stage_c: eligible ? 'true' : 'false',
+            verification_source: build?.source ?? verifiedBuildSource,
+            verification_error: build?.error ?? '',
+            idl_account: r.idlAccount ?? '',
+            error: r.error ?? '',
+          }
+        })
       )
 
-      verifiedOwnedCount += results.filter((r) => r.isVerifiedOwned).length
-
-      // Save IDL files + trigger AI+ingest only for verified, program-owned IDLs
+      // Save IDL files + trigger AI+ingest only for verified programs (build + owned IDL)
       const ingestPromises: Promise<void>[] = []
 
       for (const r of results) {
-        if (r.hasOnchainIdl && r.isVerifiedOwned && r.idlData) {
+        const build = buildChecks.get(r.programId)
+        const eligible = build?.isVerifiedBuild === true && r.isVerifiedOwned
+        if (r.hasOnchainIdl && eligible && r.idlData) {
           const normalizedIdl = normalizeIdlForSave(r.idlData, r.programId)
           const filename = resolveIdlFileName(normalizedIdl, r.programId, idlsDir, usedFileNames)
           const filePath = resolve(idlsDir, filename)
@@ -374,12 +476,15 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
   console.log('═══════════════════════════════════════════════════')
   console.log(`  Total checked : ${stats.total}`)
   console.log(`  With IDL      : ${stats.withIdl}`)
-  console.log(`  Verified IDL  : ${verifiedOwnedCount}`)
+  console.log(`  Verified Build: ${verifiedBuildCount}`)
+  console.log(`  Owned IDL     : ${verifiedOwnedCount}`)
+  console.log(`  Verified Prog.: ${verifiedProgramCount}`)
   console.log(`  IDLs saved    : ${savedIdlCount}`)
   console.log(`  Without IDL   : ${stats.withoutIdl}`)
   console.log(`  Errors        : ${stats.errors}`)
   console.log(`  Time          : ${elapsed}s`)
   console.log(`  CSV           : ${csvPath}`)
+  console.log(`  Stage C CSV   : ${stageCCsvPath}`)
   console.log(`  IDL files     : ${idlsDir}`)
   if (enableIngest) {
     console.log('───────────────────────────────────────────────────')

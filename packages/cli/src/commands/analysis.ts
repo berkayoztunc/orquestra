@@ -70,12 +70,16 @@ export async function analysis(opts: AnalysisOptions): Promise<void> {
     const rows = parseCsv(readFileSync(idlCsv, 'utf8'))
     const total = rows.length
     const published = rows.filter((r) => r.has_onchain_idl === 'true').length
+    const verifiedBuild = rows.filter((r) => r.verified_build === 'true').length
+    const verifiedProgram = rows.filter((r) => r.eligible_for_stage_c === 'true').length
     const noIdl = rows.filter((r) => r.has_onchain_idl === 'false' && !r.error).length
     const errors = rows.filter((r) => !!r.error).length
     const pct = total > 0 ? ((published / total) * 100).toFixed(2) : '0.00'
 
     console.log(`IDL check coverage:    ${total.toLocaleString()} programs checked`)
     console.log(`  Published IDL        ${published.toLocaleString()} (${pct}%)`)
+    console.log(`  Verified Build       ${verifiedBuild.toLocaleString()}`)
+    console.log(`  Verified Program     ${verifiedProgram.toLocaleString()}`)
     console.log(`  No IDL               ${noIdl.toLocaleString()}`)
     if (errors > 0) console.log(`  Errors               ${errors.toLocaleString()}`)
     console.log()

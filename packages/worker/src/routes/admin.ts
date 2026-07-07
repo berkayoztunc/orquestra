@@ -444,4 +444,25 @@ app.get('/sync/scan-metadata', async (c) => {
   }
 })
 
+/**
+ * GET /api/admin/sync/verified-build-metadata
+ *
+ * Returns latest verified-build summary written by the funnel CLI
+ * (via POST /api/ingest/verified-build-metadata).
+ * Public read — no auth required.
+ */
+app.get('/sync/verified-build-metadata', async (c) => {
+  const cache = (c.env as any)?.CACHE
+  if (!cache) return c.json({ metadata: null })
+
+  try {
+    const raw = await cache.get('verified-build:metadata', 'text')
+    if (!raw) return c.json({ metadata: null })
+    return c.json({ metadata: JSON.parse(raw) })
+  } catch (err) {
+    console.error('[admin] sync/verified-build-metadata error:', err)
+    return c.json({ metadata: null })
+  }
+})
+
 export default app

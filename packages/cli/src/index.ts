@@ -7,6 +7,7 @@
  *   bun run packages/cli/src/index.ts check-idl [options]   — Check Anchor IDL for each program
  *   bun run packages/cli/src/index.ts queue [options]        — Queue program IDs for cron auto-import
  *   bun run packages/cli/src/index.ts full [options]         — Run scan + check-idl sequentially
+ *   bun run packages/cli/src/index.ts funnel [options]       — Run scan + verified-build gated ingest
  *
  * Options:
  *   --rpc-url <url>          Solana RPC endpoint (required, or set SOLANA_RPC_URL env)
@@ -22,6 +23,11 @@
  *   --enable-ingest          Enable AI description + DB ingest for each discovered IDL
  *   --skip-ai                Skip AI description step (ingest IDL only, no AI call)
  *   --ingest-concurrency <n> Max concurrent AI+ingest calls (default: 5)
+ *   --verified-build-api-url <url>  Verified build endpoint template (must include {programId})
+ *   --verified-build-list-api-url <url>  Verified programs list endpoint template (must include {page})
+ *   --verified-build-source <name>  Source label for reports (default: official)
+ *   --verified-build-concurrency <n>  Max concurrent verification requests (default: 10)
+ *   --verified-build-rps <n>  Max verification requests/second (default: 3)
  *   --help                   Show this help
  */
 
@@ -29,6 +35,10 @@ import { scanPrograms, type ScanProgramsOptions } from './commands/scan-programs
 import { checkIdl, type CheckIdlOptions } from './commands/check-idl'
 import { analysis, type AnalysisOptions } from './commands/analysis'
 import { queuePrograms, type QueueProgramsOptions } from './commands/queue-programs'
+import { checkVerifiedBuildBatch } from './lib/verified-build'
+import { CsvWriter } from './lib/csv'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 // ─── Argument Parsing ────────────────────────────────────────────────
 function parseArgs(argv: string[]): { command: string; flags: Record<string, string | boolean> } {
@@ -100,6 +110,7 @@ COMMANDS:
   check-idl   Check on-chain Anchor IDL for each program → program_idl_status.csv
   queue       Queue all program IDs from programs.csv for cron auto-import (fast!)
   full        Run scan + check-idl sequentially
+  funnel      Run scan + verified-build gated check-idl + AI ingest
   analysis    Print summary stats from existing output CSVs (no RPC needed)
 
 OPTIONS:
@@ -117,6 +128,16 @@ OPTIONS:
   --skip-ai                Skip AI step (ingest IDL without AI description)
   --fast                   Fast IDL scan: only check new-style PDA, skip decode (no IDL data saved)
   --ingest-concurrency <n> Max concurrent AI+ingest calls (default: 5)
+  --verified-build-api-url <url>
+                          Verified build endpoint template (must include {programId})
+  --verified-build-list-api-url <url>
+                          Verified programs list endpoint template (must include {page})
+  --verified-build-source <name>
+                          Source label for reports (default: official)
+  --verified-build-concurrency <n>
+                          Max concurrent verified-build requests (default: 10)
+  --verified-build-rps <n>
+                          Max verification requests/second (default: 3)
   --help                   Show this help
 
 AI INGEST ENV VARS (required when --enable-ingest):
@@ -125,6 +146,12 @@ AI INGEST ENV VARS (required when --enable-ingest):
   CF_ACCOUNT_ID            Cloudflare account ID (for AI descriptions)
   CF_API_TOKEN             Cloudflare API token with Workers AI:Run permission
   CF_AI_MODEL              AI model (default: @cf/meta/llama-3.1-8b-instruct)
+  SOLANA_VERIFIED_BUILD_API_URL
+                          Verified build endpoint template (must include {programId})
+  SOLANA_VERIFIED_BUILD_LIST_API_URL
+                          Verified programs list endpoint template (must include {page})
+  SOLANA_VERIFIED_BUILD_API_TOKEN
+                          Optional bearer token for verified build endpoint
 
 EXAMPLES:
   # Scan all programs on mainnet
@@ -142,9 +169,102 @@ EXAMPLES:
   # Full pipeline with ingest
   bun run packages/cli/src/index.ts full --rpc-url $SOLANA_RPC_URL --out-dir ./results --enable-ingest
 
+  # Funnel pipeline: scan all programs, verify build, check IDL, ingest + AI
+  bun run packages/cli/src/index.ts funnel --rpc-url $SOLANA_RPC_URL --out-dir ./results
+
   # Resume interrupted IDL check
   bun run packages/cli/src/index.ts check-idl --rpc-url $SOLANA_RPC_URL --resume
 `)
+}
+
+function parseProgramsCsv(content: string): string[] {
+  const lines = content.trim().split('\n')
+  const out: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('program_id')) continue
+    const id = trimmed.split(',')[0]?.trim()
+    if (id) out.push(id)
+  }
+  return out
+}
+
+async function runVerifiedStage(options: {
+  outDir: string
+  verifiedBuildApiUrl: string
+  verifiedBuildListApiUrl: string
+  verifiedBuildApiToken: string
+  verifiedBuildSource: string
+  verifiedBuildConcurrency: number
+  verifiedBuildRps: number
+}): Promise<string> {
+  const programsCsvPath = resolve(options.outDir, 'programs.csv')
+  if (!existsSync(programsCsvPath)) {
+    throw new Error(`programs.csv not found at ${programsCsvPath}`)
+  }
+
+  const csvRaw = readFileSync(programsCsvPath, 'utf-8')
+  const ids = parseProgramsCsv(csvRaw)
+  const validProgramIds = [...new Set(ids.filter((id) => id.length >= 32 && id.length <= 44))]
+
+  if (validProgramIds.length === 0) {
+    throw new Error('No valid program IDs found in programs.csv')
+  }
+
+  console.log()
+  console.log('Step 1/3: programs.csv validation')
+  console.log(`  programs.csv rows: ${ids.length}`)
+  console.log(`  valid program ids: ${validProgramIds.length}`)
+
+  console.log()
+  console.log('Step 2/3: checking verified build status for all valid programs')
+
+  const checks = await checkVerifiedBuildBatch(validProgramIds, {
+    endpointTemplate: options.verifiedBuildApiUrl,
+    verifiedProgramsListEndpoint: options.verifiedBuildListApiUrl || undefined,
+    apiToken: options.verifiedBuildApiToken || undefined,
+    sourceName: options.verifiedBuildSource,
+    concurrency: options.verifiedBuildConcurrency,
+    requestsPerSecond: options.verifiedBuildRps,
+    maxRetries: 3,
+  })
+
+  const verifiedCsvPath = resolve(options.outDir, 'programs_verified.csv')
+  const verifiedCsv = new CsvWriter(verifiedCsvPath, [
+    'program_id',
+    'verified_build',
+    'verification_source',
+    'verification_error',
+  ])
+
+  const verifiedProgramIds: string[] = []
+  let verificationErrors = 0
+  for (const pid of validProgramIds) {
+    const status = checks.get(pid)
+    const verified = status?.isVerifiedBuild === true
+    if (status?.error) verificationErrors++
+    if (verified) verifiedProgramIds.push(pid)
+    verifiedCsv.writeRow({
+      program_id: pid,
+      verified_build: verified ? 'true' : 'false',
+      verification_source: status?.source ?? options.verifiedBuildSource,
+      verification_error: status?.error ?? '',
+    })
+  }
+
+  console.log(`  verified programs: ${verifiedProgramIds.length}`)
+  console.log(`  verification errors: ${verificationErrors}`)
+  console.log(`  verified csv: ${verifiedCsvPath}`)
+
+  if (verificationErrors > 0) {
+    throw new Error(
+      `Verification returned ${verificationErrors} errors; rerun with lower --verified-build-rps to avoid false negatives.`,
+    )
+  }
+
+  const verifiedListPath = resolve(options.outDir, '.program-list.verified.json')
+  writeFileSync(verifiedListPath, JSON.stringify(verifiedProgramIds), 'utf-8')
+  return verifiedListPath
 }
 
 // ─── Main ────────────────────────────────────────────────────────────
@@ -157,9 +277,9 @@ async function main() {
     process.exit(0)
   }
 
-  // Resolve RPC URL (required only for scan/check-idl/full)
+  // Resolve RPC URL (required only for scan/check-idl/full/funnel)
   const rpcUrl = (flags['rpc-url'] as string) || process.env.SOLANA_RPC_URL
-  const rpcRequiredCommands = new Set(['scan', 'check-idl', 'full'])
+  const rpcRequiredCommands = new Set(['scan', 'check-idl', 'full', 'funnel'])
   if (!rpcUrl && rpcRequiredCommands.has(command)) {
     console.error('Error: --rpc-url is required or set SOLANA_RPC_URL environment variable')
     process.exit(1)
@@ -178,6 +298,18 @@ async function main() {
   const skipAi = !!flags['skip-ai']
   const ingestConcurrency = parseInt((flags['ingest-concurrency'] as string) || '5', 10)
   const fast = !!flags['fast']
+  const verifiedBuildApiUrl =
+    (flags['verified-build-api-url'] as string) ||
+    process.env.SOLANA_VERIFIED_BUILD_API_URL ||
+    'https://verify.osec.io/status/{programId}'
+  const verifiedBuildListApiUrl =
+    (flags['verified-build-list-api-url'] as string) ||
+    process.env.SOLANA_VERIFIED_BUILD_LIST_API_URL ||
+    'https://verify.osec.io/verified-programs/{page}'
+  const verifiedBuildSource = (flags['verified-build-source'] as string) || 'osec-verify'
+  const verifiedBuildApiToken = process.env.SOLANA_VERIFIED_BUILD_API_TOKEN || ''
+  const verifiedBuildConcurrency = parseInt((flags['verified-build-concurrency'] as string) || '10', 10)
+  const verifiedBuildRps = Number((flags['verified-build-rps'] as string) || '3')
 
   const scanOpts: ScanProgramsOptions = {
     rpcUrl: rpcUrl!,
@@ -201,6 +333,10 @@ async function main() {
     skipAi,
     ingestConcurrency,
     fast,
+    verifiedBuildApiUrl,
+    verifiedBuildSource,
+    verifiedBuildApiToken,
+    verifiedBuildConcurrency,
   }
 
   switch (command) {
@@ -219,6 +355,35 @@ async function main() {
       console.log()
       await checkIdl(idlOpts)
       break
+
+    case 'funnel': {
+      await scanPrograms(scanOpts)
+      console.log()
+      console.log('─'.repeat(55))
+      console.log()
+      const verifiedListPath = await runVerifiedStage({
+        outDir,
+        verifiedBuildApiUrl,
+        verifiedBuildListApiUrl,
+        verifiedBuildApiToken,
+        verifiedBuildSource,
+        verifiedBuildConcurrency,
+        verifiedBuildRps,
+      })
+
+      console.log()
+      console.log('Step 3/3: checking IDL + ingesting verified program list')
+      console.log(`  input list: ${verifiedListPath}`)
+
+      await checkIdl({
+        ...idlOpts,
+        inputFile: verifiedListPath,
+        enableIngest: true,
+        skipAi: false,
+        skipVerifiedBuildCheck: true,
+      })
+      break
+    }
 
     case 'analysis': {
       const analysisOpts: AnalysisOptions = { outDir }

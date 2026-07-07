@@ -51,9 +51,11 @@ jobs:
           ORQUESTRA_INGEST_KEY: ${{ secrets.ORQUESTRA_INGEST_KEY }}
         run: |
           bun run cli:queue 2>&1 | tee /tmp/queue_output.txt
-          # Extract queued count from CLI output for summary reporting
-          QUEUED=$(grep -oP '(?<=queued: )\d+' /tmp/queue_output.txt || echo "0")
-          SKIPPED=$(grep -oP '(?<=skipped: )\d+' /tmp/queue_output.txt || echo "0")
+          # Extract only the final summary values (single-line) for GITHUB_OUTPUT.
+          QUEUED=$(awk -F':' '/^[[:space:]]*Queued[[:space:]]*:/ {gsub(/[^0-9]/, "", $2); v=$2} END {print v}' /tmp/queue_output.txt)
+          SKIPPED=$(awk -F':' '/^[[:space:]]*Skipped[[:space:]]*:/ {gsub(/[^0-9]/, "", $2); v=$2} END {print v}' /tmp/queue_output.txt)
+          QUEUED=${QUEUED:-0}
+          SKIPPED=${SKIPPED:-0}
           echo "queued=$QUEUED" >> $GITHUB_OUTPUT
           echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
           echo "### Queue Summary" >> $GITHUB_STEP_SUMMARY

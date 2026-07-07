@@ -290,10 +290,13 @@ app.post('/candidates', ingestKeyMiddleware, async (c) => {
       return c.json({ queued: 0, skipped }, 400)
     }
 
-    // INSERT OR IGNORE in batches to avoid bind-parameter limits
-    const BATCH = 100
-    for (let i = 0; i < valid.length; i += BATCH) {
-      const slice = valid.slice(i, i + BATCH)
+    // INSERT OR IGNORE in bind-safe batches to avoid D1 variable limits.
+    // Each row uses 3 bind vars: (program_id, status, source).
+    // Keep a conservative ceiling to stay below environment-specific limits.
+    const MAX_SQL_VARS = 90
+    const ROWS_PER_INSERT = Math.max(1, Math.floor(MAX_SQL_VARS / 3))
+    for (let i = 0; i < valid.length; i += ROWS_PER_INSERT) {
+      const slice = valid.slice(i, i + ROWS_PER_INSERT)
       const placeholders = slice.map(() => '(?, ?, ?)').join(', ')
       const values = slice.flatMap((id) => [id, 'pending', source])
       await db

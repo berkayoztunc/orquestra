@@ -709,4 +709,17 @@ export async function getVerifiedBuildMetadata(): Promise<{ metadata: VerifiedBu
   return res.data
 }
 
+export interface VerifiedBuildTotal {
+  total: number
+  fetched_at: string
+  source: string
+  cached?: boolean
+  stale?: boolean
+}
+
+export async function getVerifiedBuildTotal(): Promise<VerifiedBuildTotal> {
+  const res = await api.get('/admin/sync/verified-build-total')
+  return res.data
+}
+
 export default api

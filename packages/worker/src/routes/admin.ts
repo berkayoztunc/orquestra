@@ -465,4 +465,76 @@ app.get('/sync/verified-build-metadata', async (c) => {
   }
 })
 
+/**
+ * GET /api/admin/sync/verified-build-total
+ *
+ * Fetches OSEC verified program total from https://verify.osec.io/verified-programs
+ * and caches it in KV for a short period to avoid excessive upstream requests.
+ * Public read — no auth required.
+ */
+app.get('/sync/verified-build-total', async (c) => {
+  const cache = (c.env as any)?.CACHE
+  const cacheKey = 'verified-build:osec-total'
+
+  try {
+    if (cache) {
+      const raw = await cache.get(cacheKey, 'text')
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          total: number
+          fetched_at: string
+          source: string
+        }
+        const fetchedMs = Date.parse(parsed.fetched_at)
+        if (Number.isFinite(fetchedMs) && Date.now() - fetchedMs < 15 * 60 * 1000) {
+          return c.json({ ...parsed, cached: true })
+        }
+      }
+    }
+
+    const response = await fetch('https://verify.osec.io/verified-programs', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error(`osec returned ${response.status}`)
+    }
+
+    const json = await response.json() as any
+    const total = Number(
+      json?.meta?.total ??
+      (Array.isArray(json?.verified_programs) ? json.verified_programs.length : 0),
+    )
+
+    const payload = {
+      total: Number.isFinite(total) ? total : 0,
+      fetched_at: new Date().toISOString(),
+      source: 'osec-verify',
+    }
+
+    if (cache) {
+      await cache.put(cacheKey, JSON.stringify(payload), { expirationTtl: 6 * 60 * 60 })
+    }
+
+    return c.json({ ...payload, cached: false })
+  } catch (err) {
+    console.error('[admin] sync/verified-build-total error:', err)
+
+    if (cache) {
+      try {
+        const raw = await cache.get(cacheKey, 'text')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          return c.json({ ...parsed, cached: true, stale: true })
+        }
+      } catch {
+        // ignore stale cache read error
+      }
+    }
+
+    return c.json({ error: 'Failed to fetch verified-build total' }, 502)
+  }
+})
+
 export default app

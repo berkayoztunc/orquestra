@@ -7,12 +7,14 @@ import {
   getCandidateStats,
   getScanMetadata,
   getVerifiedBuildMetadata,
+  getVerifiedBuildTotal,
   type SyncRun,
   type SyncUpdate,
   type DiscoveredProgram,
   type CandidateStats,
   type ScanMetadata,
   type VerifiedBuildMetadata,
+  type VerifiedBuildTotal,
 } from '@/api/client'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -109,6 +111,7 @@ export default function Sync(): JSX.Element {
   const [candidates, setCandidates] = useState<CandidateStats | null>(null)
   const [scanMeta, setScanMeta] = useState<ScanMetadata | null>(null)
   const [verifiedBuildMeta, setVerifiedBuildMeta] = useState<VerifiedBuildMetadata | null>(null)
+  const [verifiedBuildTotal, setVerifiedBuildTotal] = useState<VerifiedBuildTotal | null>(null)
   const [loading, setLoading] = useState(true)
   const [updatesLoading, setUpdatesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -146,6 +149,14 @@ export default function Sync(): JSX.Element {
     try {
       const verifiedData = await getVerifiedBuildMetadata()
       setVerifiedBuildMeta(verifiedData.metadata)
+    } catch {
+      // non-fatal
+    }
+
+    // Fetch OSEC live verified-program total — non-critical
+    try {
+      const totalData = await getVerifiedBuildTotal()
+      setVerifiedBuildTotal(totalData)
     } catch {
       // non-fatal
     }
@@ -273,28 +284,37 @@ export default function Sync(): JSX.Element {
             <div className="mb-2 h-3 w-36 rounded bg-sand-200" />
             <div className="h-5 w-52 rounded bg-sand-300" />
           </div>
-        ) : verifiedBuildMeta ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        ) : (verifiedBuildMeta || verifiedBuildTotal) ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+            <StatCard
+              label="OSEC Verified (Live)"
+              value={(verifiedBuildTotal?.total ?? 0).toLocaleString()}
+              sub={verifiedBuildTotal?.fetched_at ? formatRelative(verifiedBuildTotal.fetched_at) : 'not fetched yet'}
+            />
             <StatCard
               label="Programs Checked"
-              value={(verifiedBuildMeta.total_programs ?? 0).toLocaleString()}
+              value={(verifiedBuildMeta?.total_programs ?? 0).toLocaleString()}
               sub="valid Solana programs"
             />
             <StatCard
               label="Verified Build"
-              value={(verifiedBuildMeta.verified_programs ?? 0).toLocaleString()}
+              value={(verifiedBuildMeta?.verified_programs ?? 0).toLocaleString()}
               sub="latest funnel run"
             />
             <StatCard
               label="Verification Errors"
-              value={(verifiedBuildMeta.verification_errors ?? 0).toLocaleString()}
-              sub={(verifiedBuildMeta.verification_errors ?? 0) > 0 ? 'retry suggested' : 'clean run'}
+              value={(verifiedBuildMeta?.verification_errors ?? 0).toLocaleString()}
+              sub={(verifiedBuildMeta?.verification_errors ?? 0) > 0 ? 'retry suggested' : 'clean run'}
             />
             <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-5 py-4">
               <span className="text-xs font-medium uppercase tracking-wider text-sand-1000">Scanned At</span>
-              <span className="text-lg font-bold text-sand-1600">{formatDate(verifiedBuildMeta.scanned_at)}</span>
+              <span className="text-lg font-bold text-sand-1600">
+                {verifiedBuildMeta?.scanned_at ? formatDate(verifiedBuildMeta.scanned_at) : 'N/A'}
+              </span>
               <span className="text-xs text-sand-900">
-                {verifiedBuildMeta.source} · {formatRelative(verifiedBuildMeta.scanned_at)}
+                {verifiedBuildMeta?.scanned_at
+                  ? `${verifiedBuildMeta.source} · ${formatRelative(verifiedBuildMeta.scanned_at)}`
+                  : 'Run funnel for local stage stats'}
               </span>
             </div>
           </div>

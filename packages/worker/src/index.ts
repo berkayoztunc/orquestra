@@ -106,9 +106,9 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
-    // 0 2 * * *  → dedicated nightly candidates burst (drain discovery queue, AI naming)
-    // 0 */6 * * * → full sync: existing projects + light candidates phase
-    if (_controller.cron === '0 2 * * *') {
+    // 0 2 * * * and 15 * * * * → candidates burst (drain discovery queue)
+    // 0 */6 * * *              → full sync: existing projects + light candidates phase
+    if (_controller.cron === '0 2 * * *' || _controller.cron === '15 * * * *') {
       ctx.waitUntil(runCandidatesBurst(env as any))
     } else {
       ctx.waitUntil(runDailyIdlSync(env as any))

@@ -15,6 +15,56 @@ function slugify(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]/g, '').replace(/-+/g, '-')
 }
 
+async function upsertProjectByProgramId(
+  db: any,
+  input: {
+    projectId: string
+    programId: string
+    name: string
+    description: string
+    now: string
+  },
+): Promise<{ projectId: string; created: boolean }> {
+  await db
+    .prepare(
+      'INSERT OR IGNORE INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .bind(input.projectId, 'system', input.name, input.description, input.programId, 1, input.now, input.now)
+    .run()
+
+  const project = await db
+    .prepare('SELECT id, name, description, program_id FROM projects WHERE program_id = ? LIMIT 1')
+    .bind(input.programId)
+    .first()
+
+  if (!project?.id) {
+    throw new Error(`Failed to upsert project for program ${input.programId}`)
+  }
+
+  const created = (project.id as string) === input.projectId
+
+  if (!created) {
+    await db
+      .prepare(
+        `UPDATE projects
+         SET name = CASE
+               WHEN name IS NULL OR name = '' OR name = program_id THEN ?
+               ELSE name
+             END,
+             description = CASE
+               WHEN (description IS NULL OR description = '') AND ? <> '' THEN ?
+               ELSE description
+             END,
+             updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(input.name, input.description, input.description, input.now, project.id)
+      .run()
+  }
+
+  return { projectId: project.id as string, created }
+}
+
 type Env = {
   Variables: Record<string, unknown>
   Bindings: {
@@ -86,8 +136,8 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       (body.idl.program && typeof body.idl.program.name === 'string' ? body.idl.program.name : null) || // Codama
       body.programId
 
-    const programName = rawProgramName.trim() || body.programId
-    const programDescription = body.programDescription || ''
+    let programName = rawProgramName.trim() || body.programId
+    let programDescription = body.programDescription || body.aiDescription || ''
 
     // ── 1. Find or create project ──────────────────────────────────
     let project = await db
@@ -99,26 +149,73 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
     let created = false
 
     if (!project) {
-      projectId = generateId()
+      let aiCategorizationResult:
+        | Awaited<ReturnType<typeof categorizeProgramWithAI>>
+        | null = null
+
+      if (c.env?.AI) {
+        try {
+          aiCategorizationResult = await categorizeProgramWithAI(c.env.AI, {
+            name: programName,
+            description: programDescription,
+            programId: body.programId,
+            instructions: extractInstructionNames(body.idl),
+            accounts: extractAccountNames(body.idl),
+          })
+
+          if (aiCategorizationResult.display_name) {
+            programName = aiCategorizationResult.display_name
+          }
+          if (!programDescription && aiCategorizationResult.short_description) {
+            programDescription = aiCategorizationResult.short_description
+          }
+        } catch (err) {
+          console.error('[ingest] Synchronous AI categorization failed:', err)
+        }
+      }
+
+      const proposedProjectId = generateId()
       const slug = slugify(programName)
-      await db
-        .prepare(
-          'INSERT INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        )
-        .bind(projectId, 'system', programName, programDescription, body.programId, 1, now, now)
-        .run()
+      const upserted = await upsertProjectByProgramId(db, {
+        projectId: proposedProjectId,
+        programId: body.programId,
+        name: programName,
+        description: programDescription,
+        now,
+      })
+      projectId = upserted.projectId
 
       // Create default socials entry
-      await db
-        .prepare('INSERT INTO project_socials (id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?)')
-        .bind(generateId(), projectId, now, now)
-        .run()
+      const socials = await db
+        .prepare('SELECT id FROM project_socials WHERE project_id = ? LIMIT 1')
+        .bind(projectId)
+        .first()
+      if (!socials?.id) {
+        await db
+          .prepare('INSERT INTO project_socials (id, project_id, created_at, updated_at) VALUES (?, ?, ?, ?)')
+          .bind(generateId(), projectId, now, now)
+          .run()
+      }
 
       // Auto-detect and seed category if known program
       await autoSeedCategory(db, projectId, programName)
 
+      if (aiCategorizationResult) {
+        try {
+          await setCategoryAndAliases(
+            db,
+            projectId,
+            aiCategorizationResult.category,
+            aiCategorizationResult.tags,
+            aiCategorizationResult.aliases,
+          )
+        } catch (err) {
+          console.error('[ingest] Failed to save AI categorization result:', err)
+        }
+      }
+
       // Fire AI categorization in the background (non-blocking)
-      if (c.env?.AI) {
+      if (c.env?.AI && !aiCategorizationResult) {
         c.executionCtx.waitUntil(
           (async () => {
             try {
@@ -144,7 +241,7 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
         )
       }
 
-      created = true
+      created = upserted.created
     } else {
       projectId = project.id as string
     }

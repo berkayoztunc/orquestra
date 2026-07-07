@@ -25,6 +25,8 @@ const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 export interface IdlCheckResult {
   programId: string
   hasOnchainIdl: boolean
+  /** True only when the IDL account owner matches the program id */
+  isVerifiedOwned: boolean
   idlAccount: string | null
   /** Decoded IDL JSON object when available */
   idlData: Record<string, any> | null
@@ -144,6 +146,7 @@ export async function checkIdlBatch(
         results.push({
           programId: d.programId,
           hasOnchainIdl: false,
+          isVerifiedOwned: false,
           idlAccount: null,
           idlData: null,
           error: d.error,
@@ -190,6 +193,7 @@ export async function checkIdlBatch(
           results.push({
             programId: d.programId,
             hasOnchainIdl: false,
+            isVerifiedOwned: false,
             idlAccount: null,
             idlData: null,
             error: d.error,
@@ -206,12 +210,15 @@ export async function checkIdlBatch(
 
           const oldExists = !fast && !(oldInfo instanceof Error) && oldInfo !== null && oldInfo !== undefined
           const newExists = !(newInfo instanceof Error) && newInfo !== null && newInfo !== undefined
+          const oldVerifiedOwned = oldExists && oldInfo?.owner === d.programId
+          const newVerifiedOwned = newExists && newInfo?.owner === d.programId
 
           if (fast) {
             // Fast mode: just record existence, no decoding
             results.push({
               programId: d.programId,
               hasOnchainIdl: newExists,
+              isVerifiedOwned: newVerifiedOwned,
               idlAccount: newExists ? d.newIdlAddress : null,
               idlData: null,
               error: newErr || null,
@@ -227,6 +234,7 @@ export async function checkIdlBatch(
               results.push({
                 programId: d.programId,
                 hasOnchainIdl: true,
+                isVerifiedOwned: oldVerifiedOwned,
                 idlAccount: d.oldIdlAddress,
                 idlData: oldIdlData,
                 error: null,
@@ -236,6 +244,7 @@ export async function checkIdlBatch(
               results.push({
                 programId: d.programId,
                 hasOnchainIdl: true,
+                isVerifiedOwned: newVerifiedOwned,
                 idlAccount: d.newIdlAddress,
                 idlData: newIdlData,
                 error: null,
@@ -245,6 +254,7 @@ export async function checkIdlBatch(
               results.push({
                 programId: d.programId,
                 hasOnchainIdl: true,
+                isVerifiedOwned: oldVerifiedOwned,
                 idlAccount: d.oldIdlAddress,
                 idlData: null,
                 error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
@@ -254,6 +264,7 @@ export async function checkIdlBatch(
               results.push({
                 programId: d.programId,
                 hasOnchainIdl: true,
+                isVerifiedOwned: newVerifiedOwned,
                 idlAccount: d.newIdlAddress,
                 idlData: null,
                 error: oldErr || newErr || 'IDL decode failed for both old/new account layouts',
@@ -263,6 +274,7 @@ export async function checkIdlBatch(
               results.push({
                 programId: d.programId,
                 hasOnchainIdl: false,
+                isVerifiedOwned: false,
                 idlAccount: d.oldIdlAddress,
                 idlData: null,
                 error: oldErr || newErr || null,
@@ -278,6 +290,7 @@ export async function checkIdlBatch(
         results.push({
           programId: d.programId,
           hasOnchainIdl: false,
+          isVerifiedOwned: false,
           idlAccount: d.oldIdlAddress,
           idlData: null,
           error: `Batch RPC error: ${err.message}`,

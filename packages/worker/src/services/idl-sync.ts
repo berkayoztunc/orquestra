@@ -190,6 +190,55 @@ interface CandidateRow {
   program_id: string
 }
 
+async function upsertProjectByProgramId(
+  db: D1Database,
+  input: {
+    projectId: string
+    programId: string
+    name: string
+    description: string
+  },
+): Promise<{ projectId: string; created: boolean }> {
+  await db
+    .prepare(
+      'INSERT OR IGNORE INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+    )
+    .bind(input.projectId, 'system', input.name, input.description, input.programId)
+    .run()
+
+  const project = await db
+    .prepare('SELECT id, name, description, program_id FROM projects WHERE program_id = ? LIMIT 1')
+    .bind(input.programId)
+    .first<{ id: string; name: string | null; description: string | null; program_id: string }>()
+
+  if (!project?.id) {
+    throw new Error(`Failed to upsert project for program ${input.programId}`)
+  }
+
+  const created = project.id === input.projectId
+
+  if (!created) {
+    await db
+      .prepare(
+        `UPDATE projects
+         SET name = CASE
+               WHEN name IS NULL OR name = '' OR name = program_id THEN ?
+               ELSE name
+             END,
+             description = CASE
+               WHEN (description IS NULL OR description = '') AND ? <> '' THEN ?
+               ELSE description
+             END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+      .bind(input.name, input.description, input.description, project.id)
+      .run()
+  }
+
+  return { projectId: project.id, created }
+}
+
 async function markCandidateNoIdl(db: D1Database, programId: string): Promise<void> {
   await db
     .prepare(
@@ -264,7 +313,7 @@ async function processOneCandidate(
     let projectName = toTitleCase(rawName)
     let projectDescription = ''
 
-    const projectId = generateId()
+    const proposedProjectId = generateId()
     const idlHash = await hashIdl(onChain.idlJson)
 
     // AI categorization + name/description generation
@@ -283,50 +332,64 @@ async function processOneCandidate(
         if (catResult.display_name) projectName = catResult.display_name
         if (catResult.short_description) projectDescription = catResult.short_description
 
-        await db
-          .prepare(
-            'INSERT INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
-          )
-          .bind(projectId, 'system', projectName, projectDescription, programId)
-          .run()
+        const upserted = await upsertProjectByProgramId(db, {
+          projectId: proposedProjectId,
+          programId,
+          name: projectName,
+          description: projectDescription,
+        })
 
-        await setCategoryAndAliases(db, projectId, catResult.category, catResult.tags, catResult.aliases)
+        if (upserted.created) {
+          await setCategoryAndAliases(db, upserted.projectId, catResult.category, catResult.tags, catResult.aliases)
+        }
       } catch (err) {
         console.error(`[idl-sync] AI failed for candidate ${programId}:`, err)
-        // Insert with fallback name if AI threw before the INSERT ran
-        const check = await db.prepare('SELECT id FROM projects WHERE id = ? LIMIT 1').bind(projectId).first()
-        if (!check) {
-          await db
-            .prepare(
-              'INSERT INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
-            )
-            .bind(projectId, 'system', projectName, '', programId)
-            .run()
-        }
+        await upsertProjectByProgramId(db, {
+          projectId: proposedProjectId,
+          programId,
+          name: projectName,
+          description: '',
+        })
       }
     } else {
       // No AI available — insert with title-cased name
-      await db
-        .prepare(
-          'INSERT INTO projects (id, user_id, name, description, program_id, is_public, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
-        )
-        .bind(projectId, 'system', projectName, '', programId)
-        .run()
+      await upsertProjectByProgramId(db, {
+        projectId: proposedProjectId,
+        programId,
+        name: projectName,
+        description: '',
+      })
+    }
+
+    const project = await db
+      .prepare('SELECT id FROM projects WHERE program_id = ? LIMIT 1')
+      .bind(programId)
+      .first<{ id: string }>()
+
+    if (!project?.id) {
+      throw new Error(`Project missing after upsert for program ${programId}`)
     }
 
     await db
       .prepare(
         'INSERT INTO idl_versions (id, project_id, idl_json, idl_hash, version, idl_standard, idl_source) VALUES (?, ?, ?, ?, 1, ?, ?)',
       )
-      .bind(generateId(), projectId, onChain.idlJson, idlHash, 'anchor', onChain.source)
+      .bind(generateId(), project.id, onChain.idlJson, idlHash, 'anchor', onChain.source)
       .run()
 
-    await db
-      .prepare(
-        'INSERT INTO project_socials (id, project_id, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
-      )
-      .bind(generateId(), projectId)
-      .run()
+    const socials = await db
+      .prepare('SELECT id FROM project_socials WHERE project_id = ? LIMIT 1')
+      .bind(project.id)
+      .first<{ id: string }>()
+
+    if (!socials?.id) {
+      await db
+        .prepare(
+          'INSERT INTO project_socials (id, project_id, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
+        )
+        .bind(generateId(), project.id)
+        .run()
+    }
 
     imported = 1
     console.log(`[idl-sync] Auto-imported: "${projectName}" (${programId})`)

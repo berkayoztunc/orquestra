@@ -247,7 +247,7 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
 
   // CSV writers
   const csvPath = resolve(outDir, 'program_idl_status.csv')
-  const csv = new CsvWriter(csvPath, ['program_id', 'has_onchain_idl', 'idl_account', 'error'])
+  const csv = new CsvWriter(csvPath, ['program_id', 'has_onchain_idl', 'verified_owned', 'idl_account', 'error'])
 
   const publishCsvPath = resolve(outDir, 'program_publish_status.csv')
   const publishCsv = enableIngest
@@ -267,6 +267,7 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
 
   let processedCount = 0
   let savedIdlCount = 0
+  let verifiedOwnedCount = 0
   let ingestedCount = 0
   let aiGeneratedCount = 0
   let ingestErrorCount = 0
@@ -296,16 +297,19 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
         results.map((r) => ({
           program_id: r.programId,
           has_onchain_idl: r.hasOnchainIdl ? 'true' : 'false',
+          verified_owned: r.isVerifiedOwned ? 'true' : 'false',
           idl_account: r.idlAccount ?? '',
           error: r.error ?? '',
         }))
       )
 
-      // Save IDL files + trigger AI+ingest for programs that have on-chain IDL
+      verifiedOwnedCount += results.filter((r) => r.isVerifiedOwned).length
+
+      // Save IDL files + trigger AI+ingest only for verified, program-owned IDLs
       const ingestPromises: Promise<void>[] = []
 
       for (const r of results) {
-        if (r.hasOnchainIdl && r.idlData) {
+        if (r.hasOnchainIdl && r.isVerifiedOwned && r.idlData) {
           const normalizedIdl = normalizeIdlForSave(r.idlData, r.programId)
           const filename = resolveIdlFileName(normalizedIdl, r.programId, idlsDir, usedFileNames)
           const filePath = resolve(idlsDir, filename)
@@ -370,6 +374,7 @@ export async function checkIdl(opts: CheckIdlOptions): Promise<void> {
   console.log('═══════════════════════════════════════════════════')
   console.log(`  Total checked : ${stats.total}`)
   console.log(`  With IDL      : ${stats.withIdl}`)
+  console.log(`  Verified IDL  : ${verifiedOwnedCount}`)
   console.log(`  IDLs saved    : ${savedIdlCount}`)
   console.log(`  Without IDL   : ${stats.withoutIdl}`)
   console.log(`  Errors        : ${stats.errors}`)

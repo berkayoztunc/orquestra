@@ -1,0 +1,92 @@
+name: Daily Solana Program Scan
+
+on:
+  schedule:
+    # 1am UTC daily — completes before the 2am nightly candidates burst cron
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    # Allow manual runs from the GitHub Actions UI
+    inputs:
+      max_programs:
+        description: 'Maximum programs to scan (leave empty for all)'
+        required: false
+        default: ''
+
+concurrency:
+  group: solana-scan
+  cancel-in-progress: false  # Never cancel an in-progress scan; queue instead
+
+jobs:
+  scan:
+    name: Scan + Queue Programs
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Scan all Solana programs
+        env:
+          SOLANA_RPC_URL: ${{ secrets.SOLANA_RPC_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.max_programs }}" ]; then
+            ARGS="--max-programs ${{ github.event.inputs.max_programs }}"
+          fi
+          bun run cli:scan --rpc-url "$SOLANA_RPC_URL" $ARGS
+
+      - name: Queue discovered programs
+        id: queue
+        env:
+          ORQUESTRA_API_URL: ${{ secrets.ORQUESTRA_API_URL }}
+          ORQUESTRA_INGEST_KEY: ${{ secrets.ORQUESTRA_INGEST_KEY }}
+        run: |
+          bun run cli:queue 2>&1 | tee /tmp/queue_output.txt
+          # Extract queued count from CLI output for summary reporting
+          QUEUED=$(grep -oP '(?<=queued: )\d+' /tmp/queue_output.txt || echo "0")
+          SKIPPED=$(grep -oP '(?<=skipped: )\d+' /tmp/queue_output.txt || echo "0")
+          echo "queued=$QUEUED" >> $GITHUB_OUTPUT
+          echo "skipped=$SKIPPED" >> $GITHUB_OUTPUT
+          echo "### Queue Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Queued:** $QUEUED program IDs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Skipped (invalid):** $SKIPPED" >> $GITHUB_STEP_SUMMARY
+
+      - name: Count programs found
+        id: count
+        run: |
+          COUNT=$(wc -l < output/programs.csv || echo "0")
+          # Subtract header row
+          PROGRAMS=$((COUNT - 1))
+          echo "programs=$PROGRAMS" >> $GITHUB_OUTPUT
+          echo "- **Programs found:** $PROGRAMS" >> $GITHUB_STEP_SUMMARY
+
+      - name: Report scan metadata to Orquestra
+        env:
+          ORQUESTRA_API_URL: ${{ secrets.ORQUESTRA_API_URL }}
+          ORQUESTRA_INGEST_KEY: ${{ secrets.ORQUESTRA_INGEST_KEY }}
+        run: |
+          PROGRAMS="${{ steps.count.outputs.programs }}"
+          QUEUED="${{ steps.queue.outputs.queued }}"
+          SKIPPED="${{ steps.queue.outputs.skipped }}"
+          curl -s -X POST "${ORQUESTRA_API_URL}/api/ingest/scan-metadata" \
+            -H "Content-Type: application/json" \
+            -H "X-Ingest-Key: ${ORQUESTRA_INGEST_KEY}" \
+            -d "{\"programs_found\": ${PROGRAMS}, \"queued\": ${QUEUED}, \"skipped\": ${SKIPPED}}" \
+            || echo "Warning: failed to report scan metadata (non-fatal)"
+
+      - name: Upload programs.csv artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: programs-${{ github.run_id }}
+          path: output/programs.csv
+          retention-days: 7

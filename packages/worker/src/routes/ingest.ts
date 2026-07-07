@@ -311,4 +311,44 @@ app.post('/candidates', ingestKeyMiddleware, async (c) => {
   }
 })
 
+// ── Scan Metadata ─────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/ingest/scan-metadata
+ *
+ * Called by the GitHub Actions daily scan workflow after `cli:queue` completes.
+ * Stores a lightweight summary in KV so the dashboard can display "Last full scan".
+ *
+ * Auth: X-Ingest-Key
+ * Body: { programs_found: number, queued: number, skipped: number, rpc_url?: string }
+ */
+app.post('/scan-metadata', ingestKeyMiddleware, async (c) => {
+  const cache = c.env?.CACHE
+  if (!cache) return c.json({ error: 'Cache KV not available' }, 500)
+
+  try {
+    const body = await c.req.json<{
+      programs_found: number
+      queued: number
+      skipped: number
+      rpc_url?: string
+    }>()
+
+    const metadata = {
+      programs_found: Number(body.programs_found ?? 0),
+      queued: Number(body.queued ?? 0),
+      skipped: Number(body.skipped ?? 0),
+      scanned_at: new Date().toISOString(),
+    }
+
+    // Store for 8 days (scan runs daily; 8 days provides a comfortable safety margin)
+    await cache.put('scan:metadata', JSON.stringify(metadata), { expirationTtl: 8 * 24 * 60 * 60 })
+
+    return c.json({ ok: true, metadata })
+  } catch (err) {
+    console.error('[ingest/scan-metadata] Error:', err)
+    return c.json({ error: 'Failed to store scan metadata', details: (err as Error).message }, 500)
+  }
+})
+
 export default app

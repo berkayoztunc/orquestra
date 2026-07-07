@@ -5,10 +5,12 @@ import {
   getSyncHistory,
   getDiscoveryFeed,
   getCandidateStats,
+  getScanMetadata,
   type SyncRun,
   type SyncUpdate,
   type DiscoveredProgram,
   type CandidateStats,
+  type ScanMetadata,
 } from '@/api/client'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -103,6 +105,7 @@ export default function Sync(): JSX.Element {
   const [updatesPagination, setUpdatesPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 })
   const [discovery, setDiscovery] = useState<DiscoveredProgram[]>([])
   const [candidates, setCandidates] = useState<CandidateStats | null>(null)
+  const [scanMeta, setScanMeta] = useState<ScanMetadata | null>(null)
   const [loading, setLoading] = useState(true)
   const [updatesLoading, setUpdatesLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -126,6 +129,14 @@ export default function Sync(): JSX.Element {
       setCandidates(candidateData.stats)
     } catch {
       // program_candidates table not created yet — show empty state, not an error
+    }
+
+    // Fetch last scan metadata — non-critical, from KV
+    try {
+      const scanData = await getScanMetadata()
+      setScanMeta(scanData.metadata)
+    } catch {
+      // non-fatal
     }
 
     setLoading(false)
@@ -193,6 +204,53 @@ export default function Sync(): JSX.Element {
           {error}
         </div>
       )}
+
+      {/* Last Full Chain Scan */}
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
+          Last Full Chain Scan
+        </h2>
+        {loading ? (
+          <div className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
+            <div className="mb-2 h-3 w-32 rounded bg-sand-200" />
+            <div className="h-5 w-48 rounded bg-sand-300" />
+          </div>
+        ) : scanMeta ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              label="Programs Found"
+              value={(scanMeta.programs_found ?? 0).toLocaleString()}
+              sub="total on-chain programs"
+            />
+            <StatCard
+              label="Queued"
+              value={(scanMeta.queued ?? 0).toLocaleString()}
+              sub="added to discovery queue"
+            />
+            <StatCard
+              label="Skipped"
+              value={(scanMeta.skipped ?? 0).toLocaleString()}
+              sub="invalid program IDs"
+            />
+            <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-5 py-4">
+              <span className="text-xs font-medium uppercase tracking-wider text-sand-1000">Scanned At</span>
+              <span className="text-lg font-bold text-sand-1600">{formatDate(scanMeta.scanned_at)}</span>
+              <span className="text-xs text-sand-900">{formatRelative(scanMeta.scanned_at)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="border border-border-low px-6 py-8 text-center">
+            <p className="font-medium text-sand-1200">No scan data yet</p>
+            <p className="mt-1 text-sm text-sand-900">
+              The daily GitHub Actions workflow runs at 1am UTC and scans all ~500K Solana programs.
+              After the first run, scan stats will appear here.
+            </p>
+            <p className="mt-3 font-mono text-xs text-sand-800">
+              Or trigger manually: <code>bun run cli:scan && bun run cli:queue</code>
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* Sync Status Card */}
       <section>

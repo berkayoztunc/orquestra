@@ -684,4 +684,16 @@ export async function getCandidateStats(): Promise<{ stats: CandidateStats }> {
   return res.data
 }
 
+export interface ScanMetadata {
+  programs_found: number
+  queued: number
+  skipped: number
+  scanned_at: string
+}
+
+export async function getScanMetadata(): Promise<{ metadata: ScanMetadata | null }> {
+  const res = await api.get('/admin/sync/scan-metadata')
+  return res.data
+}
+
 export default api

@@ -36,6 +36,10 @@ export interface CategorizationResult {
   category: ProgramCategory
   tags: string[]
   aliases: string[]
+  /** Human-readable display name (title-cased, spaces). AI-generated; falls back to title-cased IDL name. */
+  display_name: string
+  /** One or two sentence description of what the program does. AI-generated; empty string on failure. */
+  short_description: string
 }
 
 /**
@@ -69,11 +73,13 @@ export async function categorizeProgramWithAI(
 Rules:
 - Reply ONLY with a JSON object — no markdown, no explanation.
 - category: must be one of the taxonomy values listed above.
-- tags: 3-7 lowercase hyphenated keywords that best describe what the program does (e.g. "swap", "liquidity-pool", "yield-farming"). Focus on technical function.
-- aliases: 0-4 common short names or abbreviations for this program (e.g. "ray" for Raydium). Omit if unknown.
+- display_name: a clean, human-readable title for the program (2-4 words, Title Case, no "Program" suffix unless essential). Convert snake_case/camelCase to words. E.g. "my_swap_program" → "My Swap". Max 40 chars.
+- short_description: 1-2 sentences describing what the program does for users. Be specific and factual. Max 200 chars.
+- tags: 3-7 lowercase hyphenated keywords describing technical function (e.g. "swap", "liquidity-pool", "yield-farming").
+- aliases: 0-4 common short names or abbreviations for this program. Omit if unknown.
 
 Response format (strict JSON):
-{"category":"<one taxonomy value>","tags":["tag1","tag2"],"aliases":["alias1"]}`
+{"category":"<one taxonomy value>","display_name":"My Program","short_description":"A program that does X.","tags":["tag1","tag2"],"aliases":["alias1"]}`
 
   const userMessage = `Classify this Solana program:\n\n${programContext}`
 
@@ -99,19 +105,41 @@ Response format (strict JSON):
 
     const parsed = JSON.parse(jsonMatch[0]) as {
       category?: unknown
+      display_name?: unknown
+      short_description?: unknown
       tags?: unknown
       aliases?: unknown
     }
 
     const category = validateCategory(parsed.category)
+    const display_name = normalizeDisplayName(parsed.display_name, input.name)
+    const short_description = typeof parsed.short_description === 'string'
+      ? parsed.short_description.slice(0, 200).trim()
+      : ''
     const tags = normalizeStringArray(parsed.tags).slice(0, 10)
     const aliases = normalizeStringArray(parsed.aliases).slice(0, 5)
 
-    return { category, tags, aliases }
+    return { category, display_name, short_description, tags, aliases }
   } catch (err) {
     console.error('[ai-categorization] Error calling Workers AI:', err)
-    return fallback()
+    return fallback(input.name)
   }
+}
+
+/** Convert a raw IDL name (snake_case / camelCase) to a readable Title Case string */
+export function toTitleCase(name: string): string {
+  return name
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim()
+}
+
+function normalizeDisplayName(value: unknown, fallbackName: string): string {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim().slice(0, 40)
+  }
+  return toTitleCase(fallbackName).slice(0, 40)
 }
 
 function validateCategory(value: unknown): ProgramCategory {
@@ -129,8 +157,14 @@ function normalizeStringArray(value: unknown): string[] {
     .filter(Boolean)
 }
 
-function fallback(): CategorizationResult {
-  return { category: 'other', tags: [], aliases: [] }
+function fallback(name?: string): CategorizationResult {
+  return {
+    category: 'other',
+    display_name: name ? toTitleCase(name).slice(0, 40) : '',
+    short_description: '',
+    tags: [],
+    aliases: [],
+  }
 }
 
 /**

@@ -423,4 +423,25 @@ app.get('/sync/candidates', async (c) => {
   }
 })
 
+/**
+ * GET /api/admin/sync/scan-metadata
+ *
+ * Returns the most recent daily scan summary written by GitHub Actions
+ * (via POST /api/ingest/scan-metadata). Returns null if no scan has run yet.
+ * Public read — no auth required.
+ */
+app.get('/sync/scan-metadata', async (c) => {
+  const cache = (c.env as any)?.CACHE
+  if (!cache) return c.json({ metadata: null })
+
+  try {
+    const raw = await cache.get('scan:metadata', 'text')
+    if (!raw) return c.json({ metadata: null })
+    return c.json({ metadata: JSON.parse(raw) })
+  } catch (err) {
+    console.error('[admin] sync/scan-metadata error:', err)
+    return c.json({ metadata: null })
+  }
+})
+
 export default app

@@ -7,7 +7,7 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { handleMcpRequest } from './routes/mcp'
 
 // Scheduled
-import { runDailyIdlSync } from './services/idl-sync'
+import { runDailyIdlSync, runCandidatesBurst } from './services/idl-sync'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -106,6 +106,12 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runDailyIdlSync(env))
+    // 0 2 * * *  → dedicated nightly candidates burst (drain discovery queue, AI naming)
+    // 0 */6 * * * → full sync: existing projects + light candidates phase
+    if (_controller.cron === '0 2 * * *') {
+      ctx.waitUntil(runCandidatesBurst(env as any))
+    } else {
+      ctx.waitUntil(runDailyIdlSync(env as any))
+    }
   },
 }

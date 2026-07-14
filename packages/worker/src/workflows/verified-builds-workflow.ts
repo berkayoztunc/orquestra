@@ -12,20 +12,33 @@ export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const trigger = event.payload?.trigger ?? 'cron'
     console.log(`${TAG} started (trigger=${trigger})`)
 
-    // ── Step 1: fetch OSEC verified programs list ─────────────────────────────
+    // ── Step 1: fetch OSEC verified programs list (paginated) ────────────────
+    // API returns plain string arrays, 20 per page
     const { programIds, total } = await step.do(
       'fetch osec verified list',
-      { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
+      { timeout: '3 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        console.log(`${TAG} fetching ${OSEC_URL}`)
-        const res = await fetch(OSEC_URL, { headers: { Accept: 'application/json' } })
-        if (!res.ok) throw new Error(`OSEC API returned ${res.status}`)
-        const json = await res.json() as any
-        const list: string[] = (json.verified_programs ?? [])
-          .map((p: any) => p.program_id as string)
-          .filter(Boolean)
-        console.log(`${TAG} fetched ${list.length} verified programs (meta.total=${json.meta?.total ?? '?'})`)
-        return { programIds: list, total: list.length }
+        const fetchPage = async (page: number): Promise<{ ids: string[]; totalPages: number; metaTotal: number }> => {
+          const url = `${OSEC_URL}?page=${page}`
+          console.log(`${TAG} fetching ${url}`)
+          const res = await fetch(url, { headers: { Accept: 'application/json' } })
+          if (!res.ok) throw new Error(`OSEC API returned ${res.status} on page ${page}`)
+          const json = await res.json() as any
+          const ids: string[] = (json.verified_programs ?? []).filter((p: any) => typeof p === 'string' && p.length > 0)
+          return { ids, totalPages: json.meta?.total_pages ?? 1, metaTotal: json.meta?.total ?? 0 }
+        }
+
+        const first = await fetchPage(1)
+        const allIds: string[] = [...first.ids]
+
+        for (let page = 2; page <= first.totalPages; page++) {
+          const { ids } = await fetchPage(page)
+          allIds.push(...ids)
+          if (ids.length === 0) break
+        }
+
+        console.log(`${TAG} fetched ${allIds.length} verified programs across ${first.totalPages} pages (meta.total=${first.metaTotal})`)
+        return { programIds: allIds, total: allIds.length }
       },
     )
 

@@ -20,7 +20,6 @@ type ProjectRow = {
   id: string
   name: string
   program_id: string
-  slug: string
   version_id: string
   idl_json: string
   cpi_md: string | null
@@ -39,7 +38,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
       async () => {
         const { results } = await this.env.DB
           .prepare(`
-            SELECT p.id, p.name, p.program_id, p.slug,
+            SELECT p.id, p.name, p.program_id,
                    v.id AS version_id, v.idl_json, v.cpi_md
             FROM projects p
             JOIN idl_versions v ON v.project_id = p.id
@@ -79,7 +78,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
           const idl = JSON.parse(p.idl_json)
 
           // Generate docs
-          const docs = generateDocumentation(idl, p.program_id, this.env.API_BASE_URL, p.slug, p.cpi_md)
+          const docs = generateDocumentation(idl, p.program_id, this.env.API_BASE_URL, p.id, p.cpi_md)
           const docsText = docs.full ?? ''
 
           // Cache docs

@@ -33,7 +33,7 @@ export class IdlUpdateCacheWorkflow extends WorkflowEntrypoint<Env, Params> {
       async () => {
         const row = await this.env.DB
           .prepare(`
-            SELECT p.id, p.name, p.program_id, p.slug,
+            SELECT p.id, p.name, p.program_id,
                    v.id as version_id, v.idl_json, v.cpi_md, v.version
             FROM projects p
             JOIN idl_versions v ON v.project_id = p.id
@@ -46,7 +46,7 @@ export class IdlUpdateCacheWorkflow extends WorkflowEntrypoint<Env, Params> {
         if (!row) throw new Error(`project not found: ${projectId} (tried project ID and program ID)`)
         console.log(`${TAG} fetched project: ${(row as any).name} (program=${(row as any).program_id})`)
         return row as {
-          id: string; name: string; program_id: string; slug: string
+          id: string; name: string; program_id: string
           version_id: string; idl_json: string; cpi_md: string | null; version: number
         }
       },
@@ -75,7 +75,7 @@ export class IdlUpdateCacheWorkflow extends WorkflowEntrypoint<Env, Params> {
       'generate documentation',
       { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const docs = generateDocumentation(idl, project.program_id, this.env.API_BASE_URL, project.slug, project.cpi_md)
+        const docs = generateDocumentation(idl, project.program_id, this.env.API_BASE_URL, project.id, project.cpi_md)
         const text = docs.full ?? ''
         await this.env.CACHE.put(`docs:${projectId}`, text, { expirationTtl: 604800 })
         console.log(`${TAG} docs generated (${text.length} chars), written to CACHE`)

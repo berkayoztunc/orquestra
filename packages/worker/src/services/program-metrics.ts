@@ -1,7 +1,8 @@
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 1000
-// 9 bind vars per row × 50 rows = 450, under D1's real variable limit (~500)
-const ROWS_PER_BATCH = 50
+// D1 batch() takes an array of prepared statements — each has exactly 9 bind vars.
+// Chunk at 100 statements per batch() call to stay well under D1 limits.
+const STMTS_PER_BATCH = 100
 
 interface CompassProgram {
   program: string
@@ -14,6 +15,22 @@ interface CompassProgram {
   name?: string | null
   labels?: string[]
 }
+
+const UPSERT_SQL = `
+  INSERT INTO program_metrics
+    (program_id, tx_count_7d, unique_users_7d, fees_sol_7d, compute_units_7d,
+     compass_name, compass_labels, fetched_at, updated_at)
+  VALUES (?,?,?,?,?,?,?,?,?)
+  ON CONFLICT(program_id) DO UPDATE SET
+    tx_count_7d      = excluded.tx_count_7d,
+    unique_users_7d  = excluded.unique_users_7d,
+    fees_sol_7d      = excluded.fees_sol_7d,
+    compute_units_7d = excluded.compute_units_7d,
+    compass_name     = excluded.compass_name,
+    compass_labels   = excluded.compass_labels,
+    fetched_at       = excluded.fetched_at,
+    updated_at       = excluded.updated_at
+`.trim()
 
 export async function importProgramMetrics(env: { DB: any }): Promise<{ imported: number; pages: number }> {
   let page = 1
@@ -49,48 +66,29 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
 
     const fetchedAt = new Date().toISOString()
 
-    for (let i = 0; i < programs.length; i += ROWS_PER_BATCH) {
-      const slice = programs.slice(i, i + ROWS_PER_BATCH)
-      const placeholders = slice.map(() => '(?,?,?,?,?,?,?,?,?)').join(',')
-      const values: (string | number | null)[] = []
+    // Build one prepared statement per row — 9 bind vars each, no batch variable limit issue
+    const stmts = programs.map((p) => {
+      const m = p.metrics ?? {}
+      return env.DB.prepare(UPSERT_SQL).bind(
+        p.program,
+        Math.round(m.totalTransactions ?? 0),
+        Math.round(m.uniqueUsers ?? 0),
+        Number(m.totalFees ?? 0),
+        Math.round(m.totalCompute ?? 0),
+        p.name ?? null,
+        p.labels?.length ? JSON.stringify(p.labels) : null,
+        fetchedAt,
+        fetchedAt,
+      )
+    })
 
-      for (const p of slice) {
-        const m = p.metrics ?? {}
-        values.push(
-          p.program,
-          Math.round(m.totalTransactions ?? 0),
-          Math.round(m.uniqueUsers ?? 0),
-          Number(m.totalFees ?? 0),
-          Math.round(m.totalCompute ?? 0),
-          p.name ?? null,
-          p.labels?.length ? JSON.stringify(p.labels) : null,
-          fetchedAt,
-          fetchedAt,
-        )
-      }
-
+    // D1 batch() runs statements atomically; chunk to avoid batch size limits
+    for (let i = 0; i < stmts.length; i += STMTS_PER_BATCH) {
       try {
-        await env.DB
-          .prepare(
-            `INSERT INTO program_metrics
-               (program_id, tx_count_7d, unique_users_7d, fees_sol_7d, compute_units_7d,
-                compass_name, compass_labels, fetched_at, updated_at)
-             VALUES ${placeholders}
-             ON CONFLICT(program_id) DO UPDATE SET
-               tx_count_7d      = excluded.tx_count_7d,
-               unique_users_7d  = excluded.unique_users_7d,
-               fees_sol_7d      = excluded.fees_sol_7d,
-               compute_units_7d = excluded.compute_units_7d,
-               compass_name     = excluded.compass_name,
-               compass_labels   = excluded.compass_labels,
-               fetched_at       = excluded.fetched_at,
-               updated_at       = excluded.updated_at`,
-          )
-          .bind(...values)
-          .run()
-        imported += slice.length
+        await env.DB.batch(stmts.slice(i, i + STMTS_PER_BATCH))
+        imported += Math.min(STMTS_PER_BATCH, stmts.length - i)
       } catch (dbErr) {
-        console.error(`[program-metrics] DB insert failed (page ${page}, batch offset ${i}):`, dbErr)
+        console.error(`[program-metrics] batch() failed (page ${page}, stmt offset ${i}):`, dbErr)
         throw dbErr
       }
     }

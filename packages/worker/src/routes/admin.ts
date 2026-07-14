@@ -260,7 +260,12 @@ app.get('/sync/status', async (c) => {
       )
       .first()
 
-    return c.json({ run: latest ?? null })
+    const todayRow = await db
+      .prepare(`SELECT COUNT(*) AS total FROM update_logs WHERE detected_at >= date('now')`)
+      .first()
+    const updated_today = Number((todayRow as any)?.total ?? 0)
+
+    return c.json({ run: latest ?? null, updated_today })
   } catch (err) {
     console.error('[admin] sync/status error:', err)
     return c.json({ error: 'Failed to fetch sync status', details: String(err) }, 500)
@@ -534,6 +539,55 @@ app.get('/sync/verified-build-total', async (c) => {
     }
 
     return c.json({ error: 'Failed to fetch verified-build total' }, 502)
+  }
+})
+
+/**
+ * GET /api/admin/sync/program-metrics/:programId
+ *
+ * Returns Solana Compass activity metrics for a single program address.
+ * Returns null if no data has been imported for this program yet.
+ * Public read — no auth required.
+ */
+app.get('/sync/program-metrics/:programId', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  const programId = c.req.param('programId')
+  try {
+    const row = await db
+      .prepare(
+        `SELECT program_id, tx_count_7d, unique_users_7d, fees_sol_7d,
+                compute_units_7d, compass_name, compass_labels, fetched_at
+         FROM program_metrics
+         WHERE program_id = ?`,
+      )
+      .bind(programId)
+      .first()
+    return c.json({ metrics: row ?? null })
+  } catch {
+    return c.json({ metrics: null })
+  }
+})
+
+/**
+ * GET /api/admin/sync/program-metrics-status
+ *
+ * Returns total count and last fetch timestamp from the program_metrics table.
+ * Public read — no auth required.
+ */
+app.get('/sync/program-metrics-status', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const row = await db
+      .prepare(`SELECT COUNT(*) AS total, MAX(fetched_at) AS last_fetched FROM program_metrics`)
+      .first()
+    return c.json({
+      total: Number((row as any)?.total ?? 0),
+      last_fetched: (row as any)?.last_fetched ?? null,
+    })
+  } catch {
+    return c.json({ total: 0, last_fetched: null })
   }
 })
 

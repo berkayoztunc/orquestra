@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Plus, X } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import { useProjectsStore } from '../store/projects'
 import { useToast } from '../components/Toast'
@@ -38,7 +39,7 @@ export default function Dashboard(): JSX.Element {
   const privateCount = myProjects.filter((p) => !p.is_public).length
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -53,16 +54,12 @@ export default function Dashboard(): JSX.Element {
         >
           {showUpload ? (
             <>
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-5 h-5" />
               Cancel
             </>
           ) : (
             <>
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="w-5 h-5" />
               Upload IDL
             </>
           )}
@@ -157,9 +154,7 @@ export default function Dashboard(): JSX.Element {
               onClick={() => setShowUpload(true)}
               className="btn-primary inline-flex items-center gap-2"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus className="w-5 h-5" />
               Upload IDL
             </button>
           </div>

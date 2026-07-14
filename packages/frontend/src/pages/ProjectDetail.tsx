@@ -27,6 +27,8 @@ import {
   deleteKnownAddress,
   deleteProject,
   listPdaAccounts,
+  getProgramMetrics,
+  type ProgramMetrics,
 } from '../api/client'
 import InstructionExplorer from '../components/InstructionExplorer'
 import PDAExplorer from '../components/PDAExplorer'
@@ -83,6 +85,9 @@ export default function ProjectDetail(): JSX.Element {
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
   const [deleteError, setDeleteError] = useState('')
 
+  // Activity metrics from Solana Compass
+  const [programMetrics, setProgramMetrics] = useState<ProgramMetrics | null>(null)
+
   // Custom confirm modal state
   const [confirmModal, setConfirmModal] = useState<{
     show: boolean
@@ -97,6 +102,7 @@ export default function ProjectDetail(): JSX.Element {
   useEffect(() => {
     if (programId) {
       loadProjectByProgramId(programId)
+      getProgramMetrics(programId).then(setProgramMetrics).catch(() => {})
     }
   }, [programId, loadProjectByProgramId])
 
@@ -633,6 +639,35 @@ export default function ProjectDetail(): JSX.Element {
                 <span>Created {new Date(selectedProject.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               </div>
             </div>
+
+            {programMetrics && (
+              <div className="grid gap-2 text-xs text-sand-1200 sm:grid-cols-4">
+                <div className="flex flex-col gap-0.5 border border-border-low bg-sand-50 px-3 py-2">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">7d Transactions</span>
+                  <span className="font-mono font-semibold text-sand-1600">{programMetrics.tx_count_7d.toLocaleString()}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 border border-border-low bg-sand-50 px-3 py-2">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">7d Unique Users</span>
+                  <span className="font-mono font-semibold text-sand-1600">{programMetrics.unique_users_7d.toLocaleString()}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 border border-border-low bg-sand-50 px-3 py-2">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">7d Fees (SOL)</span>
+                  <span className="font-mono font-semibold text-sand-1600">{programMetrics.fees_sol_7d.toFixed(2)}</span>
+                </div>
+                <div className="flex flex-col gap-0.5 border border-border-low bg-sand-50 px-3 py-2">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">Activity</span>
+                  <span className="font-mono font-semibold text-sand-1600">
+                    {programMetrics.tx_count_7d > 1_000_000
+                      ? 'Very High'
+                      : programMetrics.tx_count_7d > 100_000
+                        ? 'High'
+                        : programMetrics.tx_count_7d > 10_000
+                          ? 'Medium'
+                          : 'Low'}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {selectedProject.socials && Object.values(selectedProject.socials).some(v => v) && (
               <div className="flex flex-wrap items-center gap-2">

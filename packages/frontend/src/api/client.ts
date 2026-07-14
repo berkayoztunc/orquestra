@@ -643,7 +643,7 @@ export interface DiscoveredProgram {
   tags: string | null
 }
 
-export async function getSyncStatus(): Promise<{ run: SyncRun | null }> {
+export async function getSyncStatus(): Promise<{ run: SyncRun | null; updated_today: number }> {
   const res = await api.get('/admin/sync/status')
   return res.data
 }
@@ -720,6 +720,22 @@ export interface VerifiedBuildTotal {
 export async function getVerifiedBuildTotal(): Promise<VerifiedBuildTotal> {
   const res = await api.get('/admin/sync/verified-build-total')
   return res.data
+}
+
+export interface ProgramMetrics {
+  program_id: string
+  tx_count_7d: number
+  unique_users_7d: number
+  fees_sol_7d: number
+  compute_units_7d: number
+  compass_name: string | null
+  compass_labels: string | null  // JSON array string
+  fetched_at: string
+}
+
+export async function getProgramMetrics(programId: string): Promise<ProgramMetrics | null> {
+  const res = await api.get(`/admin/sync/program-metrics/${programId}`)
+  return res.data.metrics
 }
 
 export default api

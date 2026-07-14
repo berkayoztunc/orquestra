@@ -8,6 +8,7 @@ import { handleMcpRequest } from './routes/mcp'
 
 // Scheduled
 import { runDailyIdlSync, runCandidatesBurst } from './services/idl-sync'
+import { importProgramMetrics } from './services/program-metrics'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -110,8 +111,11 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
     // 0 2 * * * and 15 * * * * → candidates burst (drain discovery queue)
     // 0 */6 * * *              → full sync: existing projects + light candidates phase
+    // 0 3 * * 1                → weekly Solana Compass program metrics import
     if (_controller.cron === '0 2 * * *' || _controller.cron === '15 * * * *') {
       ctx.waitUntil(runCandidatesBurst(env as any))
+    } else if (_controller.cron === '0 3 * * 1') {
+      ctx.waitUntil(importProgramMetrics(env as any))
     } else {
       ctx.waitUntil(runDailyIdlSync(env as any))
     }

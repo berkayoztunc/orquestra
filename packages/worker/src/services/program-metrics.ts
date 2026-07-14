@@ -1,5 +1,8 @@
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 1000
+// D1 batch() counts total bind vars across all statements in one call.
+// Limit is ~430 vars. 9 vars/row → max 47 rows. Use 40 (360 vars) to be safe.
+const BATCH_SIZE = 40
 
 interface CompassProgram {
   program: string
@@ -34,8 +37,6 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
   let imported = 0
   let pages = 0
 
-  const stmt = env.DB.prepare(UPSERT_SQL)
-
   while (true) {
     const now = new Date()
     const to = now.toISOString()
@@ -65,10 +66,11 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
 
     const fetchedAt = new Date().toISOString()
 
-    for (const p of programs) {
-      const m = p.metrics ?? {}
-      try {
-        await stmt.bind(
+    for (let i = 0; i < programs.length; i += BATCH_SIZE) {
+      const slice = programs.slice(i, i + BATCH_SIZE)
+      const stmts = slice.map((p) => {
+        const m = p.metrics ?? {}
+        return env.DB.prepare(UPSERT_SQL).bind(
           p.program,
           Math.round(m.totalTransactions ?? 0),
           Math.round(m.uniqueUsers ?? 0),
@@ -78,15 +80,18 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
           p.labels?.length ? JSON.stringify(p.labels) : null,
           fetchedAt,
           fetchedAt,
-        ).run()
-        imported++
+        )
+      })
+      try {
+        await env.DB.batch(stmts)
+        imported += slice.length
       } catch (dbErr) {
-        console.error(`[program-metrics] insert failed for ${p.program}:`, dbErr)
+        console.error(`[program-metrics] batch failed (page ${page}, offset ${i}):`, dbErr)
         throw dbErr
       }
     }
 
-    console.log(`[program-metrics] Page ${page}: inserted ${programs.length} rows (total ${imported})`)
+    console.log(`[program-metrics] Page ${page}: ${programs.length} rows (total ${imported})`)
 
     if (programs.length < PER_PAGE) break
     page++

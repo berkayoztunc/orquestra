@@ -420,44 +420,11 @@ export default function Sync(): JSX.Element {
         ) : (
           <div className="border border-border-low px-6 py-8 text-center">
             <p className="font-medium text-sand-1200">No candidates queued yet</p>
-            <p className="mt-1 text-sm text-sand-900">
-              Run <code className="font-mono">bun run cli:scan</code> then <code className="font-mono">bun run cli:queue</code> to populate the discovery queue.
-            </p>
           </div>
         )}
       </section>
 
-      {/* Footer info */}
-      <section className="border-t border-border-low pt-6 text-xs text-sand-900 space-y-1">
-        <p>
-          <span className="font-medium text-sand-1100">Sync cadence:</span> Every 6 hours via Cloudflare
-          Workers Cron (<code className="font-mono">0 */6 * * *</code>)
-        </p>
-        <p>
-          <span className="font-medium text-sand-1100">Time limit:</span> Cloudflare Workers cron
-          triggers have a 15-minute wall-clock limit. The sync stops at 12 minutes and saves a KV
-          checkpoint — the next cron run resumes from exactly where it left off.
-        </p>
-        <p>
-          <span className="font-medium text-sand-1100">IDL sources:</span> PMP (Program Metadata Program)
-          tried first, Anchor legacy account as fallback — using{' '}
-          <a
-            href="https://github.com/solana-foundation/idl"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-sand-1200"
-          >
-            @solana/idl
-          </a>
-        </p>
-        <p>
-          <span className="font-medium text-sand-1100">Bulk discovery:</span> Run{' '}
-          <code className="font-mono">bun run cli:scan</code> to find all Solana programs, then{' '}
-          <code className="font-mono">bun run cli:queue</code> to add them to the discovery queue.
-          The cron verifies each for an on-chain IDL and auto-imports programs that have one.
-          Programs without an IDL are permanently marked <em>no_idl</em> and never imported.
-        </p>
-      </section>
+     
     </div>
   )
 }

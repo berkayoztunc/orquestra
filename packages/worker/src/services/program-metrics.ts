@@ -1,7 +1,7 @@
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 1000
-// 9 bind vars per row × 90 rows = 810, safely under D1's ~999 variable limit
-const ROWS_PER_BATCH = 90
+// 9 bind vars per row × 50 rows = 450, under D1's real variable limit (~500)
+const ROWS_PER_BATCH = 50
 
 interface CompassProgram {
   program: string

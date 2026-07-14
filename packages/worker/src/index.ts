@@ -111,10 +111,10 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
     // 0 2 * * * and 15 * * * * → candidates burst (drain discovery queue)
     // 0 */6 * * *              → full sync: existing projects + light candidates phase
-    // 0 3 * * 1                → weekly Solana Compass program metrics import
+    // 0 3 * * *                → daily Solana Compass program metrics import
     if (_controller.cron === '0 2 * * *' || _controller.cron === '15 * * * *') {
       ctx.waitUntil(runCandidatesBurst(env as any))
-    } else if (_controller.cron === '0 3 * * 1') {
+    } else if (_controller.cron === '0 3 * * *') {
       ctx.waitUntil(importProgramMetrics(env as any))
     } else {
       ctx.waitUntil(runDailyIdlSync(env as any))

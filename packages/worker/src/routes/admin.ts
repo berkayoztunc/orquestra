@@ -6,6 +6,7 @@ import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import { generateDocumentation } from '../services/doc-generator'
 import { generateId } from '../utils/id'
 import { runDailyIdlSync } from '../services/idl-sync'
+import { importProgramMetrics } from '../services/program-metrics'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -589,6 +590,22 @@ app.get('/sync/program-metrics-status', async (c) => {
   } catch {
     return c.json({ total: 0, last_fetched: null })
   }
+})
+
+/**
+ * POST /api/admin/sync/trigger-metrics
+ *
+ * Manually trigger a Solana Compass program metrics import.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-metrics', ingestKeyMiddleware, async (c) => {
+  const env = c.env
+
+  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+
+  c.executionCtx.waitUntil(importProgramMetrics({ DB: env.DB }))
+
+  return c.json({ triggered: true, message: 'Program metrics import started in background' })
 })
 
 export default app

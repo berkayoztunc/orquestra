@@ -17,6 +17,8 @@ interface Project {
   isOwner?: boolean
   socials?: Record<string, string>
   category?: string | null
+  is_verified?: number | boolean | null
+  verified_at?: string | null
 }
 
 interface UpdateLog {

@@ -19,6 +19,7 @@ type Env = {
     IDL_SYNC_WORKFLOW: any
     IDL_UPDATE_CACHE_WORKFLOW: any
     BULK_RECATEGORIZE_WORKFLOW: any
+    VERIFIED_BUILDS_WORKFLOW: any
   }
 }
 
@@ -594,6 +595,55 @@ app.post('/sync/run-metrics', ingestKeyMiddleware, async (c) => {
     return c.json({ ok: true, imported: result.imported, pages: result.pages })
   } catch (err: any) {
     return c.json({ ok: false, error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-verified-builds
+ *
+ * Triggers VerifiedBuildsWorkflow — fetches OSEC list, resets is_verified on all projects,
+ * then marks matching programs as verified in batches.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-verified-builds', ingestKeyMiddleware, async (c) => {
+  const workflow = c.env?.VERIFIED_BUILDS_WORKFLOW
+  if (!workflow) return c.json({ error: 'VERIFIED_BUILDS_WORKFLOW binding not available' }, 500)
+
+  try {
+    const instance = await workflow.create({ params: { trigger: 'manual' } })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'VerifiedBuildsWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/verified-builds-status
+ *
+ * Returns count of verified programs currently in the projects table.
+ * Public read — no auth required.
+ */
+app.get('/sync/verified-builds-status', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const row = await db
+      .prepare(
+        `SELECT
+           COUNT(*) AS total_projects,
+           SUM(CASE WHEN is_verified = 1 THEN 1 ELSE 0 END) AS verified_count,
+           MAX(verified_at) AS last_verified_at
+         FROM projects WHERE is_public = 1`,
+      )
+      .first()
+    return c.json({
+      total_projects: Number((row as any)?.total_projects ?? 0),
+      verified_count: Number((row as any)?.verified_count ?? 0),
+      last_verified_at: (row as any)?.last_verified_at ?? null,
+    })
+  } catch (err) {
+    console.error('[admin] sync/verified-builds-status error:', err)
+    return c.json({ error: 'Failed to fetch verified builds status', details: String(err) }, 500)
   }
 })
 

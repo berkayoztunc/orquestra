@@ -20,6 +20,10 @@ export interface SearchResult {
   aliases: string | null
   relevance_score: number
   match_type: 'name' | 'description' | 'category' | 'tags' | 'aliases'
+  is_verified: number | null
+  unique_users_7d: number | null
+  tx_count_7d: number | null
+  fees_sol_7d: number | null
 }
 
 interface FTSRow {
@@ -35,6 +39,10 @@ interface FTSRow {
   category: string | null
   tags: string | null
   aliases: string | null
+  is_verified: number | null
+  unique_users_7d: number | null
+  tx_count_7d: number | null
+  fees_sol_7d: number | null
 }
 
 /**
@@ -130,13 +138,18 @@ export async function searchProjects(
           u.avatar_url,
           COALESCE(pc.category, '') as category,
           COALESCE(pc.tags, '') as tags,
-          COALESCE(pc.aliases, '') as aliases
+          COALESCE(pc.aliases, '') as aliases,
+          p.is_verified,
+          pm.unique_users_7d,
+          pm.tx_count_7d,
+          pm.fees_sol_7d
         FROM projects_fts
         JOIN projects p ON projects_fts.project_id = p.id
         JOIN users u ON p.user_id = u.id
         LEFT JOIN program_categories pc ON p.id = pc.project_id
+        LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
         WHERE projects_fts MATCH ? AND (p.is_public = 1 OR p.user_id = ?)
-        ORDER BY rank ASC
+        ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, rank ASC
         LIMIT ? OFFSET ?
       `
       : `
@@ -152,13 +165,18 @@ export async function searchProjects(
           u.avatar_url,
           COALESCE(pc.category, '') as category,
           COALESCE(pc.tags, '') as tags,
-          COALESCE(pc.aliases, '') as aliases
+          COALESCE(pc.aliases, '') as aliases,
+          p.is_verified,
+          pm.unique_users_7d,
+          pm.tx_count_7d,
+          pm.fees_sol_7d
         FROM projects_fts
         JOIN projects p ON projects_fts.project_id = p.id
         JOIN users u ON p.user_id = u.id
         LEFT JOIN program_categories pc ON p.id = pc.project_id
+        LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
         WHERE projects_fts MATCH ? AND p.is_public = 1
-        ORDER BY rank ASC
+        ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, rank ASC
         LIMIT ? OFFSET ?
       `
 
@@ -224,10 +242,12 @@ async function fallbackLikeSearch(
     ? `SELECT p.*, u.username, u.avatar_url,
               COALESCE(pc.category, '') as category,
               COALESCE(pc.tags, '') as tags,
-              COALESCE(pc.aliases, '') as aliases
+              COALESCE(pc.aliases, '') as aliases,
+              p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
        FROM projects p
        JOIN users u ON p.user_id = u.id
        LEFT JOIN program_categories pc ON p.id = pc.project_id
+       LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
        WHERE (p.is_public = 1 OR p.user_id = ?)
          AND (
            LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
@@ -236,15 +256,17 @@ async function fallbackLikeSearch(
            OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
          )
-       ORDER BY p.updated_at DESC
+       ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
        LIMIT ? OFFSET ?`
     : `SELECT p.*, u.username, u.avatar_url,
               COALESCE(pc.category, '') as category,
               COALESCE(pc.tags, '') as tags,
-              COALESCE(pc.aliases, '') as aliases
+              COALESCE(pc.aliases, '') as aliases,
+              p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
        FROM projects p
        JOIN users u ON p.user_id = u.id
        LEFT JOIN program_categories pc ON p.id = pc.project_id
+       LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
        WHERE p.is_public = 1
          AND (
            LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
@@ -253,7 +275,7 @@ async function fallbackLikeSearch(
            OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
          )
-       ORDER BY p.updated_at DESC
+       ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
        LIMIT ? OFFSET ?`
 
   const resultParams = userId

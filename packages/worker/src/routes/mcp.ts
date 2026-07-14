@@ -112,7 +112,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
 
   server.tool(
     'search_programs',
-    'Search the orquestra registry for Solana programs. Supply either a text query (matches name/description) or a Solana programId (base58 public key). Returns a list of matching projects with their IDs, names, program IDs, and descriptions.',
+    'Search the orquestra registry for Solana programs. Supply either a text query (matches name/description/category) or a Solana programId (base58 public key). Results are sorted by weekly active users descending — prefer programs near the top as they are more widely used and validated. Each result includes weeklyUsers, weeklyTxCount, and weeklyFeesSol (7-day Solana Compass data) so you can assess program activity before interacting.',
     {
       query: z
         .string()
@@ -158,13 +158,17 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
         if (programId) {
           // Exact lookup by program ID
           const baseQuery = scopeListId
-            ? `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+            ? `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username,
+                      pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
                FROM projects p LEFT JOIN users u ON p.user_id = u.id
+               LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
                JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
                WHERE p.program_id = ? AND p.is_public = 1
                LIMIT 1`
-            : `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+            : `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username,
+                      pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
                FROM projects p LEFT JOIN users u ON p.user_id = u.id
+               LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
                WHERE p.program_id = ? AND p.is_public = 1
                LIMIT 1`
           const row = scopeListId
@@ -173,21 +177,27 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           if (row) results = [row]
         } else if (query) {
           if (scopeListId) {
-            // Scoped text search — filter FTS results by list membership
+            // Scoped text search — filter FTS results by list membership; preserve metrics from FTS
             const { results: searchResults } = await searchProjects(db, query, limit, 0)
             const projectIds = searchResults.map((r) => r.id)
             if (projectIds.length > 0) {
               const placeholders = projectIds.map(() => '?').join(',')
               const { results: scopedRows } = await db
                 ?.prepare(
-                  `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
-                   FROM projects p LEFT JOIN users u ON p.user_id = u.id
+                  `SELECT p.id FROM projects p
                    JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
                    WHERE p.id IN (${placeholders}) AND p.is_public = 1`,
                 )
                 .bind(scopeListId, ...projectIds)
                 .all()
-              results = scopedRows ?? []
+              const scopedIds = new Set((scopedRows ?? []).map((r: any) => r.id))
+              results = searchResults
+                .filter((r) => scopedIds.has(r.id))
+                .map((r) => ({
+                  id: r.id, name: r.name, program_id: r.program_id, description: r.description,
+                  updated_at: r.updated_at, username: r.username, is_verified: r.is_verified,
+                  unique_users_7d: r.unique_users_7d, tx_count_7d: r.tx_count_7d, fees_sol_7d: r.fees_sol_7d,
+                }))
             }
           } else {
             // Use FTS search for text queries
@@ -197,32 +207,42 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
               name: r.name,
               program_id: r.program_id,
               description: r.description,
-              updated_at: new Date().toISOString(),
+              updated_at: r.updated_at,
               username: r.username,
+              is_verified: r.is_verified,
+              unique_users_7d: r.unique_users_7d,
+              tx_count_7d: r.tx_count_7d,
+              fees_sol_7d: r.fees_sol_7d,
             }))
           }
         } else {
           if (scopeListId) {
-            // Return all programs in the scoped list
+            // Return all programs in the scoped list, sorted by usage
             const { results: rows } = await db
               ?.prepare(
-                `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+                `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username,
+                        pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
                  FROM projects p LEFT JOIN users u ON p.user_id = u.id
+                 LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
                  JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
                  WHERE p.is_public = 1
-                 ORDER BY pli.added_at DESC LIMIT ?`,
+                 ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, pli.added_at DESC
+                 LIMIT ?`,
               )
               .bind(scopeListId, limit)
               .all()
             results = rows ?? []
           } else {
-            // Return recent public projects
+            // Return most-used public programs
             const { results: rows } = await db
               ?.prepare(
-                `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username
+                `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username,
+                        pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
                  FROM projects p LEFT JOIN users u ON p.user_id = u.id
+                 LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
                  WHERE p.is_public = 1
-                 ORDER BY p.updated_at DESC LIMIT ?`,
+                 ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
+                 LIMIT ?`,
               )
               .bind(limit)
               .all()
@@ -234,15 +254,19 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           return { content: [{ type: 'text', text: 'No programs found matching your query.' }] }
         }
 
-        const lines = results.map(
-          (r: any) =>
-            `- **${r.name}** (projectId: \`${r.id}\`)\n  Program: \`${r.program_id}\`${r.description ? `\n  ${r.description}` : ''}${r.username ? `\n  Author: ${r.username}` : ''}`,
-        )
+        const lines = results.map((r: any) => {
+          const verified = r.is_verified ? ' ✓ verified build' : ''
+          const users = r.unique_users_7d != null ? ` · ${Number(r.unique_users_7d).toLocaleString()} weekly users` : ''
+          const txs = r.tx_count_7d != null ? ` · ${Number(r.tx_count_7d).toLocaleString()} weekly txs` : ''
+          const fees = r.fees_sol_7d != null && r.fees_sol_7d > 0 ? ` · ${Number(r.fees_sol_7d).toFixed(2)} SOL fees` : ''
+          const usage = users || txs ? `\n  Usage (7d):${users}${txs}${fees}` : ''
+          return `- **${r.name}**${verified} (projectId: \`${r.id}\`)\n  Program: \`${r.program_id}\`${r.description ? `\n  ${r.description}` : ''}${usage}${r.username ? `\n  Author: ${r.username}` : ''}`
+        })
         return {
           content: [
             {
               type: 'text',
-              text: `Found ${results.length} program(s):\n\n${lines.join('\n\n')}`,
+              text: `Found ${results.length} program(s) — sorted by weekly active users:\n\n${lines.join('\n\n')}`,
             },
           ],
         }

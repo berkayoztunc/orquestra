@@ -72,6 +72,13 @@ name = "bulk-recategorize"
 binding = "BULK_RECATEGORIZE_WORKFLOW"
 class_name = "BulkRecategorizeWorkflow"
 
+# Workflow: weekly OSEC verified build sync — sets is_verified on projects
+[[workflows]]
+name = "verified-builds"
+binding = "VERIFIED_BUILDS_WORKFLOW"
+class_name = "VerifiedBuildsWorkflow"
+schedules = ["0 4 * * 1"]
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -124,6 +131,12 @@ class_name = "IdlUpdateCacheWorkflow"
 name = "bulk-recategorize-prod"
 binding = "BULK_RECATEGORIZE_WORKFLOW"
 class_name = "BulkRecategorizeWorkflow"
+
+[[env.production.workflows]]
+name = "verified-builds-prod"
+binding = "VERIFIED_BUILDS_WORKFLOW"
+class_name = "VerifiedBuildsWorkflow"
+schedules = ["0 4 * * 1"]
 
 # Environment: Development
 [env.development]

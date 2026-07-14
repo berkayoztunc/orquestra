@@ -1,8 +1,5 @@
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 1000
-// D1 batch() takes an array of prepared statements — each has exactly 9 bind vars.
-// Chunk at 100 statements per batch() call to stay well under D1 limits.
-const STMTS_PER_BATCH = 100
 
 interface CompassProgram {
   program: string
@@ -37,6 +34,8 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
   let imported = 0
   let pages = 0
 
+  const stmt = env.DB.prepare(UPSERT_SQL)
+
   while (true) {
     const now = new Date()
     const to = now.toISOString()
@@ -66,37 +65,33 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
 
     const fetchedAt = new Date().toISOString()
 
-    // Build one prepared statement per row — 9 bind vars each, no batch variable limit issue
-    const stmts = programs.map((p) => {
+    for (const p of programs) {
       const m = p.metrics ?? {}
-      return env.DB.prepare(UPSERT_SQL).bind(
-        p.program,
-        Math.round(m.totalTransactions ?? 0),
-        Math.round(m.uniqueUsers ?? 0),
-        Number(m.totalFees ?? 0),
-        Math.round(m.totalCompute ?? 0),
-        p.name ?? null,
-        p.labels?.length ? JSON.stringify(p.labels) : null,
-        fetchedAt,
-        fetchedAt,
-      )
-    })
-
-    // D1 batch() runs statements atomically; chunk to avoid batch size limits
-    for (let i = 0; i < stmts.length; i += STMTS_PER_BATCH) {
       try {
-        await env.DB.batch(stmts.slice(i, i + STMTS_PER_BATCH))
-        imported += Math.min(STMTS_PER_BATCH, stmts.length - i)
+        await stmt.bind(
+          p.program,
+          Math.round(m.totalTransactions ?? 0),
+          Math.round(m.uniqueUsers ?? 0),
+          Number(m.totalFees ?? 0),
+          Math.round(m.totalCompute ?? 0),
+          p.name ?? null,
+          p.labels?.length ? JSON.stringify(p.labels) : null,
+          fetchedAt,
+          fetchedAt,
+        ).run()
+        imported++
       } catch (dbErr) {
-        console.error(`[program-metrics] batch() failed (page ${page}, stmt offset ${i}):`, dbErr)
+        console.error(`[program-metrics] insert failed for ${p.program}:`, dbErr)
         throw dbErr
       }
     }
+
+    console.log(`[program-metrics] Page ${page}: inserted ${programs.length} rows (total ${imported})`)
 
     if (programs.length < PER_PAGE) break
     page++
   }
 
-  console.log(`[program-metrics] Imported ${imported} rows across ${pages} pages`)
+  console.log(`[program-metrics] Done: ${imported} rows across ${pages} pages`)
   return { imported, pages }
 }

@@ -595,7 +595,7 @@ app.get('/sync/program-metrics-status', async (c) => {
 /**
  * POST /api/admin/sync/trigger-metrics
  *
- * Manually trigger a Solana Compass program metrics import.
+ * Manually trigger a Solana Compass program metrics import (background).
  * Auth: X-Ingest-Key header required.
  */
 app.post('/sync/trigger-metrics', ingestKeyMiddleware, async (c) => {
@@ -606,6 +606,36 @@ app.post('/sync/trigger-metrics', ingestKeyMiddleware, async (c) => {
   c.executionCtx.waitUntil(importProgramMetrics({ DB: env.DB }))
 
   return c.json({ triggered: true, message: 'Program metrics import started in background' })
+})
+
+/**
+ * POST /api/admin/sync/run-metrics
+ *
+ * Synchronous import — awaits completion and returns result.
+ * Blocks until all pages fetched and inserted (~30s for 4000 programs).
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/run-metrics', ingestKeyMiddleware, async (c) => {
+  const env = c.env
+
+  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+
+  // Verify table exists before starting
+  try {
+    await env.DB.prepare(`SELECT 1 FROM program_metrics LIMIT 1`).first()
+  } catch (tableErr: any) {
+    return c.json({
+      error: 'program_metrics table missing — run migration 020 first',
+      detail: String(tableErr?.message ?? tableErr),
+    }, 500)
+  }
+
+  try {
+    const result = await importProgramMetrics({ DB: env.DB })
+    return c.json({ ok: true, imported: result.imported, pages: result.pages })
+  } catch (err: any) {
+    return c.json({ ok: false, error: String(err?.message ?? err) }, 500)
+  }
 })
 
 export default app

@@ -16,6 +16,7 @@ export { IdlSyncWorkflow } from './workflows/idl-sync-workflow'
 export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
 export { BulkRecategorizeWorkflow } from './workflows/bulk-recategorize-workflow'
 export { VerifiedBuildsWorkflow } from './workflows/verified-builds-workflow'
+export { VerifiedAnalysisWorkflow } from './workflows/verified-analysis-workflow'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -63,6 +64,7 @@ type Env = {
     IDL_UPDATE_CACHE_WORKFLOW: any
     BULK_RECATEGORIZE_WORKFLOW: any
     VERIFIED_BUILDS_WORKFLOW: any
+    VERIFIED_ANALYSIS_WORKFLOW: any
   }
 }
 

@@ -20,6 +20,7 @@ type Env = {
     IDL_UPDATE_CACHE_WORKFLOW: any
     BULK_RECATEGORIZE_WORKFLOW: any
     VERIFIED_BUILDS_WORKFLOW: any
+    VERIFIED_ANALYSIS_WORKFLOW: any
   }
 }
 
@@ -595,6 +596,50 @@ app.post('/sync/run-metrics', ingestKeyMiddleware, async (c) => {
     return c.json({ ok: true, imported: result.imported, pages: result.pages })
   } catch (err: any) {
     return c.json({ ok: false, error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-verified-analysis
+ *
+ * Triggers VerifiedAnalysisWorkflow — generates AI docs + analysis for every
+ * verified program that has an IDL but no ai_analyses row yet.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-verified-analysis', ingestKeyMiddleware, async (c) => {
+  const workflow = c.env?.VERIFIED_ANALYSIS_WORKFLOW
+  if (!workflow) return c.json({ error: 'VERIFIED_ANALYSIS_WORKFLOW binding not available' }, 500)
+
+  try {
+    const instance = await workflow.create({ params: { trigger: 'admin' } })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'VerifiedAnalysisWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/verified-analysis-queue
+ *
+ * Returns count of verified programs that still need AI analysis.
+ * Public read — no auth required.
+ */
+app.get('/sync/verified-analysis-queue', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const row = await db
+      .prepare(`
+        SELECT COUNT(DISTINCT p.id) AS pending
+        FROM projects p
+        JOIN idl_versions v ON v.project_id = p.id
+        LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+        WHERE p.is_verified = 1 AND p.is_public = 1 AND aa.id IS NULL
+      `)
+      .first()
+    return c.json({ pending: Number((row as any)?.pending ?? 0) })
+  } catch (err) {
+    return c.json({ error: String(err) }, 500)
   }
 })
 

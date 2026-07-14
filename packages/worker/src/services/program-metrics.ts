@@ -1,8 +1,6 @@
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
-const PER_PAGE = 1000
-// D1 batch() counts total bind vars across all statements in one call.
-// Limit is ~430 vars. 9 vars/row → max 47 rows. Use 40 (360 vars) to be safe.
-const BATCH_SIZE = 40
+const PER_PAGE = 500  // Compass API hard cap per page
+const BATCH_SIZE = 40 // D1 batch() limit: ~430 vars total; 9 vars/row → max 47, use 40
 
 interface CompassProgram {
   program: string
@@ -37,15 +35,11 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
   let imported = 0
   let pages = 0
 
-  while (true) {
-    const now = new Date()
-    const to = now.toISOString()
-    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const fetchedAt = new Date().toISOString()
 
+  while (true) {
     const url =
-      `${COMPASS_BASE}?range=7d&interval=1d` +
-      `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-      `&sortBy=tx_count&sortDir=desc&page=${page}&per_page=${PER_PAGE}`
+      `${COMPASS_BASE}?range=7d&sortBy=tx_count&sortDir=desc&page=${page}&per_page=${PER_PAGE}`
 
     let programs: CompassProgram[]
     try {
@@ -63,8 +57,6 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
 
     pages++
     if (programs.length === 0) break
-
-    const fetchedAt = new Date().toISOString()
 
     for (let i = 0; i < programs.length; i += BATCH_SIZE) {
       const slice = programs.slice(i, i + BATCH_SIZE)

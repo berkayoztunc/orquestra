@@ -79,6 +79,12 @@ binding = "VERIFIED_BUILDS_WORKFLOW"
 class_name = "VerifiedBuildsWorkflow"
 schedules = ["0 4 * * 1"]
 
+# Workflow: generate AI analysis for verified programs that have IDL but no analysis yet
+[[workflows]]
+name = "verified-analysis"
+binding = "VERIFIED_ANALYSIS_WORKFLOW"
+class_name = "VerifiedAnalysisWorkflow"
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -137,6 +143,11 @@ name = "verified-builds-prod"
 binding = "VERIFIED_BUILDS_WORKFLOW"
 class_name = "VerifiedBuildsWorkflow"
 schedules = ["0 4 * * 1"]
+
+[[env.production.workflows]]
+name = "verified-analysis-prod"
+binding = "VERIFIED_ANALYSIS_WORKFLOW"
+class_name = "VerifiedAnalysisWorkflow"
 
 # Environment: Development
 [env.development]

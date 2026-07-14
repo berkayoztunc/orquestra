@@ -1,7 +1,7 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
-const PER_PAGE = 1000
+const PER_PAGE = 500
 const TAG = '[program-metrics-workflow]'
 
 type Env = {
@@ -42,85 +42,83 @@ export class ProgramMetricsWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(_event: WorkflowEvent<Params>, step: WorkflowStep) {
     console.log(`${TAG} workflow started`)
 
-    // Step 1: discover time window and total page count
-    const { totalPages, from, to } = await step.do(
+    const fetchedAt = new Date().toISOString()
+
+    // Step 1: fetch page 1 to discover totalPages (API caps per_page at 500)
+    const { totalPages, firstPagePrograms } = await step.do(
       'discover pages',
       { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const now = new Date()
-        const to = now.toISOString()
-        const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
-        const url =
-          `${COMPASS_BASE}?range=7d&interval=1d` +
-          `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-          `&sortBy=tx_count&sortDir=desc&page=1&per_page=${PER_PAGE}`
-
-        console.log(`${TAG} fetching page 1 to discover total pages`)
+        const url = `${COMPASS_BASE}?range=7d&sortBy=tx_count&sortDir=desc&page=1&per_page=${PER_PAGE}`
+        console.log(`${TAG} fetching page 1 (per_page=${PER_PAGE})`)
         const res = await fetch(url, { headers: { Accept: 'application/json' } })
-        if (!res.ok) {
-          console.error(`${TAG} Compass API returned ${res.status} on discovery`)
-          throw new Error(`Compass API returned ${res.status}`)
-        }
+        if (!res.ok) throw new Error(`Compass API returned ${res.status} on discovery`)
         const json = await res.json() as any
-        const totalPages = (json.totalPages as number) ?? 1
-        const totalPrograms = (json.totalPrograms as number) ?? 0
-        console.log(`${TAG} discovered ${totalPages} pages, ${totalPrograms} total programs, window ${from} → ${to}`)
-        return { totalPages, from, to }
+        const totalPages = Math.max(1, Number(json.totalPages ?? json.total_pages ?? 1))
+        const totalPrograms = Number(json.totalPrograms ?? json.total_programs ?? 0)
+        const programs: CompassProgram[] = json.programs ?? []
+        console.log(`${TAG} page 1: ${programs.length} programs, totalPages=${totalPages}, totalPrograms=${totalPrograms}`)
+        return { totalPages, firstPagePrograms: programs }
       },
     )
 
-    // Steps 2..N: one durable step per page — each inserts up to 1000 rows individually
-    let imported = 0
-    for (let page = 1; page <= totalPages; page++) {
+    // Insert page 1 data immediately
+    const insertPage = async (programs: CompassProgram[], pageLabel: string): Promise<number> => {
+      const stmt = this.env.DB.prepare(UPSERT_SQL)
+      let inserted = 0
+      for (const p of programs) {
+        const m = p.metrics ?? {}
+        try {
+          await stmt.bind(
+            p.program,
+            Math.round(m.totalTransactions ?? 0),
+            Math.round(m.uniqueUsers ?? 0),
+            Number(m.totalFees ?? 0),
+            Math.round(m.totalCompute ?? 0),
+            p.name ?? null,
+            p.labels?.length ? JSON.stringify(p.labels) : null,
+            fetchedAt,
+            fetchedAt,
+          ).run()
+          inserted++
+        } catch (dbErr) {
+          console.error(`${TAG} DB insert failed (${pageLabel}) for ${p.program}:`, dbErr)
+          throw dbErr
+        }
+      }
+      console.log(`${TAG} ${pageLabel}: inserted ${inserted}/${programs.length} rows`)
+      return inserted
+    }
+
+    let imported = await step.do(
+      `insert page 1 of ${totalPages}`,
+      { timeout: '3 minutes', retries: { limit: 2, delay: 10000, backoff: 'exponential' } },
+      () => insertPage(firstPagePrograms, `page 1/${totalPages}`),
+    )
+
+    // Steps for pages 2..N
+    for (let page = 2; page <= totalPages; page++) {
       const count = await step.do(
         `import page ${page} of ${totalPages}`,
         { timeout: '3 minutes', retries: { limit: 3, delay: 10000, backoff: 'exponential' } },
         async () => {
-          const url =
-            `${COMPASS_BASE}?range=7d&interval=1d` +
-            `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-            `&sortBy=tx_count&sortDir=desc&page=${page}&per_page=${PER_PAGE}`
-
+          const url = `${COMPASS_BASE}?range=7d&sortBy=tx_count&sortDir=desc&page=${page}&per_page=${PER_PAGE}`
           console.log(`${TAG} fetching page ${page}/${totalPages}`)
           const res = await fetch(url, { headers: { Accept: 'application/json' } })
-          if (!res.ok) {
-            console.error(`${TAG} Compass API page ${page} returned ${res.status}`)
-            throw new Error(`Compass API page ${page} returned ${res.status}`)
-          }
+          if (!res.ok) throw new Error(`Compass API page ${page} returned ${res.status}`)
           const json = await res.json() as any
           const programs: CompassProgram[] = json.programs ?? []
-          console.log(`${TAG} page ${page}: got ${programs.length} programs, inserting...`)
-
-          const stmt = this.env.DB.prepare(UPSERT_SQL)
-          let inserted = 0
-          for (const p of programs) {
-            const m = p.metrics ?? {}
-            try {
-              await stmt.bind(
-                p.program,
-                Math.round(m.totalTransactions ?? 0),
-                Math.round(m.uniqueUsers ?? 0),
-                Number(m.totalFees ?? 0),
-                Math.round(m.totalCompute ?? 0),
-                p.name ?? null,
-                p.labels?.length ? JSON.stringify(p.labels) : null,
-                to,
-                to,
-              ).run()
-              inserted++
-            } catch (dbErr) {
-              console.error(`${TAG} DB insert failed for ${p.program}:`, dbErr)
-              throw dbErr
-            }
+          if (programs.length === 0) {
+            console.log(`${TAG} page ${page}: empty — stopping early`)
+            return 0
           }
-
-          console.log(`${TAG} page ${page}: inserted ${inserted}/${programs.length} rows`)
-          return inserted
+          return insertPage(programs, `page ${page}/${totalPages}`)
         },
       )
 
       imported += count
-      console.log(`${TAG} progress: ${imported} total rows inserted (page ${page}/${totalPages} done)`)
+      console.log(`${TAG} progress: ${imported} total rows (page ${page}/${totalPages} done)`)
+      if (count === 0) break
     }
 
     console.log(`${TAG} workflow complete — ${imported} rows across ${totalPages} pages`)

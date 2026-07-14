@@ -17,7 +17,7 @@ export interface SyncEnv {
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
 }
 
-interface ProjectRow {
+export interface ProjectRow {
   id: string
   program_id: string
   name: string
@@ -414,7 +414,7 @@ async function processOneCandidate(
  *  - No IDL:
  *      mark 'no_idl', set recheck_after = +30 days
  */
-async function processCandidates(
+export async function processCandidates(
   db: D1Database,
   rpcUrls: string[],
   ai: any,
@@ -502,6 +502,60 @@ async function processCandidates(
  * focuses entirely on draining the discovery queue with a higher limit.
  * AI generates human-readable names + descriptions for all auto-imported programs.
  */
+
+export interface SyncBatchResult {
+  updated: number
+  unchanged: number
+  skipped: number
+  errors: number
+  categorized: number
+}
+
+/**
+ * Sync a batch of projects concurrently and return aggregate counts.
+ * Used by IdlSyncWorkflow — each workflow step calls this for its slice.
+ */
+export async function syncProjectBatch(
+  env: SyncEnv,
+  projects: ProjectRow[],
+): Promise<SyncBatchResult> {
+  const rpcUrls = buildMainnetRpcUrlList(env)
+  let updated = 0, unchanged = 0, skipped = 0, errors = 0, categorized = 0, aiCallCount = 0
+
+  const results = await Promise.allSettled(
+    projects.map((p) => syncProject(env.DB, env.CACHE, rpcUrls, p)),
+  )
+
+  for (const r of results) {
+    if (r.status === 'rejected') { errors++; continue }
+    const sr = r.value
+    if (sr.status === 'updated') {
+      updated++
+      if (sr.isFirstVersion && env.AI && aiCallCount < 50 && sr.idl) {
+        try {
+          const instructions = extractInstructionNames(sr.idl)
+          const accounts = extractAccountNames(sr.idl)
+          const cat = await categorizeProgramWithAI(env.AI, {
+            name: sr.programName,
+            programId: sr.programId,
+            instructions,
+            accounts,
+          })
+          await setCategoryAndAliases(env.DB, sr.projectId, cat.category, cat.tags, cat.aliases)
+          aiCallCount++
+          categorized++
+        } catch { /* non-fatal */ }
+      }
+    } else if (sr.status === 'unchanged') {
+      unchanged++
+    } else {
+      skipped++
+    }
+  }
+
+  return { updated, unchanged, skipped, errors, categorized }
+}
+
 export async function runCandidatesBurst(env: SyncEnv): Promise<void> {
   const rpcUrls = buildMainnetRpcUrlList(env)
   const wallStart = Date.now()

@@ -1,10 +1,5 @@
 import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
-import { setCategoryAndAliases } from '../services/search'
-import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
-import { generateDocumentation } from '../services/doc-generator'
-import { generateId } from '../utils/id'
 import { runDailyIdlSync } from '../services/idl-sync'
 import { importProgramMetrics } from '../services/program-metrics'
 
@@ -19,6 +14,11 @@ type Env = {
     INGEST_API_KEY: string
     SOLANA_RPC_URL: string
     SOLANA_MAINNET_RPC_URL?: string
+    PROGRAM_METRICS_WORKFLOW: any
+    AI_ANALYSIS_WORKFLOW: any
+    IDL_SYNC_WORKFLOW: any
+    IDL_UPDATE_CACHE_WORKFLOW: any
+    BULK_RECATEGORIZE_WORKFLOW: any
   }
 }
 
@@ -94,146 +94,66 @@ app.get('/analytics', async (c) => {
 /**
  * POST /api/admin/recategorize
  *
- * Retroactively AI-categorize all public projects that have no entry in
- * program_categories yet. Processing happens in the background via
- * executionCtx.waitUntil — the endpoint returns immediately with a count
- * of how many projects were queued.
- *
- * Auth: X-Ingest-Key header (reuses the existing INGEST_API_KEY secret)
+ * Triggers BulkRecategorizeWorkflow — durably categorizes all uncategorized
+ * public projects in batches of 25. Returns workflow instanceId for polling.
+ * Auth: X-Ingest-Key header required.
  */
 app.post('/recategorize', ingestKeyMiddleware, async (c) => {
-  const db = c.env?.DB
-  const ai = c.env?.AI
+  const workflow = c.env?.BULK_RECATEGORIZE_WORKFLOW
+  if (!workflow) return c.json({ error: 'BULK_RECATEGORIZE_WORKFLOW binding not available' }, 500)
 
-  if (!db) {
-    return c.json({ error: 'Database not available' }, 500)
+  try {
+    const instance = await workflow.create({ params: { trigger: 'admin' } })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'BulkRecategorizeWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
   }
-  if (!ai) {
-    return c.json({ error: 'Workers AI binding not available' }, 500)
-  }
-
-  // Fetch all projects that have no program_categories row yet.
-  // We also pull the latest IDL so we can extract instruction/account names.
-  const rows = await db
-    .prepare(
-      `SELECT
-         p.id        AS project_id,
-         p.name,
-         p.description,
-         p.program_id,
-         iv.idl_json
-       FROM projects p
-       LEFT JOIN program_categories pc ON pc.project_id = p.id
-       LEFT JOIN idl_versions iv ON iv.id = (
-         SELECT id FROM idl_versions
-         WHERE project_id = p.id
-         ORDER BY version DESC
-         LIMIT 1
-       )
-       WHERE pc.id IS NULL
-       ORDER BY p.created_at DESC
-       LIMIT 500`
-    )
-    .all()
-
-  const uncategorized = (rows.results || []) as Array<{
-    project_id: string
-    name: string
-    description: string | null
-    program_id: string
-    idl_json: string | null
-  }>
-
-  if (uncategorized.length === 0) {
-    return c.json({ queued: 0, message: 'All projects are already categorized.' })
-  }
-
-  // Fire all categorizations in the background — one at a time to respect
-  // Workers AI rate limits (sequential, not parallel).
-  c.executionCtx.waitUntil(
-    (async () => {
-      for (const row of uncategorized) {
-        try {
-          let idl: Record<string, any> = {}
-          if (row.idl_json) {
-            try { idl = JSON.parse(row.idl_json) } catch { /* ignore */ }
-          }
-
-          const result = await categorizeProgramWithAI(ai, {
-            name: row.name,
-            description: row.description,
-            programId: row.program_id,
-            instructions: extractInstructionNames(idl),
-            accounts: extractAccountNames(idl),
-          })
-
-          await setCategoryAndAliases(db, row.project_id, result.category, result.tags, result.aliases)
-        } catch (err) {
-          console.error(`[admin] Recategorize failed for project ${row.project_id}:`, err)
-        }
-      }
-    })()
-  )
-
-  return c.json({ queued: uncategorized.length })
 })
 
-// ── Regenerate AI Analysis ────────────────────────────────────────────────────
+// ── AI Analysis Workflow ──────────────────────────────────────────────────────
 
 /**
  * POST /api/admin/regenerate-analysis/:projectId
  *
- * Fetches the latest IDL version from DB, deletes the existing AI analysis,
- * and regenerates it. Returns the new analysis.
+ * Triggers the AI analysis Cloudflare Workflow for a project.
+ * Steps: fetch project → generate docs → AI analysis → categorize → invalidate cache.
+ * Returns immediately with instanceId; use /analysis/status/:instanceId to poll.
  */
 app.post('/regenerate-analysis/:projectId', ingestKeyMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
-  const db = c.env?.DB
-  const ai = c.env?.AI
+  const workflow = c.env?.AI_ANALYSIS_WORKFLOW
 
-  if (!db) return c.json({ error: 'Database not available' }, 500)
-  if (!ai) return c.json({ error: 'Workers AI binding not available' }, 500)
+  if (!workflow) return c.json({ error: 'AI_ANALYSIS_WORKFLOW binding not available' }, 500)
 
-  const project = await db
-    .prepare('SELECT name, program_id, is_public FROM projects WHERE id = ?')
-    .bind(projectId)
-    .first()
+  const body = await c.req.json().catch(() => ({})) as { force?: boolean }
+  const force = body?.force !== false // default true
 
-  if (!project) return c.json({ error: 'Project not found' }, 404)
-
-  const idlRow = await db
-    .prepare('SELECT id, idl_json, cpi_md FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1')
-    .bind(projectId)
-    .first()
-
-  if (!idlRow) return c.json({ error: 'No IDL version found for project' }, 404)
-
-  const idl = JSON.parse(idlRow.idl_json as string)
-  const apiBaseUrl = c.env?.API_BASE_URL || 'http://localhost:8787'
-
-  const docs = generateDocumentation(idl, project.program_id as string, apiBaseUrl, projectId, idlRow.cpi_md as string | null)
-
-  await db.prepare('DELETE FROM ai_analyses WHERE project_id = ?').bind(projectId).run()
-
-  const now = new Date().toISOString()
-  const analysis = await generateAndStoreAIAnalysis({
-    db,
-    ai,
-    id: generateId(),
-    projectId,
-    idlVersionId: idlRow.id as string,
-    idl,
-    docsText: docs.full,
-    programId: project.program_id as string,
-    projectName: project.name as string,
-    now,
-  })
-
-  if (c.env?.CACHE) {
-    await c.env.CACHE.delete(`docs:${projectId}`)
+  try {
+    const instance = await workflow.create({ params: { projectId, force } })
+    return c.json({ triggered: true, instanceId: instance.id, projectId })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
   }
+})
 
-  return c.json({ ok: true, projectId, analysisId: analysis.id, generatedAt: analysis.generatedAt })
+/**
+ * GET /api/admin/analysis/status/:instanceId
+ *
+ * Returns the status of a running or completed AI analysis workflow instance.
+ */
+app.get('/analysis/status/:instanceId', ingestKeyMiddleware, async (c) => {
+  const instanceId = c.req.param('instanceId')
+  const workflow = c.env?.AI_ANALYSIS_WORKFLOW
+
+  if (!workflow) return c.json({ error: 'AI_ANALYSIS_WORKFLOW binding not available' }, 500)
+
+  try {
+    const instance = await workflow.get(instanceId)
+    const status = await instance.status()
+    return c.json({ instanceId, status: status.status, output: status.output ?? null, error: status.error ?? null })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 404)
+  }
 })
 
 // ── IDL Sync Status ───────────────────────────────────────────────────────────
@@ -362,15 +282,24 @@ app.get('/sync/discovery', async (c) => {
 /**
  * POST /api/admin/sync/trigger
  *
- * Manually trigger an IDL sync run in the background.
+ * Triggers IdlSyncWorkflow — durable, retriable IDL sync for all public projects.
+ * Falls back to legacy waitUntil if IDL_SYNC_WORKFLOW binding unavailable.
  * Auth: X-Ingest-Key header required.
  */
 app.post('/sync/trigger', ingestKeyMiddleware, async (c) => {
   const env = c.env
 
-  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+  if (env?.IDL_SYNC_WORKFLOW) {
+    try {
+      const instance = await env.IDL_SYNC_WORKFLOW.create({ params: { trigger: 'manual' } })
+      return c.json({ triggered: true, instanceId: instance.id, message: 'IdlSyncWorkflow started' })
+    } catch (err: any) {
+      return c.json({ error: String(err?.message ?? err) }, 500)
+    }
+  }
 
-  // Fire sync in the background — don't block the response
+  // Legacy fallback
+  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
   c.executionCtx.waitUntil(
     runDailyIdlSync(
       {
@@ -384,8 +313,30 @@ app.post('/sync/trigger', ingestKeyMiddleware, async (c) => {
       'manual',
     ),
   )
+  return c.json({ triggered: true, message: 'IDL sync started in background (legacy)' })
+})
 
-  return c.json({ triggered: true, message: 'IDL sync started in background' })
+/**
+ * POST /api/admin/sync/trigger-update-cache/:projectId
+ *
+ * Triggers IdlUpdateCacheWorkflow for a single project — rebuilds IDL summary,
+ * docs, AI analysis, category, and clears stale CACHE keys.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-update-cache/:projectId', ingestKeyMiddleware, async (c) => {
+  const projectId = c.req.param('projectId')
+  const workflow = c.env?.IDL_UPDATE_CACHE_WORKFLOW
+  if (!workflow) return c.json({ error: 'IDL_UPDATE_CACHE_WORKFLOW binding not available' }, 500)
+
+  const body = await c.req.json().catch(() => ({})) as { force?: boolean }
+  const force = body?.force === true
+
+  try {
+    const instance = await workflow.create({ params: { projectId, force } })
+    return c.json({ triggered: true, instanceId: instance.id, projectId })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
 })
 
 // ── Candidates Queue Stats ────────────────────────────────────────────────────
@@ -595,17 +546,25 @@ app.get('/sync/program-metrics-status', async (c) => {
 /**
  * POST /api/admin/sync/trigger-metrics
  *
- * Manually trigger a Solana Compass program metrics import (background).
+ * Create a Cloudflare Workflow instance for the program metrics import.
+ * Runs durably in the background — each page is a separate step with retries.
  * Auth: X-Ingest-Key header required.
  */
 app.post('/sync/trigger-metrics', ingestKeyMiddleware, async (c) => {
   const env = c.env
 
-  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+  if (!env?.PROGRAM_METRICS_WORKFLOW) return c.json({ error: 'Workflow binding not available' }, 500)
 
-  c.executionCtx.waitUntil(importProgramMetrics({ DB: env.DB }))
-
-  return c.json({ triggered: true, message: 'Program metrics import started in background' })
+  try {
+    const instance = await env.PROGRAM_METRICS_WORKFLOW.create()
+    return c.json({
+      triggered: true,
+      instanceId: instance.id,
+      message: 'Program metrics workflow started — check status at /sync/program-metrics-status',
+    })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
 })
 
 /**

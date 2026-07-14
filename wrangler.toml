@@ -39,7 +39,38 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 binding = "AI"
 
 [triggers]
-crons = ["0 */6 * * *", "15 * * * *", "0 2 * * *", "0 3 * * *"]
+crons = ["0 */6 * * *", "15 * * * *", "0 2 * * *"]
+
+# Workflow: daily Solana Compass program metrics import (runs durably, one step per page)
+[[workflows]]
+name = "program-metrics-import"
+binding = "PROGRAM_METRICS_WORKFLOW"
+class_name = "ProgramMetricsWorkflow"
+schedules = ["0 3 * * *"]
+
+# Workflow: on-demand AI analysis (fetch project → gen docs → AI call → categorize)
+[[workflows]]
+name = "ai-analysis"
+binding = "AI_ANALYSIS_WORKFLOW"
+class_name = "AiAnalysisWorkflow"
+
+# Workflow: durable IDL sync replacing cron runDailyIdlSync (scheduled every 6h)
+[[workflows]]
+name = "idl-sync"
+binding = "IDL_SYNC_WORKFLOW"
+class_name = "IdlSyncWorkflow"
+
+# Workflow: per-project cache update after IDL change (on-demand)
+[[workflows]]
+name = "idl-update-cache"
+binding = "IDL_UPDATE_CACHE_WORKFLOW"
+class_name = "IdlUpdateCacheWorkflow"
+
+# Workflow: bulk categorize programs missing program_categories (on-demand)
+[[workflows]]
+name = "bulk-recategorize"
+binding = "BULK_RECATEGORIZE_WORKFLOW"
+class_name = "BulkRecategorizeWorkflow"
 
 # Environment: Production
 [env.production]
@@ -66,7 +97,33 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 binding = "AI"
 
 [env.production.triggers]
-crons = ["0 */6 * * *", "15 * * * *", "0 2 * * *", "0 3 * * *"]
+crons = ["0 */6 * * *", "15 * * * *", "0 2 * * *"]
+
+[[env.production.workflows]]
+name = "program-metrics-import-prod"
+binding = "PROGRAM_METRICS_WORKFLOW"
+class_name = "ProgramMetricsWorkflow"
+schedules = ["0 3 * * *"]
+
+[[env.production.workflows]]
+name = "ai-analysis-prod"
+binding = "AI_ANALYSIS_WORKFLOW"
+class_name = "AiAnalysisWorkflow"
+
+[[env.production.workflows]]
+name = "idl-sync-prod"
+binding = "IDL_SYNC_WORKFLOW"
+class_name = "IdlSyncWorkflow"
+
+[[env.production.workflows]]
+name = "idl-update-cache-prod"
+binding = "IDL_UPDATE_CACHE_WORKFLOW"
+class_name = "IdlUpdateCacheWorkflow"
+
+[[env.production.workflows]]
+name = "bulk-recategorize-prod"
+binding = "BULK_RECATEGORIZE_WORKFLOW"
+class_name = "BulkRecategorizeWorkflow"
 
 # Environment: Development
 [env.development]

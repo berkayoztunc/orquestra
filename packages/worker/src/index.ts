@@ -8,7 +8,13 @@ import { handleMcpRequest } from './routes/mcp'
 
 // Scheduled
 import { runDailyIdlSync, runCandidatesBurst } from './services/idl-sync'
-import { importProgramMetrics } from './services/program-metrics'
+
+// Workflows
+export { ProgramMetricsWorkflow } from './workflows/program-metrics-workflow'
+export { AiAnalysisWorkflow } from './workflows/ai-analysis-workflow'
+export { IdlSyncWorkflow } from './workflows/idl-sync-workflow'
+export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
+export { BulkRecategorizeWorkflow } from './workflows/bulk-recategorize-workflow'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -50,6 +56,11 @@ type Env = {
     INGEST_API_KEY: string
     AI: Ai
     AI_ANALYSIS_MODEL?: string
+    PROGRAM_METRICS_WORKFLOW: any
+    AI_ANALYSIS_WORKFLOW: any
+    IDL_SYNC_WORKFLOW: any
+    IDL_UPDATE_CACHE_WORKFLOW: any
+    BULK_RECATEGORIZE_WORKFLOW: any
   }
 }
 
@@ -111,11 +122,9 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
     // 0 2 * * * and 15 * * * * → candidates burst (drain discovery queue)
     // 0 */6 * * *              → full sync: existing projects + light candidates phase
-    // 0 3 * * *                → daily Solana Compass program metrics import
+    // 0 3 * * *                → daily metrics import (handled by workflow schedule)
     if (_controller.cron === '0 2 * * *' || _controller.cron === '15 * * * *') {
       ctx.waitUntil(runCandidatesBurst(env as any))
-    } else if (_controller.cron === '0 3 * * *') {
-      ctx.waitUntil(importProgramMetrics(env as any))
     } else {
       ctx.waitUntil(runDailyIdlSync(env as any))
     }

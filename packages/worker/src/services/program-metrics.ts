@@ -69,26 +69,30 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
         )
       }
 
-      await env.DB
-        .prepare(
-          `INSERT INTO program_metrics
-             (program_id, tx_count_7d, unique_users_7d, fees_sol_7d, compute_units_7d,
-              compass_name, compass_labels, fetched_at, updated_at)
-           VALUES ${placeholders}
-           ON CONFLICT(program_id) DO UPDATE SET
-             tx_count_7d      = excluded.tx_count_7d,
-             unique_users_7d  = excluded.unique_users_7d,
-             fees_sol_7d      = excluded.fees_sol_7d,
-             compute_units_7d = excluded.compute_units_7d,
-             compass_name     = excluded.compass_name,
-             compass_labels   = excluded.compass_labels,
-             fetched_at       = excluded.fetched_at,
-             updated_at       = excluded.updated_at`,
-        )
-        .bind(...values)
-        .run()
-
-      imported += slice.length
+      try {
+        await env.DB
+          .prepare(
+            `INSERT INTO program_metrics
+               (program_id, tx_count_7d, unique_users_7d, fees_sol_7d, compute_units_7d,
+                compass_name, compass_labels, fetched_at, updated_at)
+             VALUES ${placeholders}
+             ON CONFLICT(program_id) DO UPDATE SET
+               tx_count_7d      = excluded.tx_count_7d,
+               unique_users_7d  = excluded.unique_users_7d,
+               fees_sol_7d      = excluded.fees_sol_7d,
+               compute_units_7d = excluded.compute_units_7d,
+               compass_name     = excluded.compass_name,
+               compass_labels   = excluded.compass_labels,
+               fetched_at       = excluded.fetched_at,
+               updated_at       = excluded.updated_at`,
+          )
+          .bind(...values)
+          .run()
+        imported += slice.length
+      } catch (dbErr) {
+        console.error(`[program-metrics] DB insert failed (page ${page}, batch offset ${i}):`, dbErr)
+        throw dbErr
+      }
     }
 
     if (programs.length < PER_PAGE) break

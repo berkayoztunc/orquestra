@@ -265,10 +265,12 @@ export default function Sync(): JSX.Element {
             </p>
           </>
         ) : (
-          <EmptyState
-            title="No sync runs yet"
-            desc="The first sync will run automatically at the next 6-hour cron tick (0 */6 * * *)."
-          />
+          <div className="border border-border-low px-6 py-8 text-center">
+            <p className="font-medium text-sand-1200">No sync runs yet</p>
+            <p className="mt-1 text-sm text-sand-900">
+              First sync runs automatically at next 6-hour cron tick (<code className="font-mono">0 */6 * * *</code>).
+            </p>
+          </div>
         )}
       </section>
 
@@ -416,10 +418,12 @@ export default function Sync(): JSX.Element {
             </p>
           </>
         ) : (
-          <EmptyState
-            title="No candidates queued yet"
-            desc="Run bun run cli:scan then bun run cli:queue to populate the discovery queue."
-          />
+          <div className="border border-border-low px-6 py-8 text-center">
+            <p className="font-medium text-sand-1200">No candidates queued yet</p>
+            <p className="mt-1 text-sm text-sand-900">
+              Run <code className="font-mono">bun run cli:scan</code> then <code className="font-mono">bun run cli:queue</code> to populate the discovery queue.
+            </p>
+          </div>
         )}
       </section>
 

@@ -37,13 +37,13 @@ export class IdlUpdateCacheWorkflow extends WorkflowEntrypoint<Env, Params> {
                    v.id as version_id, v.idl_json, v.cpi_md, v.version
             FROM projects p
             JOIN idl_versions v ON v.project_id = p.id
-            WHERE p.id = ?
+            WHERE p.id = ? OR p.program_id = ?
             ORDER BY v.version DESC LIMIT 1
           `)
-          .bind(projectId)
+          .bind(projectId, projectId)
           .first()
 
-        if (!row) throw new Error(`project not found: ${projectId}`)
+        if (!row) throw new Error(`project not found: ${projectId} (tried project ID and program ID)`)
         console.log(`${TAG} fetched project: ${(row as any).name} (program=${(row as any).program_id})`)
         return row as {
           id: string; name: string; program_id: string; slug: string

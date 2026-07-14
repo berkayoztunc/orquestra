@@ -36,14 +36,14 @@ export class AiAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
                    v.id AS version_id, v.idl_json, v.cpi_md
             FROM projects p
             JOIN idl_versions v ON v.project_id = p.id
-            WHERE p.id = ?
+            WHERE p.id = ? OR p.program_id = ?
             ORDER BY v.version DESC
             LIMIT 1
           `)
-          .bind(projectId)
+          .bind(projectId, projectId)
           .first()
 
-        if (!row) throw new Error(`Project not found: ${projectId}`)
+        if (!row) throw new Error(`Project not found: ${projectId} (tried project ID and program ID)`)
 
         console.log(`${TAG} found project "${(row as any).name}" (${(row as any).program_id})`)
         return {

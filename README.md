@@ -1,6 +1,12 @@
-# Orquestra
+<p align="center">
+  <img src="packages/frontend/assets/brand/orquestra-v07/logo.png" alt="Orquestra" width="120" />
+</p>
 
-Orquestra turns Solana Anchor and Codama IDLs into hosted API, AI-ready docs, and MCP tools.
+<h1 align="center">Orquestra</h1>
+
+<p align="center">
+  Turns Solana Anchor and Codama IDLs into a hosted API, AI-ready docs, and MCP tools.
+</p>
 
 Upload an IDL once, then use Orquestra to inspect instructions, derive PDAs, decode account data, and build unsigned Solana transactions from HTTP clients or AI agents.
 
@@ -34,24 +40,17 @@ bun run dev
 - Known address notes and external API documentation for richer AI context
 - Cloudflare Workers, D1, and KV deployment
 
-## MCP Tools
+## Add the MCP Server
 
-Orquestra exposes these tools over Streamable HTTP MCP:
+Orquestra exposes `search_programs`, `list_instructions`, `build_instruction`, `simulate_instruction`, `simulate_transaction`, `list_pda_accounts`, `derive_pda`, `read_llms_txt`, `get_ai_analysis`, `fetch_pda_data`, and `get_program_data` over Streamable HTTP MCP at `https://api.orquestra.dev/mcp`. Full tool reference: [docs/mcp-tools.md](./docs/mcp-tools.md) · [live docs](https://orquestra.dev/docs/mcp).
 
-- `search_programs`
-- `list_instructions`
-- `build_instruction`
-- `simulate_instruction`
-- `list_pda_accounts`
-- `derive_pda`
-- `read_llms_txt`
-- `get_ai_analysis`
-- `fetch_pda_data`
-- `get_program_data`
+**Claude Code** — fastest via CLI:
 
-`get_program_data` wraps Solana `getProgramAccounts` for a project program ID. It supports `accountType` discriminator filters, exact `dataSize`, raw byte-offset `memcmp`, fixed-offset IDL `fieldFilters`, decoded results, and optional raw base64 output. Helius RPC URLs use `getProgramAccountsV2` automatically and return `paginationKey` for large account sets.
+```bash
+claude mcp add --transport http orquestra https://api.orquestra.dev/mcp
+```
 
-Example Claude Code config:
+**Claude Desktop / Cursor / VS Code** — add to your MCP config file:
 
 ```json
 {
@@ -63,6 +62,24 @@ Example Claude Code config:
   }
 }
 ```
+
+## Install Agent Skills
+
+The `agents` directory defines Orquestra skill contracts for agentic Solana workflows: `orquestra-researcher` → `orquestra-pda-explorer` → `orquestra-tx-builder` → `orquestra-simulator` → `orquestra-signer`. Orquestra MCP builds and simulates; signing always happens in the signer skill after explicit user approval.
+
+Install into the current project:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh)
+```
+
+Install globally for all projects:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/berkayoztunc/orquestra/main/install-skills.sh) --global
+```
+
+The installer writes agent files under `.claude/agents/`. Full skill contracts and MCP config: [docs/agent-skills.md](./docs/agent-skills.md).
 
 ## Development Commands
 

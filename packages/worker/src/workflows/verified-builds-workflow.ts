@@ -4,7 +4,7 @@ const OSEC_URL = 'https://verify.osec.io/verified-programs'
 const TAG = '[verified-builds-workflow]'
 const BATCH_SIZE = 100
 
-type Env = { DB: any }
+type Env = { DB: any; VERIFIED_ANALYSIS_WORKFLOW: any }
 type Params = { trigger?: 'cron' | 'manual' }
 
 export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
@@ -88,6 +88,20 @@ export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
       updated += count
     }
+
+    // ── Final step: trigger analysis workflow for newly verified programs ─────
+    await step.do(
+      'trigger verified analysis',
+      { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
+      async () => {
+        try {
+          await this.env.VERIFIED_ANALYSIS_WORKFLOW.create({ params: { trigger: 'cron', force: false } })
+          console.log(`${TAG} triggered VerifiedAnalysisWorkflow (force=false — new programs only)`)
+        } catch (err) {
+          console.error(`${TAG} failed to trigger VerifiedAnalysisWorkflow`, err)
+        }
+      },
+    )
 
     const result = { updated, cleared, total }
     console.log(`${TAG} complete — ${updated} programs marked verified (${cleared} cleared, ${total} in OSEC list)`)

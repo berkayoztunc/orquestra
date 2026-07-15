@@ -611,8 +611,15 @@ app.post('/sync/trigger-verified-analysis', ingestKeyMiddleware, async (c) => {
   if (!workflow) return c.json({ error: 'VERIFIED_ANALYSIS_WORKFLOW binding not available' }, 500)
 
   try {
-    const instance = await workflow.create({ params: { trigger: 'admin' } })
-    return c.json({ triggered: true, instanceId: instance.id, message: 'VerifiedAnalysisWorkflow started' })
+    const body = await c.req.json().catch(() => ({})) as { force?: boolean }
+    const force = body?.force === true
+    const instance = await workflow.create({ params: { trigger: 'admin', force } })
+    return c.json({
+      triggered: true,
+      instanceId: instance.id,
+      force,
+      message: `VerifiedAnalysisWorkflow started (force=${force})`,
+    })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)
   }

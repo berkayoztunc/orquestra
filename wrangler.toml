@@ -39,7 +39,7 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 binding = "AI"
 
 [triggers]
-crons = ["0 */6 * * *", "15 * * * *", "0 2 * * *"]
+crons = ["15 * * * *", "0 2 * * *"]
 
 # Workflow: daily Solana Compass program metrics import (runs durably, one step per page)
 [[workflows]]
@@ -54,11 +54,12 @@ name = "ai-analysis"
 binding = "AI_ANALYSIS_WORKFLOW"
 class_name = "AiAnalysisWorkflow"
 
-# Workflow: durable IDL sync replacing cron runDailyIdlSync (scheduled every 6h)
+# Workflow: durable IDL sync — replaces legacy runDailyIdlSync cron
 [[workflows]]
 name = "idl-sync"
 binding = "IDL_SYNC_WORKFLOW"
 class_name = "IdlSyncWorkflow"
+schedules = ["0 */6 * * *"]
 
 # Workflow: per-project cache update after IDL change (on-demand)
 [[workflows]]
@@ -116,7 +117,7 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 binding = "AI"
 
 [env.production.triggers]
-crons = ["0 */6 * * *", "15 * * * *", "0 2 * * *"]
+crons = ["15 * * * *", "0 2 * * *"]
 
 [[env.production.workflows]]
 name = "program-metrics-import-prod"
@@ -133,6 +134,7 @@ class_name = "AiAnalysisWorkflow"
 name = "idl-sync-prod"
 binding = "IDL_SYNC_WORKFLOW"
 class_name = "IdlSyncWorkflow"
+schedules = ["0 */6 * * *"]
 
 [[env.production.workflows]]
 name = "idl-update-cache-prod"

@@ -91,6 +91,8 @@ function detectMatchType(row: FTSRow, query: string): SearchResult['match_type']
  * Search projects with full-text search and relevance ranking.
  * Falls back to LIKE search if FTS fails or FTS index is unavailable.
  */
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
 export async function searchProjects(
   db: D1Database,
   searchQuery: string,
@@ -98,8 +100,48 @@ export async function searchProjects(
   offset: number = 0,
   userId?: string
 ): Promise<{ results: SearchResult[]; total: number }> {
-  const tokens = searchQuery
-    .trim()
+  const trimmed = searchQuery.trim()
+
+  // Fast path: exact program_id lookup (base58 Solana address)
+  if (BASE58_RE.test(trimmed)) {
+    const sql = userId
+      ? `SELECT p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at,
+                u.username, u.avatar_url,
+                COALESCE(pc.category, '') as category,
+                COALESCE(pc.tags, '') as tags,
+                COALESCE(pc.aliases, '') as aliases,
+                p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
+         FROM projects p
+         JOIN users u ON p.user_id = u.id
+         LEFT JOIN program_categories pc ON p.id = pc.project_id
+         LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
+         WHERE p.program_id = ? AND (p.is_public = 1 OR p.user_id = ?)
+         LIMIT 1`
+      : `SELECT p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at,
+                u.username, u.avatar_url,
+                COALESCE(pc.category, '') as category,
+                COALESCE(pc.tags, '') as tags,
+                COALESCE(pc.aliases, '') as aliases,
+                p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
+         FROM projects p
+         JOIN users u ON p.user_id = u.id
+         LEFT JOIN program_categories pc ON p.id = pc.project_id
+         LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
+         WHERE p.program_id = ? AND p.is_public = 1
+         LIMIT 1`
+
+    const params = userId ? [trimmed, userId] : [trimmed]
+    const row = await db.prepare(sql).bind(...params).first<FTSRow>()
+    if (row) {
+      return {
+        results: [{ ...row, rank: 0, relevance_score: 0, match_type: 'name' }],
+        total: 1,
+      }
+    }
+    // Not found by exact address — fall through to FTS
+  }
+
+  const tokens = trimmed
     .split(/\s+/)
     .filter(Boolean)
     .map(escapeToken)
@@ -219,6 +261,7 @@ async function fallbackLikeSearch(
            OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR p.program_id LIKE ? ESCAPE '\\'
          )`
     : `SELECT COUNT(*) as count FROM projects p
        LEFT JOIN program_categories pc ON p.id = pc.project_id
@@ -229,11 +272,12 @@ async function fallbackLikeSearch(
            OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR p.program_id LIKE ? ESCAPE '\\'
          )`
 
   const countParams = userId
-    ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
-    : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
+    ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
+    : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
 
   const countResult = await db.prepare(countSQL).bind(...countParams).first<{ count: number }>()
   const total = countResult?.count || 0
@@ -255,6 +299,7 @@ async function fallbackLikeSearch(
            OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR p.program_id LIKE ? ESCAPE '\\'
          )
        ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
        LIMIT ? OFFSET ?`
@@ -274,13 +319,14 @@ async function fallbackLikeSearch(
            OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
            OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+           OR p.program_id LIKE ? ESCAPE '\\'
          )
        ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
        LIMIT ? OFFSET ?`
 
   const resultParams = userId
-    ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
-    : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
+    ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
+    : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
 
   const rows = await db.prepare(resultSQL).bind(...resultParams).all<FTSRow>()
   const results = (rows.results || []).map((row) => ({

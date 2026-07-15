@@ -12,8 +12,7 @@ export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
     const trigger = event.payload?.trigger ?? 'cron'
     console.log(`${TAG} started (trigger=${trigger})`)
 
-    // ── Step 1: fetch OSEC verified programs list (paginated) ────────────────
-    // API returns plain string arrays, 20 per page
+    // ── Step 1: fetch all OSEC verified program IDs ───────────────────────────
     const { programIds, total } = await step.do(
       'fetch osec verified list',
       { timeout: '3 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
@@ -24,7 +23,9 @@ export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
           const res = await fetch(url, { headers: { Accept: 'application/json' } })
           if (!res.ok) throw new Error(`OSEC API returned ${res.status} on page ${page}`)
           const json = await res.json() as any
-          const ids: string[] = (json.verified_programs ?? []).filter((p: any) => typeof p === 'string' && p.length > 0)
+          const ids: string[] = (json.verified_programs ?? [])
+            .map((p: any) => typeof p === 'string' ? p : (p?.program_id ?? ''))
+            .filter((id: string) => id.length > 0)
           return { ids, totalPages: json.meta?.total_pages ?? 1, metaTotal: json.meta?.total ?? 0 }
         }
 
@@ -37,74 +38,103 @@ export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
           if (ids.length === 0) break
         }
 
-        console.log(`${TAG} fetched ${allIds.length} verified programs across ${first.totalPages} pages (meta.total=${first.metaTotal})`)
+        console.log(`${TAG} fetched ${allIds.length} verified program IDs (meta.total=${first.metaTotal})`)
         return { programIds: allIds, total: allIds.length }
       },
     )
 
     if (total === 0) {
-      console.log(`${TAG} empty list — aborting to avoid wiping all is_verified flags`)
-      return { updated: 0, cleared: 0, total: 0 }
+      console.log(`${TAG} empty OSEC list — aborting to avoid clearing all is_verified flags`)
+      return { marked: 0, unmarked: 0, total: 0 }
     }
 
-    // ── Step 2: clear all existing verified flags ──────────────────────────────
-    const cleared = await step.do(
-      'reset verified flags',
+    // ── Step 2: find programs to unmark (currently verified but dropped off OSEC) ──
+    // No global reset — only touch programs that actually changed.
+    const toUnmark = await step.do(
+      'find programs to unmark',
       { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const result = await this.env.DB
-          .prepare(`UPDATE projects SET is_verified = 0, verified_at = NULL WHERE is_verified = 1`)
-          .run()
-        const n = result?.meta?.changes ?? 0
-        console.log(`${TAG} cleared is_verified on ${n} project(s)`)
-        return n
+        const { results } = await this.env.DB
+          .prepare(`SELECT program_id FROM projects WHERE is_verified = 1`)
+          .all()
+        const osecSet = new Set(programIds)
+        const dropped = (results ?? [])
+          .map((r: any) => r.program_id as string)
+          .filter((id: string) => !osecSet.has(id))
+        console.log(`${TAG} ${(results ?? []).length} currently verified, ${dropped.length} dropped off OSEC list`)
+        return dropped
       },
     )
 
-    // ── Steps 3..N: batch mark verified programs ───────────────────────────────
-    const totalBatches = Math.ceil(programIds.length / BATCH_SIZE)
-    let updated = 0
+    // ── Step 3: unmark programs that dropped off OSEC list ────────────────────
+    let unmarked = 0
+    if (toUnmark.length > 0) {
+      const unmarkBatches = Math.ceil(toUnmark.length / BATCH_SIZE)
+      for (let i = 0; i < unmarkBatches; i++) {
+        const batch = toUnmark.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
+        const placeholders = batch.map(() => '?').join(', ')
 
-    for (let i = 0; i < totalBatches; i++) {
+        const count = await step.do(
+          `unmark dropped batch ${i + 1} of ${unmarkBatches}`,
+          { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
+          async () => {
+            const result = await this.env.DB
+              .prepare(`UPDATE projects SET is_verified = 0, verified_at = NULL WHERE program_id IN (${placeholders})`)
+              .bind(...batch)
+              .run()
+            const n = result?.meta?.changes ?? 0
+            console.log(`${TAG} unmark batch ${i + 1}/${unmarkBatches}: cleared ${n} program(s)`)
+            return n
+          },
+        )
+        unmarked += count
+      }
+    }
+
+    // ── Steps 4..N: mark newly verified programs (only where is_verified = 0) ─
+    // Skips programs already marked — no unnecessary writes, no blackout window.
+    const markBatches = Math.ceil(programIds.length / BATCH_SIZE)
+    let marked = 0
+
+    for (let i = 0; i < markBatches; i++) {
       const batch = programIds.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
       const placeholders = batch.map(() => '?').join(', ')
 
       const count = await step.do(
-        `mark verified batch ${i + 1} of ${totalBatches}`,
+        `mark verified batch ${i + 1} of ${markBatches}`,
         { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
         async () => {
           const result = await this.env.DB
             .prepare(
               `UPDATE projects SET is_verified = 1, verified_at = CURRENT_TIMESTAMP
-               WHERE program_id IN (${placeholders})`,
+               WHERE program_id IN (${placeholders}) AND is_verified = 0`,
             )
             .bind(...batch)
             .run()
           const n = result?.meta?.changes ?? 0
-          console.log(`${TAG} batch ${i + 1}/${totalBatches}: marked ${n} project(s) verified`)
+          if (n > 0) console.log(`${TAG} mark batch ${i + 1}/${markBatches}: ${n} new program(s) verified`)
           return n
         },
       )
-
-      updated += count
+      marked += count
     }
 
-    // ── Final step: trigger analysis workflow for newly verified programs ─────
+    // ── Final step: trigger analysis for newly verified programs ──────────────
     await step.do(
       'trigger verified analysis',
       { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
       async () => {
         try {
-          await this.env.VERIFIED_ANALYSIS_WORKFLOW.create({ params: { trigger: 'cron', force: false } })
-          console.log(`${TAG} triggered VerifiedAnalysisWorkflow (force=false — new programs only)`)
+          await this.env.VERIFIED_ANALYSIS_WORKFLOW.create({ params: { trigger: 'cron' } })
+          console.log(`${TAG} triggered VerifiedAnalysisWorkflow`)
         } catch (err) {
           console.error(`${TAG} failed to trigger VerifiedAnalysisWorkflow`, err)
         }
       },
     )
 
-    const result = { updated, cleared, total }
-    console.log(`${TAG} complete — ${updated} programs marked verified (${cleared} cleared, ${total} in OSEC list)`)
+    const result = { marked, unmarked, total }
+    console.log(`${TAG} complete — ${marked} newly verified, ${unmarked} unmarked, ${total} in OSEC list`)
     return result
   }
 }

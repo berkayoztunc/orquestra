@@ -126,13 +126,11 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
-    // 0 2 * * * and 15 * * * * → candidates burst (drain discovery queue)
-    // 0 */6 * * *              → full sync: existing projects + light candidates phase
-    // 0 3 * * *                → daily metrics import (handled by workflow schedule)
+    // 15 * * * * and 0 2 * * * → candidates burst (drain discovery queue)
+    // 0 */6 * * *              → handled by IdlSyncWorkflow schedule (not this handler)
+    // 0 3 * * *                → handled by ProgramMetricsWorkflow schedule
     if (_controller.cron === '0 2 * * *' || _controller.cron === '15 * * * *') {
       ctx.waitUntil(runCandidatesBurst(env as any))
-    } else {
-      ctx.waitUntil(runDailyIdlSync(env as any))
     }
   },
 }

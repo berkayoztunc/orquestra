@@ -133,8 +133,9 @@ export async function searchProjects(
     const params = userId ? [trimmed, userId] : [trimmed]
     const row = await db.prepare(sql).bind(...params).first<FTSRow>()
     if (row) {
+      const { rank: _rank, ...rest } = row
       return {
-        results: [{ ...row, rank: 0, relevance_score: 0, match_type: 'name' }],
+        results: [{ ...rest, relevance_score: 0, match_type: 'name' as const }],
         total: 1,
       }
     }

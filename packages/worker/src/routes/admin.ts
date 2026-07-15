@@ -22,6 +22,8 @@ type Env = {
     VERIFIED_BUILDS_WORKFLOW: any
     VERIFIED_ANALYSIS_WORKFLOW: any
     OSEC_DISCOVER_WORKFLOW: any
+    VERIFIED_MATCH_WORKFLOW: any
+    VERIFIED_IDL_IMPORT_WORKFLOW: any
   }
 }
 
@@ -755,6 +757,94 @@ app.get('/sync/osec-discover-status', async (c) => {
   } catch (err) {
     console.error('[admin] osec-discover-status error:', err)
     return c.json({ error: 'Failed to fetch OSEC discover status', details: String(err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-verified-match
+ * Triggers VerifiedMatchWorkflow — matches OSEC verified list against existing
+ * DB projects, updates is_verified flags, and triggers AI analysis for the
+ * matched set. Does not import missing programs (see verified-idl-import).
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-verified-match', ingestKeyMiddleware, async (c) => {
+  const workflow = c.env?.VERIFIED_MATCH_WORKFLOW
+  if (!workflow) return c.json({ error: 'VERIFIED_MATCH_WORKFLOW binding not available' }, 500)
+
+  try {
+    const instance = await workflow.create({ params: { trigger: 'admin' } })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'VerifiedMatchWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/verified-match-status
+ * Public read — no auth required.
+ */
+app.get('/sync/verified-match-status', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const row = await db
+      .prepare(
+        `SELECT
+           COUNT(*) AS total_projects,
+           SUM(CASE WHEN is_verified = 1 THEN 1 ELSE 0 END) AS verified_count,
+           MAX(verified_at) AS last_verified_at
+         FROM projects WHERE is_public = 1`,
+      )
+      .first()
+    return c.json({
+      total_projects: Number((row as any)?.total_projects ?? 0),
+      verified_count: Number((row as any)?.verified_count ?? 0),
+      last_verified_at: (row as any)?.last_verified_at ?? null,
+    })
+  } catch (err) {
+    console.error('[admin] sync/verified-match-status error:', err)
+    return c.json({ error: 'Failed to fetch verified match status', details: String(err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-verified-idl-import
+ * Triggers VerifiedIdlImportWorkflow — fetches on-chain IDL (RPC-throttled)
+ * for OSEC-verified programs missing from DB or missing an idl_versions row.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-verified-idl-import', ingestKeyMiddleware, async (c) => {
+  const workflow = c.env?.VERIFIED_IDL_IMPORT_WORKFLOW
+  if (!workflow) return c.json({ error: 'VERIFIED_IDL_IMPORT_WORKFLOW binding not available' }, 500)
+
+  try {
+    const instance = await workflow.create({ params: { trigger: 'admin' } })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'VerifiedIdlImportWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/verified-idl-import-status
+ * Count of verified projects still missing an idl_versions row.
+ * Public read — no auth required.
+ */
+app.get('/sync/verified-idl-import-status', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const row = await db
+      .prepare(
+        `SELECT COUNT(*) AS verified_missing_idl FROM projects p
+         LEFT JOIN idl_versions v ON v.project_id = p.id
+         WHERE p.is_verified = 1 AND v.id IS NULL`,
+      )
+      .first()
+    return c.json({ verified_missing_idl: Number((row as any)?.verified_missing_idl ?? 0) })
+  } catch (err) {
+    console.error('[admin] sync/verified-idl-import-status error:', err)
+    return c.json({ error: 'Failed to fetch verified idl import status', details: String(err) }, 500)
   }
 })
 

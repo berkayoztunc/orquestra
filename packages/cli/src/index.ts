@@ -35,6 +35,8 @@ import { scanPrograms, type ScanProgramsOptions } from './commands/scan-programs
 import { checkIdl, type CheckIdlOptions } from './commands/check-idl'
 import { analysis, type AnalysisOptions } from './commands/analysis'
 import { queuePrograms, type QueueProgramsOptions } from './commands/queue-programs'
+import { verifiedMatch, type VerifiedMatchOptions } from './commands/verified-match'
+import { verifiedIdlImport, type VerifiedIdlImportOptions } from './commands/verified-idl-import'
 import { checkVerifiedBuildBatch } from './lib/verified-build'
 import { CsvWriter } from './lib/csv'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -88,6 +90,16 @@ function parseArgs(argv: string[]): { command: string; flags: Record<string, str
       continue
     }
 
+    if (arg === '--trigger') {
+      flags['trigger'] = true
+      continue
+    }
+
+    if (arg === '--status') {
+      flags['status'] = true
+      continue
+    }
+
     if (arg.startsWith('--') && i + 1 < argv.length) {
       const key = arg.slice(2)
       flags[key] = argv[++i]
@@ -112,6 +124,8 @@ COMMANDS:
   full        Run scan + check-idl sequentially
   funnel      Run scan + verified-build gated check-idl + AI ingest
   analysis    Print summary stats from existing output CSVs (no RPC needed)
+  verified-match       Trigger/check WF1: match OSEC-verified programs against DB + AI analysis
+  verified-idl-import  Trigger/check WF2: backfill on-chain IDL for missing/IDL-less OSEC programs
 
 OPTIONS:
   --rpc-url <url>          Solana RPC endpoint (required, or SOLANA_RPC_URL env)
@@ -138,6 +152,10 @@ OPTIONS:
                           Max concurrent verified-build requests (default: 10)
   --verified-build-rps <n>
                           Max verification requests/second (default: 3)
+  --trigger                POST the admin endpoint to start verified-match / verified-idl-import
+  --status                 GET the current status/counts (no trigger)
+  --api-url <url>          Worker base URL (or ORQUESTRA_API_URL env)
+  --ingest-key <key>       Ingest key for --trigger (or ORQUESTRA_INGEST_KEY env)
   --help                   Show this help
 
 AI INGEST ENV VARS (required when --enable-ingest):
@@ -398,6 +416,46 @@ async function main() {
         batchSize: parseInt((flags['batch-size'] as string) || '500', 10),
       }
       await queuePrograms(queueOpts)
+      break
+    }
+
+    case 'verified-match': {
+      const apiUrl = (flags['api-url'] as string) || process.env.ORQUESTRA_API_URL
+      if (!apiUrl) {
+        console.error('Error: --api-url or ORQUESTRA_API_URL required')
+        process.exit(1)
+      }
+      if (!flags.trigger && !flags.status) {
+        console.error('Error: verified-match requires --trigger or --status')
+        process.exit(1)
+      }
+      const ingestKey = (flags['ingest-key'] as string) || process.env.ORQUESTRA_INGEST_KEY
+      const opts: VerifiedMatchOptions = {
+        action: flags.trigger ? 'trigger' : 'status',
+        apiUrl: apiUrl!,
+        ingestKey,
+      }
+      await verifiedMatch(opts)
+      break
+    }
+
+    case 'verified-idl-import': {
+      const apiUrl = (flags['api-url'] as string) || process.env.ORQUESTRA_API_URL
+      if (!apiUrl) {
+        console.error('Error: --api-url or ORQUESTRA_API_URL required')
+        process.exit(1)
+      }
+      if (!flags.trigger && !flags.status) {
+        console.error('Error: verified-idl-import requires --trigger or --status')
+        process.exit(1)
+      }
+      const ingestKey = (flags['ingest-key'] as string) || process.env.ORQUESTRA_INGEST_KEY
+      const opts: VerifiedIdlImportOptions = {
+        action: flags.trigger ? 'trigger' : 'status',
+        apiUrl: apiUrl!,
+        ingestKey,
+      }
+      await verifiedIdlImport(opts)
       break
     }
 

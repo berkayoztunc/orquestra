@@ -190,6 +190,84 @@ export async function queueCandidates(
   }
 }
 
+export interface WorkflowTriggerResult {
+  success: true
+  instanceId: string
+  message: string
+}
+
+export interface WorkflowTriggerError {
+  success: false
+  error: string
+  status?: number
+}
+
+export type WorkflowTriggerResponse = WorkflowTriggerResult | WorkflowTriggerError
+
+async function triggerWorkflow(path: string, opts: APIClientOptions): Promise<WorkflowTriggerResponse> {
+  const url = `${opts.baseUrl.replace(/\/$/, '')}${path}`
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000)
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'X-Ingest-Key': opts.ingestKey },
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+
+    const body = await response.json().catch(() => ({})) as any
+    if (!response.ok) {
+      return { success: false, error: body?.error ?? `HTTP ${response.status}`, status: response.status }
+    }
+    return { success: true, instanceId: body.instanceId, message: body.message ?? 'triggered' }
+  } catch (err: any) {
+    clearTimeout(timeoutId)
+    return { success: false, error: err.name === 'AbortError' ? 'Timeout' : (err.message ?? String(err)) }
+  }
+}
+
+async function getStatus<T>(baseUrl: string, path: string): Promise<T | { error: string }> {
+  const url = `${baseUrl.replace(/\/$/, '')}${path}`
+  try {
+    const response = await fetch(url)
+    const body = await response.json().catch(() => ({})) as any
+    if (!response.ok) return { error: body?.error ?? `HTTP ${response.status}` }
+    return body as T
+  } catch (err: any) {
+    return { error: err.message ?? String(err) }
+  }
+}
+
+export interface VerifiedMatchStatus {
+  total_projects: number
+  verified_count: number
+  last_verified_at: string | null
+}
+
+export interface VerifiedIdlImportStatus {
+  verified_missing_idl: number
+}
+
+/** Trigger WF1: match OSEC verified list against DB + AI analysis. */
+export async function triggerVerifiedMatch(opts: APIClientOptions): Promise<WorkflowTriggerResponse> {
+  return triggerWorkflow('/api/admin/sync/trigger-verified-match', opts)
+}
+
+export async function getVerifiedMatchStatus(baseUrl: string): Promise<VerifiedMatchStatus | { error: string }> {
+  return getStatus<VerifiedMatchStatus>(baseUrl, '/api/admin/sync/verified-match-status')
+}
+
+/** Trigger WF2: throttled on-chain IDL backfill for missing/IDL-less OSEC programs. */
+export async function triggerVerifiedIdlImport(opts: APIClientOptions): Promise<WorkflowTriggerResponse> {
+  return triggerWorkflow('/api/admin/sync/trigger-verified-idl-import', opts)
+}
+
+export async function getVerifiedIdlImportStatus(baseUrl: string): Promise<VerifiedIdlImportStatus | { error: string }> {
+  return getStatus<VerifiedIdlImportStatus>(baseUrl, '/api/admin/sync/verified-idl-import-status')
+}
+
 /**
  * Store verified-build summary so the Sync dashboard can display latest count.
  */

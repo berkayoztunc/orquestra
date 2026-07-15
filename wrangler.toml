@@ -92,6 +92,18 @@ name = "osec-discover"
 binding = "OSEC_DISCOVER_WORKFLOW"
 class_name = "OsecDiscoverWorkflow"
 
+# Workflow: match OSEC-verified programs against existing DB rows + trigger AI analysis
+[[workflows]]
+name = "verified-match"
+binding = "VERIFIED_MATCH_WORKFLOW"
+class_name = "VerifiedMatchWorkflow"
+
+# Workflow: fetch on-chain IDL (rate-limit-throttled) for OSEC-verified programs missing from DB or missing an IDL
+[[workflows]]
+name = "verified-idl-import"
+binding = "VERIFIED_IDL_IMPORT_WORKFLOW"
+class_name = "VerifiedIdlImportWorkflow"
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -161,6 +173,16 @@ class_name = "VerifiedAnalysisWorkflow"
 name = "osec-discover-prod"
 binding = "OSEC_DISCOVER_WORKFLOW"
 class_name = "OsecDiscoverWorkflow"
+
+[[env.production.workflows]]
+name = "verified-match-prod"
+binding = "VERIFIED_MATCH_WORKFLOW"
+class_name = "VerifiedMatchWorkflow"
+
+[[env.production.workflows]]
+name = "verified-idl-import-prod"
+binding = "VERIFIED_IDL_IMPORT_WORKFLOW"
+class_name = "VerifiedIdlImportWorkflow"
 
 # Environment: Development
 [env.development]

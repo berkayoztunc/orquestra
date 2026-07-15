@@ -18,6 +18,8 @@ export { BulkRecategorizeWorkflow } from './workflows/bulk-recategorize-workflow
 export { VerifiedBuildsWorkflow } from './workflows/verified-builds-workflow'
 export { VerifiedAnalysisWorkflow } from './workflows/verified-analysis-workflow'
 export { OsecDiscoverWorkflow } from './workflows/osec-discover-workflow'
+export { VerifiedMatchWorkflow } from './workflows/verified-match-workflow'
+export { VerifiedIdlImportWorkflow } from './workflows/verified-idl-import-workflow'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -67,6 +69,8 @@ type Env = {
     VERIFIED_BUILDS_WORKFLOW: any
     VERIFIED_ANALYSIS_WORKFLOW: any
     OSEC_DISCOVER_WORKFLOW: any
+    VERIFIED_MATCH_WORKFLOW: any
+    VERIFIED_IDL_IMPORT_WORKFLOW: any
   }
 }
 

@@ -85,6 +85,12 @@ name = "verified-analysis"
 binding = "VERIFIED_ANALYSIS_WORKFLOW"
 class_name = "VerifiedAnalysisWorkflow"
 
+# Workflow: discover verified programs from OSEC list and enqueue them as candidates
+[[workflows]]
+name = "osec-discover"
+binding = "OSEC_DISCOVER_WORKFLOW"
+class_name = "OsecDiscoverWorkflow"
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -148,6 +154,11 @@ schedules = ["0 4 * * 1"]
 name = "verified-analysis-prod"
 binding = "VERIFIED_ANALYSIS_WORKFLOW"
 class_name = "VerifiedAnalysisWorkflow"
+
+[[env.production.workflows]]
+name = "osec-discover-prod"
+binding = "OSEC_DISCOVER_WORKFLOW"
+class_name = "OsecDiscoverWorkflow"
 
 # Environment: Development
 [env.development]

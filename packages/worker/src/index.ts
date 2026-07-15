@@ -17,6 +17,7 @@ export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
 export { BulkRecategorizeWorkflow } from './workflows/bulk-recategorize-workflow'
 export { VerifiedBuildsWorkflow } from './workflows/verified-builds-workflow'
 export { VerifiedAnalysisWorkflow } from './workflows/verified-analysis-workflow'
+export { OsecDiscoverWorkflow } from './workflows/osec-discover-workflow'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -65,6 +66,7 @@ type Env = {
     BULK_RECATEGORIZE_WORKFLOW: any
     VERIFIED_BUILDS_WORKFLOW: any
     VERIFIED_ANALYSIS_WORKFLOW: any
+    OSEC_DISCOVER_WORKFLOW: any
   }
 }
 

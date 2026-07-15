@@ -21,6 +21,7 @@ type Env = {
     BULK_RECATEGORIZE_WORKFLOW: any
     VERIFIED_BUILDS_WORKFLOW: any
     VERIFIED_ANALYSIS_WORKFLOW: any
+    OSEC_DISCOVER_WORKFLOW: any
   }
 }
 
@@ -696,6 +697,59 @@ app.get('/sync/verified-builds-status', async (c) => {
   } catch (err) {
     console.error('[admin] sync/verified-builds-status error:', err)
     return c.json({ error: 'Failed to fetch verified builds status', details: String(err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-osec-discover
+ * Fetch all OSEC verified program IDs, enqueue new ones into program_candidates.
+ * Run IDL sync afterwards to actually import them.
+ */
+app.post('/sync/trigger-osec-discover', ingestKeyMiddleware, async (c) => {
+  const wf = c.env?.OSEC_DISCOVER_WORKFLOW
+  if (!wf) return c.json({ error: 'OSEC_DISCOVER_WORKFLOW not bound' }, 500)
+  try {
+    const instance = await wf.create({ params: { trigger: 'admin' } })
+    return c.json({ instanceId: instance.id, status: 'started', message: 'OSEC discover workflow started. Check queue status, then trigger IDL sync to import.' })
+  } catch (err) {
+    console.error('[admin] trigger-osec-discover error:', err)
+    return c.json({ error: 'Failed to start OSEC discover workflow', details: String(err) }, 500)
+  }
+})
+
+/**
+ * GET /api/admin/sync/osec-discover-status
+ * How many OSEC programs are queued as candidates vs already imported.
+ */
+app.get('/sync/osec-discover-status', async (c) => {
+  const db = c.env?.DB
+  if (!db) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const [candidateRow, projectRow] = await Promise.all([
+      db.prepare(
+        `SELECT
+           COUNT(*) AS total,
+           SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END) AS pending,
+           SUM(CASE WHEN status = 'has_idl'  THEN 1 ELSE 0 END) AS has_idl,
+           SUM(CASE WHEN status = 'no_idl'   THEN 1 ELSE 0 END) AS no_idl
+         FROM program_candidates WHERE source = 'osec'`,
+      ).first(),
+      db.prepare(
+        `SELECT COUNT(*) AS imported FROM projects WHERE is_verified = 1`,
+      ).first(),
+    ])
+    return c.json({
+      osec_candidates: {
+        total:   Number((candidateRow as any)?.total   ?? 0),
+        pending: Number((candidateRow as any)?.pending ?? 0),
+        has_idl: Number((candidateRow as any)?.has_idl ?? 0),
+        no_idl:  Number((candidateRow as any)?.no_idl  ?? 0),
+      },
+      verified_in_db: Number((projectRow as any)?.imported ?? 0),
+    })
+  } catch (err) {
+    console.error('[admin] osec-discover-status error:', err)
+    return c.json({ error: 'Failed to fetch OSEC discover status', details: String(err) }, 500)
   }
 })
 

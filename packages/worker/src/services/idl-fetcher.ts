@@ -19,7 +19,8 @@ function shouldTryNextRpc(err: unknown): boolean {
     message.includes('Too Many Requests') ||
     message.includes('fetch failed') ||
     message.includes('network') ||
-    message.includes('timed out')
+    message.includes('timed out') ||
+    /HTTP [45]\d\d/.test(message) // retry on any 4xx/5xx HTTP error
 }
 
 // ── Base58 helpers (self-contained) ──────────────────
@@ -270,21 +271,27 @@ export async function fetchAnchorIDLFromChain(
   rpcUrl: string | string[],
 ): Promise<{ idl: any; idlJson: string } | null> {
   const rpcUrls = normalizeRpcUrls(rpcUrl)
+
+  // Derive both old-style (createWithSeed) and new-style (PDA seeds) addresses
+  // Old-style: base=PDA([],program), createWithSeed(base,"anchor:idl",program)  — Anchor <0.30
+  // New-style: PDA(["anchor:idl", program], program)                             — Anchor ≥0.30
+  const [oldAddress, newAddress] = await Promise.all([
+    getIdlAccountAddress(programId),
+    getAnchorIdlPdaAddress(programId),
+  ])
+
   for (const url of rpcUrls) {
     try {
-      // 1. Compute IDL account address
-      const idlAddress = await getIdlAccountAddress(programId)
-
-      // 2. Fetch account data via RPC
+      // Check both addresses in one RPC call
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
-          method: 'getAccountInfo',
+          method: 'getMultipleAccounts',
           params: [
-            idlAddress,
+            [oldAddress, newAddress],
             { encoding: 'base64', commitment: 'confirmed' },
           ],
         }),
@@ -295,46 +302,40 @@ export async function fetchAnchorIDLFromChain(
       }
 
       const rpcResult = await response.json() as any
+      const accounts: (any | null)[] = rpcResult?.result?.value ?? []
 
-      if (!rpcResult.result?.value?.data) {
-        return null // No IDL account found
+      // Try each account in order (old-style first, then new-style)
+      for (const account of accounts) {
+        if (!account?.data?.[0]) continue
+
+        const rawBytes = Uint8Array.from(atob(account.data[0]), c => c.charCodeAt(0))
+
+        // Layout: [8 discriminator][32 authority][4 data_len LE][...compressed IDL...]
+        if (rawBytes.length < 44) continue
+
+        const dataOffset = 40 // 8 + 32
+        const dataLength =
+          rawBytes[dataOffset] |
+          (rawBytes[dataOffset + 1] << 8) |
+          (rawBytes[dataOffset + 2] << 16) |
+          (rawBytes[dataOffset + 3] << 24)
+
+        if (dataLength <= 0 || dataOffset + 4 + dataLength > rawBytes.length) continue
+
+        const compressedData = rawBytes.slice(dataOffset + 4, dataOffset + 4 + dataLength)
+
+        try {
+          const idlJson = await decompressData(compressedData)
+          const idl = JSON.parse(idlJson)
+          const validation = validateIDL(idl)
+          if (!validation.valid) continue
+          return { idl, idlJson: JSON.stringify(idl) }
+        } catch {
+          continue // decode failed for this account, try the other
+        }
       }
 
-      // 3. Decode base64 account data
-      const base64Data = rpcResult.result.value.data[0]
-      const rawBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0))
-
-      // 4. Skip Anchor discriminator (8 bytes) + authority pubkey (32 bytes)
-      //    Then read u32 LE data length
-      if (rawBytes.length < 44) {
-        return null // Too short to be a valid IDL account
-      }
-
-      const dataOffset = 8 + 32 // discriminator + authority
-      const dataLength = rawBytes[dataOffset] |
-        (rawBytes[dataOffset + 1] << 8) |
-        (rawBytes[dataOffset + 2] << 16) |
-        (rawBytes[dataOffset + 3] << 24)
-
-      const compressedData = rawBytes.slice(dataOffset + 4, dataOffset + 4 + dataLength)
-
-      // 5. Decompress
-      const idlJson = await decompressData(compressedData)
-
-      // 6. Parse and validate
-      let idl: any
-      try {
-        idl = JSON.parse(idlJson)
-      } catch {
-        return null // Invalid JSON
-      }
-
-      const validation = validateIDL(idl)
-      if (!validation.valid) {
-        return null // Invalid IDL structure
-      }
-
-      return { idl, idlJson: JSON.stringify(idl) }
+      return null // both accounts checked — no valid IDL
     } catch (err) {
       if (!shouldTryNextRpc(err)) return null
     }

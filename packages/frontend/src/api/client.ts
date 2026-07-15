@@ -643,7 +643,7 @@ export interface DiscoveredProgram {
   tags: string | null
 }
 
-export async function getSyncStatus(): Promise<{ run: SyncRun | null; updated_today: number }> {
+export async function getSyncStatus(): Promise<{ run: SyncRun | null; updated_today: number; verified_count: number }> {
   const res = await api.get('/admin/sync/status')
   return res.data
 }

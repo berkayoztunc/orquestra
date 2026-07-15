@@ -3,13 +3,11 @@ import {
   getSyncStatus,
   getCandidateStats,
   getScanMetadata,
-  getVerifiedBuildMetadata,
   getVerifiedBuildTotal,
   getPublicStats,
   type SyncRun,
   type CandidateStats,
   type ScanMetadata,
-  type VerifiedBuildMetadata,
   type VerifiedBuildTotal,
   type PublicStats,
 } from '@/api/client'
@@ -49,12 +47,58 @@ function formatDuration(startIso: string, endIso: string | null): string {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  highlight,
+}: {
+  label: string
+  value: string | number
+  sub?: string
+  highlight?: boolean
+}) {
   return (
-    <div className="flex flex-col gap-0.5 border border-border-low bg-bg2 px-4 py-3">
+    <div
+      className={`flex flex-col gap-0.5 border px-4 py-3 ${
+        highlight
+          ? 'border-green-800/40 bg-green-950/20'
+          : 'border-border-low bg-bg2'
+      }`}
+    >
       <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">{label}</span>
       <span className="text-xl font-bold tabular-nums text-sand-1600">{value}</span>
       {sub && <span className="text-[10px] text-sand-800">{sub}</span>}
+    </div>
+  )
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
+      {children}
+    </h2>
+  )
+}
+
+function EmptyState({ title, sub }: { title: string; sub?: string }) {
+  return (
+    <div className="border border-border-low px-6 py-8 text-center">
+      <p className="font-medium text-sand-1200">{title}</p>
+      {sub && <p className="mt-1 text-sm text-sand-900">{sub}</p>}
+    </div>
+  )
+}
+
+function SkeletonGrid({ cols = 4, count }: { cols?: number; count: number }) {
+  return (
+    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-${cols}`}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
+          <div className="mb-2 h-3 w-20 rounded bg-sand-200" />
+          <div className="h-7 w-16 rounded bg-sand-300" />
+        </div>
+      ))}
     </div>
   )
 }
@@ -64,10 +108,10 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 export default function Sync(): JSX.Element {
   const [run, setRun] = useState<SyncRun | null>(null)
   const [updatedToday, setUpdatedToday] = useState(0)
+  const [verifiedCount, setVerifiedCount] = useState(0)
   const [publicStats, setPublicStats] = useState<PublicStats | null>(null)
   const [candidates, setCandidates] = useState<CandidateStats | null>(null)
   const [scanMeta, setScanMeta] = useState<ScanMetadata | null>(null)
-  const [verifiedBuildMeta, setVerifiedBuildMeta] = useState<VerifiedBuildMetadata | null>(null)
   const [verifiedBuildTotal, setVerifiedBuildTotal] = useState<VerifiedBuildTotal | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +121,7 @@ export default function Sync(): JSX.Element {
       const statusData = await getSyncStatus()
       setRun(statusData.run)
       setUpdatedToday(statusData.updated_today ?? 0)
+      setVerifiedCount(statusData.verified_count ?? 0)
     } catch (err: any) {
       setError(err?.response?.data?.error ?? err?.message ?? 'Failed to load sync status')
     }
@@ -88,15 +133,13 @@ export default function Sync(): JSX.Element {
       // non-fatal
     }
 
-    // Fetch candidates stats separately — table may not exist yet (migration 018)
     try {
       const candidateData = await getCandidateStats()
       setCandidates(candidateData.stats)
     } catch {
-      // program_candidates table not created yet — show empty state, not an error
+      // program_candidates table may not exist yet
     }
 
-    // Fetch last scan metadata — non-critical, from KV
     try {
       const scanData = await getScanMetadata()
       setScanMeta(scanData.metadata)
@@ -104,15 +147,6 @@ export default function Sync(): JSX.Element {
       // non-fatal
     }
 
-    // Fetch verified-build metadata from funnel stage — non-critical, from KV
-    try {
-      const verifiedData = await getVerifiedBuildMetadata()
-      setVerifiedBuildMeta(verifiedData.metadata)
-    } catch {
-      // non-fatal
-    }
-
-    // Fetch OSEC live verified-program total — non-critical
     try {
       const totalData = await getVerifiedBuildTotal()
       setVerifiedBuildTotal(totalData)
@@ -131,37 +165,36 @@ export default function Sync(): JSX.Element {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  const syncStatusDot = run?.status === 'running'
+    ? 'animate-pulse bg-yellow-400'
+    : run?.status === 'partial'
+      ? 'bg-orange-400'
+      : run?.completed_at
+        ? 'bg-green-500'
+        : 'bg-sand-600'
+
+  const syncStatusText = run
+    ? run.status === 'running'
+      ? `Sync running (started ${formatRelative(run.started_at)})`
+      : run.status === 'partial'
+        ? `Partial run ${formatRelative(run.completed_at!)} — resumed via checkpoint`
+        : `Last sync ${formatRelative(run.completed_at!)}`
+    : loading ? 'Loading…' : 'No sync runs recorded yet'
+
   return (
     <div className="space-y-10 px-6 py-10 sm:px-8 sm:py-12">
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-sand-1600">IDL Sync Dashboard</h1>
+          <h1 className="text-3xl font-bold text-sand-1600">Sync Dashboard</h1>
           <p className="mt-1 text-sand-1000">
-            Automated 6-hour sync of all on-chain IDLs — PMP &amp; Anchor formats
+            IDL sync · verified builds · discovery queue
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm text-sand-900">
-          <span className={`inline-block h-2 w-2 rounded-full ${
-            run?.status === 'running'
-              ? 'animate-pulse bg-yellow-400'
-              : run?.status === 'partial'
-                ? 'bg-orange-400'
-                : run?.completed_at
-                  ? 'bg-green-500'
-                  : 'bg-sand-600'
-          }`} />
-          {run ? (
-            run.status === 'running'
-              ? `Sync running (started ${formatRelative(run.started_at)})`
-              : run.status === 'partial'
-                ? `Partial run ${formatRelative(run.completed_at!)} — resumed via checkpoint`
-                : `Last sync ${formatRelative(run.completed_at!)}`
-          ) : loading ? (
-            'Loading…'
-          ) : (
-            'No sync runs recorded yet'
-          )}
+          <span className={`inline-block h-2 w-2 rounded-full ${syncStatusDot}`} />
+          {syncStatusText}
         </div>
       </div>
 
@@ -171,20 +204,11 @@ export default function Sync(): JSX.Element {
         </div>
       )}
 
-      {/* Summary stats */}
+      {/* ── Overview ── */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
-          Overview
-        </h2>
+        <SectionHeading>Overview</SectionHeading>
         {loading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
-                <div className="mb-2 h-3 w-20 rounded bg-sand-200" />
-                <div className="h-7 w-16 rounded bg-sand-300" />
-              </div>
-            ))}
-          </div>
+          <SkeletonGrid cols={4} count={4} />
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard
@@ -193,44 +217,40 @@ export default function Sync(): JSX.Element {
               sub="public indexed programs"
             />
             <StatCard
-              label="IDL Updates Today"
+              label="IDL Updated Today"
               value={updatedToday.toLocaleString()}
-              sub="new versions detected"
+              sub={updatedToday > 0 ? 'new versions detected' : 'no changes yet today'}
             />
             <StatCard
-              label="OSEC Verified (Live)"
+              label="Verified in DB"
+              value={verifiedCount.toLocaleString()}
+              sub="OSEC verified + imported"
+              highlight={verifiedCount > 0}
+            />
+            <StatCard
+              label="OSEC Live Total"
               value={(verifiedBuildTotal?.total ?? 0).toLocaleString()}
-              sub={verifiedBuildTotal?.fetched_at ? formatRelative(verifiedBuildTotal.fetched_at) : 'not fetched yet'}
-            />
-            <StatCard
-              label="Queue Pending"
-              value={(candidates?.pending ?? 0).toLocaleString()}
-              sub="awaiting cron check"
+              sub={verifiedBuildTotal?.fetched_at ? `fetched ${formatRelative(verifiedBuildTotal.fetched_at)}` : 'not fetched yet'}
             />
           </div>
         )}
       </section>
 
-      {/* Latest Sync Run */}
+      {/* ── Latest IDL Sync Run ── */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
-          Latest Sync Run
-        </h2>
+        <SectionHeading>Latest IDL Sync Run</SectionHeading>
         {loading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
-                <div className="mb-2 h-3 w-16 rounded bg-sand-200" />
-                <div className="h-6 w-12 rounded bg-sand-300" />
-              </div>
-            ))}
-          </div>
+          <SkeletonGrid cols={3} count={6} />
         ) : run ? (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
               <StatCard
                 label="Programs Checked"
-                value={`${(run.total_checked ?? 0).toLocaleString()}${(run.total_programs ?? 0) > 0 && run.total_programs !== run.total_checked ? ` / ${(run.total_programs ?? 0).toLocaleString()}` : ''}`}
+                value={`${(run.total_checked ?? 0).toLocaleString()}${
+                  (run.total_programs ?? 0) > 0 && run.total_programs !== run.total_checked
+                    ? ` / ${(run.total_programs ?? 0).toLocaleString()}`
+                    : ''
+                }`}
                 sub={run.status === 'partial' ? 'partial — resumed next run' : 'this run'}
               />
               <StatCard
@@ -265,25 +285,18 @@ export default function Sync(): JSX.Element {
             </p>
           </>
         ) : (
-          <div className="border border-border-low px-6 py-8 text-center">
-            <p className="font-medium text-sand-1200">No sync runs yet</p>
-            <p className="mt-1 text-sm text-sand-900">
-              First sync runs automatically at next 6-hour cron tick (<code className="font-mono">0 */6 * * *</code>).
-            </p>
-          </div>
+          <EmptyState
+            title="No sync runs yet"
+            sub="First sync runs automatically at next 6-hour tick (0 */6 * * *)."
+          />
         )}
       </section>
 
-      {/* Last Full Chain Scan */}
+      {/* ── Last Full Chain Scan ── */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
-          Last Full Chain Scan
-        </h2>
+        <SectionHeading>Last Full Chain Scan</SectionHeading>
         {loading ? (
-          <div className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
-            <div className="mb-2 h-3 w-32 rounded bg-sand-200" />
-            <div className="h-5 w-48 rounded bg-sand-300" />
-          </div>
+          <SkeletonGrid cols={4} count={4} />
         ) : scanMeta ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard
@@ -301,130 +314,53 @@ export default function Sync(): JSX.Element {
               value={(scanMeta.skipped ?? 0).toLocaleString()}
               sub="invalid program IDs"
             />
-            <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-5 py-4">
-              <span className="text-xs font-medium uppercase tracking-wider text-sand-1000">Scanned At</span>
+            <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-4 py-3">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">Scanned At</span>
               <span className="text-lg font-bold text-sand-1600">{formatDate(scanMeta.scanned_at)}</span>
-              <span className="text-xs text-sand-900">{formatRelative(scanMeta.scanned_at)}</span>
+              <span className="text-[10px] text-sand-800">{formatRelative(scanMeta.scanned_at)}</span>
             </div>
           </div>
         ) : (
-          <div className="border border-border-low px-6 py-8 text-center">
-            <p className="font-medium text-sand-1200">No scan data yet</p>
-            <p className="mt-1 text-sm text-sand-900">
-              The daily GitHub Actions workflow runs at 1am UTC and scans all ~500K Solana programs.
-              After the first run, scan stats will appear here.
-            </p>
-            <p className="mt-3 font-mono text-xs text-sand-800">
-              Or trigger manually: <code>bun run cli:scan && bun run cli:queue</code>
-            </p>
-          </div>
+          <EmptyState
+            title="No scan data yet"
+            sub="Daily scan runs at 1am UTC via GitHub Actions."
+          />
         )}
       </section>
 
-      {/* Last Verified Build Scan */}
+      {/* ── Discovery Queue ── */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
-          Last Verified Build Scan
-        </h2>
+        <SectionHeading>Discovery Queue</SectionHeading>
         {loading ? (
-          <div className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
-            <div className="mb-2 h-3 w-36 rounded bg-sand-200" />
-            <div className="h-5 w-52 rounded bg-sand-300" />
-          </div>
-        ) : (verifiedBuildMeta || verifiedBuildTotal) ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-            <StatCard
-              label="OSEC Verified (Live)"
-              value={(verifiedBuildTotal?.total ?? 0).toLocaleString()}
-              sub={verifiedBuildTotal?.fetched_at ? formatRelative(verifiedBuildTotal.fetched_at) : 'not fetched yet'}
-            />
-            <StatCard
-              label="Programs Checked"
-              value={(verifiedBuildMeta?.total_programs ?? 0).toLocaleString()}
-              sub="valid Solana programs"
-            />
-            <StatCard
-              label="Verified Build"
-              value={(verifiedBuildMeta?.verified_programs ?? 0).toLocaleString()}
-              sub="latest funnel run"
-            />
-            <StatCard
-              label="Verification Errors"
-              value={(verifiedBuildMeta?.verification_errors ?? 0).toLocaleString()}
-              sub={(verifiedBuildMeta?.verification_errors ?? 0) > 0 ? 'retry suggested' : 'clean run'}
-            />
-            <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-5 py-4">
-              <span className="text-xs font-medium uppercase tracking-wider text-sand-1000">Scanned At</span>
-              <span className="text-lg font-bold text-sand-1600">
-                {verifiedBuildMeta?.scanned_at ? formatDate(verifiedBuildMeta.scanned_at) : 'N/A'}
-              </span>
-              <span className="text-xs text-sand-900">
-                {verifiedBuildMeta?.scanned_at
-                  ? `${verifiedBuildMeta.source} · ${formatRelative(verifiedBuildMeta.scanned_at)}`
-                  : 'Run funnel for local stage stats'}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="border border-border-low px-6 py-8 text-center">
-            <p className="font-medium text-sand-1200">No verified-build data yet</p>
-            <p className="mt-1 text-sm text-sand-900">
-              Run funnel once to publish verified-build totals to this dashboard.
-            </p>
-          </div>
-        )}
-      </section>
-
-      {/* Candidates Queue */}
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
-          Discovery Queue
-        </h2>
-        {loading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
-                <div className="mb-2 h-3 w-16 rounded bg-sand-200" />
-                <div className="h-6 w-12 rounded bg-sand-300" />
-              </div>
-            ))}
-          </div>
+          <SkeletonGrid cols={4} count={4} />
         ) : candidates ? (
-          <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard
-                label="Total Queued"
-                value={(candidates.total ?? 0).toLocaleString()}
-                sub="unique program IDs"
-              />
-              <StatCard
-                label="Pending"
-                value={(candidates.pending ?? 0).toLocaleString()}
-                sub="awaiting cron check"
-              />
-              <StatCard
-                label="Has IDL"
-                value={(candidates.has_idl ?? 0).toLocaleString()}
-                sub="verified + imported"
-              />
-              <StatCard
-                label="No IDL"
-                value={(candidates.no_idl ?? 0).toLocaleString()}
-                sub="no on-chain IDL, skipped"
-              />
-            </div>
-            <p className="mt-2 text-xs text-sand-900">
-              Add new program IDs: <code className="font-mono">bun run cli:queue</code>
-            </p>
-          </>
-        ) : (
-          <div className="border border-border-low px-6 py-8 text-center">
-            <p className="font-medium text-sand-1200">No candidates queued yet</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              label="Total in Queue"
+              value={(candidates.total ?? 0).toLocaleString()}
+              sub="unique program IDs"
+            />
+            <StatCard
+              label="Pending"
+              value={(candidates.pending ?? 0).toLocaleString()}
+              sub="awaiting cron check"
+            />
+            <StatCard
+              label="Has IDL"
+              value={(candidates.has_idl ?? 0).toLocaleString()}
+              sub="verified + imported"
+            />
+            <StatCard
+              label="No IDL"
+              value={(candidates.no_idl ?? 0).toLocaleString()}
+              sub="no on-chain IDL"
+            />
           </div>
+        ) : (
+          <EmptyState title="No candidates queued yet" />
         )}
       </section>
 
-     
     </div>
   )
 }

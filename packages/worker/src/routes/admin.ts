@@ -189,7 +189,12 @@ app.get('/sync/status', async (c) => {
       .first()
     const updated_today = Number((todayRow as any)?.total ?? 0)
 
-    return c.json({ run: latest ?? null, updated_today })
+    const verifiedRow = await db
+      .prepare(`SELECT COUNT(*) AS total FROM projects WHERE is_verified = 1`)
+      .first()
+    const verified_count = Number((verifiedRow as any)?.total ?? 0)
+
+    return c.json({ run: latest ?? null, updated_today, verified_count })
   } catch (err) {
     console.error('[admin] sync/status error:', err)
     return c.json({ error: 'Failed to fetch sync status', details: String(err) }, 500)

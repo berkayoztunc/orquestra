@@ -80,11 +80,17 @@ export const requestLogger = createMiddleware<Env>(async (c, next) => {
   console.log(JSON.stringify(logEntry))
 
   // Extract project_id from paths like /api/:projectId/instructions
-  // Skip known non-project prefixes so we don't store route names as IDs.
+  // Skip known non-project prefixes so we don't store route names as IDs,
+  // then require the captured segment to look like an Orquestra project id
+  // (lowercase base36 legacy ids or UUIDs, 19-36 chars, no dots/slashes/etc) —
+  // otherwise scanner noise (/api/.env, /api/v1, /api/wp-config.old.bak, ...)
+  // pollutes analytics. This is a cheap shape filter, not authoritative —
+  // the admin analytics query still INNER JOINs against real projects.
   const projectIdMatch = path.match(
     /^\/api\/(?!projects|admin|ingest|idl|stats|ai)([^/]+)/,
   )
-  const projectId = projectIdMatch ? projectIdMatch[1] : ''
+  const candidate = projectIdMatch ? projectIdMatch[1] : ''
+  const projectId = /^[a-z0-9-]{19,36}$/.test(candidate) ? candidate : ''
 
   incrementEvent(c.env.DB, c.executionCtx, {
     eventType: EVENT_TYPE.api,

@@ -77,8 +77,7 @@ app.get('/analytics', async (c) => {
         .prepare(
           `SELECT a.project_id, p.name, SUM(a.count) AS total
            FROM analytics a
-           LEFT JOIN projects p ON p.id = a.project_id
-           WHERE a.project_id != ''
+           INNER JOIN projects p ON p.id = a.project_id
            GROUP BY a.project_id
            ORDER BY total DESC
            LIMIT 20`,

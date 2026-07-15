@@ -12,6 +12,9 @@ const MCP_TOOL_NAMES: Record<number, string> = {
   5: 'read_llms_txt',
   6: 'get_ai_analysis',
   7: 'fetch_pda_data',
+  8: 'simulate_instruction',
+  9: 'get_program_data',
+  10: 'simulate_transaction',
 }
 
 const skeletonHeights = [32, 58, 42, 74, 46, 88, 62, 38, 70, 52, 84, 45, 66, 92, 56, 76, 40, 64]

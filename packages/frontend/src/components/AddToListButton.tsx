@@ -82,8 +82,11 @@ export default function AddToListButton({ projectId, variant = 'default' }: AddT
 
   const label = variant === 'header' ? 'Save' : lists.length > 1 ? 'Add to list' : 'Save'
   const buttonClassName = variant === 'header'
-    ? 'inline-flex h-10 items-center justify-center gap-2 border border-border-low bg-sand-100 px-4 text-sm font-medium text-sand-1400 transition-all duration-200 hover:border-border-medium hover:bg-sand-200 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 disabled:cursor-not-allowed disabled:opacity-50'
+    ? 'inline-flex h-10 items-center justify-center gap-2 bg-sand-1600 px-4 text-sm font-medium text-sand-50 transition-all duration-200 hover:bg-sand-1500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-1600/30 disabled:cursor-not-allowed disabled:opacity-50'
     : 'flex items-center gap-1 text-xs font-medium text-sand-1100 hover:text-sand-1600 transition-colors border border-border-low hover:border-border-medium px-2 py-1 bg-transparent hover:bg-sand-100 disabled:opacity-50'
+  const spinnerClassName = variant === 'header'
+    ? 'w-3.5 h-3.5 border border-sand-50/30 border-t-sand-50 animate-spin'
+    : 'w-3.5 h-3.5 border border-border-low border-t-sand-1600 animate-spin'
 
   return (
     <div ref={dropdownRef} className="relative" onClick={(e) => e.stopPropagation()}>
@@ -94,7 +97,7 @@ export default function AddToListButton({ projectId, variant = 'default' }: AddT
         title="Add to list"
       >
         {loading ? (
-          <div className="w-3.5 h-3.5 border border-border-low border-t-sand-1600 animate-spin" />
+          <div className={spinnerClassName} />
         ) : (
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

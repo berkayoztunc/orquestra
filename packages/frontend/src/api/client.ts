@@ -71,6 +71,9 @@ export async function listProjects(params?: {
   page?: number
   limit?: number
   search?: string
+  sort?: 'active' | 'recent' | 'new'
+  verified?: 1 | 0
+  has_ai_docs?: 1 | 0
 }) {
   const res = await api.get('/projects', { params })
   return res.data

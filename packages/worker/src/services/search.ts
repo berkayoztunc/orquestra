@@ -24,6 +24,7 @@ export interface SearchResult {
   unique_users_7d: number | null
   tx_count_7d: number | null
   fees_sol_7d: number | null
+  has_ai_docs: number | null
 }
 
 interface FTSRow {
@@ -43,6 +44,7 @@ interface FTSRow {
   unique_users_7d: number | null
   tx_count_7d: number | null
   fees_sol_7d: number | null
+  has_ai_docs: number | null
 }
 
 /**
@@ -98,37 +100,35 @@ export async function searchProjects(
   searchQuery: string,
   limit: number = 20,
   offset: number = 0,
-  userId?: string
+  userId?: string,
+  filters?: { verified?: boolean; has_ai_docs?: boolean }
 ): Promise<{ results: SearchResult[]; total: number }> {
   const trimmed = searchQuery.trim()
 
+  // Build filter conditions (shared across all query paths)
+  const filterParts: string[] = []
+  if (filters?.verified) filterParts.push('p.is_verified = 1')
+  if (filters?.has_ai_docs) filterParts.push('aa.short_description IS NOT NULL')
+  const filterSQL = filterParts.length > 0 ? ` AND ${filterParts.join(' AND ')}` : ''
+
   // Fast path: exact program_id lookup (base58 Solana address)
   if (BASE58_RE.test(trimmed)) {
-    const sql = userId
-      ? `SELECT p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at,
-                u.username, u.avatar_url,
-                COALESCE(pc.category, '') as category,
-                COALESCE(pc.tags, '') as tags,
-                COALESCE(pc.aliases, '') as aliases,
-                p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
-         FROM projects p
-         JOIN users u ON p.user_id = u.id
-         LEFT JOIN program_categories pc ON p.id = pc.project_id
-         LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-         WHERE p.program_id = ? AND (p.is_public = 1 OR p.user_id = ?)
-         LIMIT 1`
-      : `SELECT p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at,
-                u.username, u.avatar_url,
-                COALESCE(pc.category, '') as category,
-                COALESCE(pc.tags, '') as tags,
-                COALESCE(pc.aliases, '') as aliases,
-                p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
-         FROM projects p
-         JOIN users u ON p.user_id = u.id
-         LEFT JOIN program_categories pc ON p.id = pc.project_id
-         LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-         WHERE p.program_id = ? AND p.is_public = 1
-         LIMIT 1`
+    const visibilityCond = userId ? '(p.is_public = 1 OR p.user_id = ?)' : 'p.is_public = 1'
+    const sql = `
+      SELECT p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at,
+             u.username, u.avatar_url,
+             COALESCE(pc.category, '') as category,
+             COALESCE(pc.tags, '') as tags,
+             COALESCE(pc.aliases, '') as aliases,
+             p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d,
+             CASE WHEN aa.short_description IS NOT NULL THEN 1 ELSE 0 END AS has_ai_docs
+      FROM projects p
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN program_categories pc ON p.id = pc.project_id
+      LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
+      LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+      WHERE p.program_id = ? AND ${visibilityCond}${filterSQL}
+      LIMIT 1`
 
     const params = userId ? [trimmed, userId] : [trimmed]
     const row = await db.prepare(sql).bind(...params).first<FTSRow>()
@@ -155,73 +155,38 @@ export async function searchProjects(
 
   try {
     // BM25 weights: project_id(0), name(10), description(2), category(5), tags(8), aliases(8)
-    const countSQL = userId
-      ? `SELECT COUNT(*) as count FROM projects_fts
-         JOIN projects p ON projects_fts.project_id = p.id
-         WHERE projects_fts MATCH ? AND (p.is_public = 1 OR p.user_id = ?)`
-      : `SELECT COUNT(*) as count FROM projects_fts
-         JOIN projects p ON projects_fts.project_id = p.id
-         WHERE projects_fts MATCH ? AND p.is_public = 1`
+    const visibilityFts = userId ? '(p.is_public = 1 OR p.user_id = ?)' : 'p.is_public = 1'
+
+    const countSQL = `
+      SELECT COUNT(*) as count
+      FROM projects_fts
+      JOIN projects p ON projects_fts.project_id = p.id
+      LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+      WHERE projects_fts MATCH ? AND ${visibilityFts}${filterSQL}`
 
     const countParams = userId ? [ftsQuery, userId] : [ftsQuery]
     const countResult = await db.prepare(countSQL).bind(...countParams).first<{ count: number }>()
     const total = countResult?.count || 0
 
-    const resultSQL = userId
-      ? `
-        SELECT
-          bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
-          p.id,
-          p.name,
-          p.description,
-          p.program_id,
-          p.is_public,
-          p.updated_at,
-          u.username,
-          u.avatar_url,
-          COALESCE(pc.category, '') as category,
-          COALESCE(pc.tags, '') as tags,
-          COALESCE(pc.aliases, '') as aliases,
-          p.is_verified,
-          pm.unique_users_7d,
-          pm.tx_count_7d,
-          pm.fees_sol_7d
-        FROM projects_fts
-        JOIN projects p ON projects_fts.project_id = p.id
-        JOIN users u ON p.user_id = u.id
-        LEFT JOIN program_categories pc ON p.id = pc.project_id
-        LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-        WHERE projects_fts MATCH ? AND (p.is_public = 1 OR p.user_id = ?)
-        ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, rank ASC
-        LIMIT ? OFFSET ?
-      `
-      : `
-        SELECT
-          bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
-          p.id,
-          p.name,
-          p.description,
-          p.program_id,
-          p.is_public,
-          p.updated_at,
-          u.username,
-          u.avatar_url,
-          COALESCE(pc.category, '') as category,
-          COALESCE(pc.tags, '') as tags,
-          COALESCE(pc.aliases, '') as aliases,
-          p.is_verified,
-          pm.unique_users_7d,
-          pm.tx_count_7d,
-          pm.fees_sol_7d
-        FROM projects_fts
-        JOIN projects p ON projects_fts.project_id = p.id
-        JOIN users u ON p.user_id = u.id
-        LEFT JOIN program_categories pc ON p.id = pc.project_id
-        LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-        WHERE projects_fts MATCH ? AND p.is_public = 1
-        ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, rank ASC
-        LIMIT ? OFFSET ?
-      `
+    const resultSQL = `
+      SELECT
+        bm25(projects_fts, 0, 10, 2, 5, 8, 8) as rank,
+        p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at,
+        u.username, u.avatar_url,
+        COALESCE(pc.category, '') as category,
+        COALESCE(pc.tags, '') as tags,
+        COALESCE(pc.aliases, '') as aliases,
+        p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d,
+        CASE WHEN aa.short_description IS NOT NULL THEN 1 ELSE 0 END AS has_ai_docs
+      FROM projects_fts
+      JOIN projects p ON projects_fts.project_id = p.id
+      JOIN users u ON p.user_id = u.id
+      LEFT JOIN program_categories pc ON p.id = pc.project_id
+      LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
+      LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+      WHERE projects_fts MATCH ? AND ${visibilityFts}${filterSQL}
+      ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, rank ASC
+      LIMIT ? OFFSET ?`
 
     const resultParams = userId ? [ftsQuery, userId, limit, offset] : [ftsQuery, limit, offset]
 
@@ -235,7 +200,7 @@ export async function searchProjects(
     return { results, total }
   } catch (error) {
     console.error('FTS search error:', error)
-    return fallbackLikeSearch(db, searchQuery, limit, offset, userId)
+    return fallbackLikeSearch(db, searchQuery, limit, offset, userId, filters)
   }
 }
 
@@ -248,84 +213,58 @@ async function fallbackLikeSearch(
   searchQuery: string,
   limit: number,
   offset: number,
-  userId?: string
+  userId?: string,
+  filters?: { verified?: boolean; has_ai_docs?: boolean }
 ): Promise<{ results: SearchResult[]; total: number }> {
   const searchTerm = `%${searchQuery.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
 
-  const countSQL = userId
-    ? `SELECT COUNT(*) as count FROM projects p
-       LEFT JOIN program_categories pc ON p.id = pc.project_id
-       WHERE (p.is_public = 1 OR p.user_id = ?)
-         AND (
-           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR p.program_id LIKE ? ESCAPE '\\'
-         )`
-    : `SELECT COUNT(*) as count FROM projects p
-       LEFT JOIN program_categories pc ON p.id = pc.project_id
-       WHERE p.is_public = 1
-         AND (
-           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR p.program_id LIKE ? ESCAPE '\\'
-         )`
+  const filterParts: string[] = []
+  if (filters?.verified) filterParts.push('p.is_verified = 1')
+  if (filters?.has_ai_docs) filterParts.push('aa.short_description IS NOT NULL')
+  const filterSQL = filterParts.length > 0 ? ` AND ${filterParts.join(' AND ')}` : ''
 
-  const countParams = userId
+  const likeCondition = `(
+    LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
+    OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
+    OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
+    OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
+    OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
+    OR p.program_id LIKE ? ESCAPE '\\'
+  )`
+
+  const visibilityCount = userId ? '(p.is_public = 1 OR p.user_id = ?)' : 'p.is_public = 1'
+  const countSQL = `
+    SELECT COUNT(*) as count FROM projects p
+    LEFT JOIN program_categories pc ON p.id = pc.project_id
+    LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+    WHERE ${visibilityCount} AND ${likeCondition}${filterSQL}`
+
+  const countParams: any[] = userId
     ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
     : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm]
 
   const countResult = await db.prepare(countSQL).bind(...countParams).first<{ count: number }>()
   const total = countResult?.count || 0
 
-  const resultSQL = userId
-    ? `SELECT p.*, u.username, u.avatar_url,
-              COALESCE(pc.category, '') as category,
-              COALESCE(pc.tags, '') as tags,
-              COALESCE(pc.aliases, '') as aliases,
-              p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
-       FROM projects p
-       JOIN users u ON p.user_id = u.id
-       LEFT JOIN program_categories pc ON p.id = pc.project_id
-       LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-       WHERE (p.is_public = 1 OR p.user_id = ?)
-         AND (
-           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR p.program_id LIKE ? ESCAPE '\\'
-         )
-       ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
-       LIMIT ? OFFSET ?`
-    : `SELECT p.*, u.username, u.avatar_url,
-              COALESCE(pc.category, '') as category,
-              COALESCE(pc.tags, '') as tags,
-              COALESCE(pc.aliases, '') as aliases,
-              p.is_verified, pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
-       FROM projects p
-       JOIN users u ON p.user_id = u.id
-       LEFT JOIN program_categories pc ON p.id = pc.project_id
-       LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-       WHERE p.is_public = 1
-         AND (
-           LOWER(p.name) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(p.description,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.aliases,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.tags,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR LOWER(COALESCE(pc.category,'')) LIKE LOWER(?) ESCAPE '\\'
-           OR p.program_id LIKE ? ESCAPE '\\'
-         )
-       ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
-       LIMIT ? OFFSET ?`
+  const visibilityResult = userId ? '(p.is_public = 1 OR p.user_id = ?)' : 'p.is_public = 1'
+  const resultSQL = `
+    SELECT p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at, p.is_verified,
+           u.username, u.avatar_url,
+           COALESCE(pc.category, '') as category,
+           COALESCE(pc.tags, '') as tags,
+           COALESCE(pc.aliases, '') as aliases,
+           pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d,
+           CASE WHEN aa.short_description IS NOT NULL THEN 1 ELSE 0 END AS has_ai_docs
+    FROM projects p
+    JOIN users u ON p.user_id = u.id
+    LEFT JOIN program_categories pc ON p.id = pc.project_id
+    LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
+    LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+    WHERE ${visibilityResult} AND ${likeCondition}${filterSQL}
+    ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
+    LIMIT ? OFFSET ?`
 
-  const resultParams = userId
+  const resultParams: any[] = userId
     ? [userId, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
     : [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, limit, offset]
 

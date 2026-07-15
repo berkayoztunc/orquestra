@@ -19,6 +19,10 @@ interface Project {
   category?: string | null
   is_verified?: number | boolean | null
   verified_at?: string | null
+  has_ai_docs?: number | null
+  unique_users_7d?: number | null
+  tx_count_7d?: number | null
+  fees_sol_7d?: number | null
 }
 
 interface UpdateLog {
@@ -53,7 +57,7 @@ interface ProjectsState {
     totalPages: number
   }
 
-  loadPublicProjects: (params?: { page?: number; search?: string }) => Promise<void>
+  loadPublicProjects: (params?: { page?: number; search?: string; sort?: string; verified?: boolean; has_ai_docs?: boolean }) => Promise<void>
   loadMyProjects: () => Promise<void>
   loadProject: (projectId: string) => Promise<void>
   loadProjectByProgramId: (programId: string) => Promise<void>
@@ -68,13 +72,19 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
   updates: [],
   isLoading: false,
   error: null,
-  pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+  pagination: { page: 1, limit: 30, total: 0, totalPages: 0 },
   updatesPagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
 
   loadPublicProjects: async (params) => {
     set({ isLoading: true, error: null })
     try {
-      const data = await listProjects(params)
+      const data = await listProjects({
+        ...params,
+        limit: 30,
+        sort: (params as any)?.sort,
+        verified: (params as any)?.verified ? 1 : undefined,
+        has_ai_docs: (params as any)?.has_ai_docs ? 1 : undefined,
+      })
       set({
         projects: data.projects,
         pagination: data.pagination,

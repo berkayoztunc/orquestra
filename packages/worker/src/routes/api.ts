@@ -270,12 +270,17 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
     return c.json({ error: 'Search term too long (max 100 characters)' }, 400)
   }
 
+  const sort = c.req.query('sort') || 'active'
+  const verifiedOnly = c.req.query('verified') === '1'
+  const hasAiDocs = c.req.query('has_ai_docs') === '1'
+  const filters = { verified: verifiedOnly, has_ai_docs: hasAiDocs }
+
   try {
     const db = c.env.DB
 
     if (rawSearch) {
-      // Use FTS for search queries
-      const { results, total } = await searchProjects(db, rawSearch, limit, offset, userId)
+      // Use FTS for search queries — pass filters through
+      const { results, total } = await searchProjects(db, rawSearch, limit, offset, userId, filters)
       return c.json({
         projects: results,
         pagination: {
@@ -290,47 +295,64 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
         },
       })
     } else {
-      // No search: return recent projects
+      // Browse mode: dynamic SQL with sort + filter support
+      const orderBy = sort === 'recent' ? 'p.updated_at DESC'
+        : sort === 'new' ? 'p.created_at DESC'
+        : /* active (default) */ 'COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC'
+
+      const whereParts: string[] = []
+      const bindParams: any[] = []
+
       if (userId) {
-        const query =
-          'SELECT p.*, u.username, u.avatar_url, pc.category FROM projects p JOIN users u ON p.user_id = u.id LEFT JOIN program_categories pc ON pc.project_id = p.id WHERE p.is_public = 1 OR p.user_id = ? ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
-        const params = [userId, limit, offset]
-        const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1 OR user_id = ?'
-        const countParams = [userId]
-
-        const results = await db.prepare(query).bind(...params).all()
-        const countResult = await db.prepare(countQuery).bind(...countParams).first()
-        const total = (countResult as any)?.count || 0
-
-        return c.json({
-          projects: results?.results || [],
-          pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
-          },
-        })
+        whereParts.push('(p.is_public = 1 OR p.user_id = ?)')
+        bindParams.push(userId)
       } else {
-        const query =
-          'SELECT p.*, u.username, u.avatar_url, pc.category FROM projects p JOIN users u ON p.user_id = u.id LEFT JOIN program_categories pc ON pc.project_id = p.id WHERE p.is_public = 1 ORDER BY p.updated_at DESC LIMIT ? OFFSET ?'
-        const params = [limit, offset]
-        const countQuery = 'SELECT COUNT(*) as count FROM projects WHERE is_public = 1'
-
-        const results = await db.prepare(query).bind(...params).all()
-        const countResult = await db.prepare(countQuery).first()
-        const total = (countResult as any)?.count || 0
-
-        return c.json({
-          projects: results?.results || [],
-          pagination: {
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
-          },
-        })
+        whereParts.push('p.is_public = 1')
       }
+      if (verifiedOnly) whereParts.push('p.is_verified = 1')
+      if (hasAiDocs) whereParts.push('aa.short_description IS NOT NULL')
+
+      const whereClause = `WHERE ${whereParts.join(' AND ')}`
+
+      const selectSQL = `
+        SELECT
+          p.id, p.name, p.description, p.program_id, p.is_public, p.updated_at, p.is_verified,
+          u.username, u.avatar_url,
+          COALESCE(pc.category, '') AS category,
+          COALESCE(pc.tags, '') AS tags,
+          COALESCE(pc.aliases, '') AS aliases,
+          pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d,
+          CASE WHEN aa.short_description IS NOT NULL THEN 1 ELSE 0 END AS has_ai_docs
+        FROM projects p
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN program_categories pc ON pc.project_id = p.id
+        LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
+        LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+        ${whereClause}
+        ORDER BY ${orderBy}
+        LIMIT ? OFFSET ?
+      `
+
+      const countSQL = `
+        SELECT COUNT(*) AS count
+        FROM projects p
+        LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+        ${whereClause}
+      `
+
+      const results = await db.prepare(selectSQL).bind(...bindParams, limit, offset).all()
+      const countResult = await db.prepare(countSQL).bind(...bindParams).first()
+      const total = Number((countResult as any)?.count ?? 0)
+
+      return c.json({
+        projects: results?.results || [],
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      })
     }
   } catch (err) {
     console.error('Projects list error:', err)

@@ -19,7 +19,7 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
       { timeout: '3 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
         const fetchPage = async (page: number): Promise<{ ids: string[]; totalPages: number }> => {
-          const res = await fetch(`${OSEC_URL}?page=${page}`, { headers: { Accept: 'application/json' } })
+          const res = await fetch(`${OSEC_URL}/${page}`, { headers: { Accept: 'application/json' } })
           if (!res.ok) throw new Error(`OSEC API ${res.status} on page ${page}`)
           const json = await res.json() as any
           const ids: string[] = (json.verified_programs ?? [])

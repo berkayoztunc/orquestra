@@ -46,7 +46,7 @@ export class VerifiedBuildsWorkflow extends WorkflowEntrypoint<Env, Params> {
         console.log(`${TAG} [1] Fetching OSEC verified programs...`)
 
         const fetchPage = async (page: number) => {
-          const res = await fetch(`${OSEC_URL}?page=${page}`, { headers: { Accept: 'application/json' } })
+          const res = await fetch(`${OSEC_URL}/${page}`, { headers: { Accept: 'application/json' } })
           if (!res.ok) throw new Error(`OSEC API ${res.status} on page ${page}`)
           const json = await res.json() as any
           const ids: string[] = (json.verified_programs ?? [])

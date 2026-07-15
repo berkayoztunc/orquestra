@@ -18,7 +18,7 @@ export async function fetchOsecVerifiedProgramIds(opts: OsecFetchOptions = {}): 
   const baseUrl = opts.baseUrl ?? OSEC_URL
 
   const fetchPage = async (page: number) => {
-    const res = await fetch(`${baseUrl}?page=${page}`, { headers: { Accept: 'application/json' } })
+    const res = await fetch(`${baseUrl}/${page}`, { headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error(`OSEC API ${res.status} on page ${page}`)
     const json = await res.json() as any
     const ids: string[] = (json.verified_programs ?? [])

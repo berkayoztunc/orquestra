@@ -37,6 +37,7 @@ import { analysis, type AnalysisOptions } from './commands/analysis'
 import { queuePrograms, type QueueProgramsOptions } from './commands/queue-programs'
 import { verifiedMatch, type VerifiedMatchOptions } from './commands/verified-match'
 import { verifiedIdlImport, type VerifiedIdlImportOptions } from './commands/verified-idl-import'
+import { verifiedAnalysis, type VerifiedAnalysisOptions } from './commands/verified-analysis'
 import { checkVerifiedBuildBatch } from './lib/verified-build'
 import { CsvWriter } from './lib/csv'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -100,6 +101,11 @@ function parseArgs(argv: string[]): { command: string; flags: Record<string, str
       continue
     }
 
+    if (arg === '--force') {
+      flags['force'] = true
+      continue
+    }
+
     if (arg.startsWith('--') && i + 1 < argv.length) {
       const key = arg.slice(2)
       flags[key] = argv[++i]
@@ -126,6 +132,7 @@ COMMANDS:
   analysis    Print summary stats from existing output CSVs (no RPC needed)
   verified-match       Trigger/check WF1: match OSEC-verified programs against DB + AI analysis
   verified-idl-import  Trigger/check WF2: backfill on-chain IDL for missing/IDL-less OSEC programs
+  verified-analysis    Trigger/check AI doc generation for verified programs missing an analysis
 
 OPTIONS:
   --rpc-url <url>          Solana RPC endpoint (required, or SOLANA_RPC_URL env)
@@ -156,6 +163,7 @@ OPTIONS:
   --status                 GET the current status/counts (no trigger)
   --api-url <url>          Worker base URL (or ORQUESTRA_API_URL env)
   --ingest-key <key>       Ingest key for --trigger (or ORQUESTRA_INGEST_KEY env)
+  --force                  verified-analysis --trigger: regenerate ALL verified+IDL programs, not just missing ones
   --help                   Show this help
 
 AI INGEST ENV VARS (required when --enable-ingest):
@@ -456,6 +464,27 @@ async function main() {
         ingestKey,
       }
       await verifiedIdlImport(opts)
+      break
+    }
+
+    case 'verified-analysis': {
+      const apiUrl = (flags['api-url'] as string) || process.env.ORQUESTRA_API_URL
+      if (!apiUrl) {
+        console.error('Error: --api-url or ORQUESTRA_API_URL required')
+        process.exit(1)
+      }
+      if (!flags.trigger && !flags.status) {
+        console.error('Error: verified-analysis requires --trigger or --status')
+        process.exit(1)
+      }
+      const ingestKey = (flags['ingest-key'] as string) || process.env.ORQUESTRA_INGEST_KEY
+      const opts: VerifiedAnalysisOptions = {
+        action: flags.trigger ? 'trigger' : 'status',
+        apiUrl: apiUrl!,
+        ingestKey,
+        force: !!flags.force,
+      }
+      await verifiedAnalysis(opts)
       break
     }
 

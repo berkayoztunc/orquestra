@@ -26,8 +26,6 @@ type ProjectRow = {
   name: string
   program_id: string
   version_id: string
-  idl_json: string
-  cpi_md: string | null
   version: number
 }
 
@@ -44,12 +42,17 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
       'query eligible projects',
       { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
+        // NOTE: only lightweight columns here — idl_json/cpi_md can be large and
+        // Cloudflare Workflow step outputs are capped at 1MiB. Fetching the full
+        // IDL for every eligible project in this single step blows past that cap
+        // once the queue grows past a couple dozen programs, so each project's
+        // IDL/cpi_md is fetched individually inside its own step below instead.
         const { results } = await this.env.DB
           .prepare(
             force
               ? `
                 SELECT p.id, p.name, p.program_id,
-                       v.id AS version_id, v.idl_json, v.cpi_md, v.version
+                       v.id AS version_id, v.version
                 FROM projects p
                 JOIN idl_versions v ON v.project_id = p.id
                 WHERE p.is_verified = 1 AND p.is_public = 1
@@ -58,7 +61,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
               `
               : `
                 SELECT p.id, p.name, p.program_id,
-                       v.id AS version_id, v.idl_json, v.cpi_md, v.version
+                       v.id AS version_id, v.version
                 FROM projects p
                 JOIN idl_versions v ON v.project_id = p.id
                 LEFT JOIN ai_analyses aa ON aa.project_id = p.id
@@ -93,7 +96,18 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
         async () => {
           console.log(`${TAG} [${i + 1}/${projects.length}] ${p.name} (${p.program_id})`)
 
-          const idl = JSON.parse(p.idl_json)
+          // Fetch idl_json/cpi_md here (not in step 1) — keeps step 1's output
+          // small enough to stay under the 1MiB Workflow step-output cap.
+          const versionRow = await this.env.DB
+            .prepare(`SELECT idl_json, cpi_md FROM idl_versions WHERE id = ?`)
+            .bind(p.version_id)
+            .first() as { idl_json: string; cpi_md: string | null } | null
+          if (!versionRow) {
+            console.error(`${TAG} [${i + 1}/${projects.length}] ${p.name} — idl_versions row missing`)
+            return false
+          }
+
+          const idl = JSON.parse(versionRow.idl_json)
 
           // 1. Update IDL summary in IDLS KV
           await writeIdlSummaryCache({
@@ -105,7 +119,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
           })
 
           // 2. Generate docs
-          const docs = generateDocumentation(idl, p.program_id, this.env.API_BASE_URL, p.id, p.cpi_md)
+          const docs = generateDocumentation(idl, p.program_id, this.env.API_BASE_URL, p.id, versionRow.cpi_md)
           const docsText = docs.full ?? ''
 
           // 3. Delete existing analysis when force=true (INSERT not UPSERT)

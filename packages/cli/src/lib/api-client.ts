@@ -204,7 +204,7 @@ export interface WorkflowTriggerError {
 
 export type WorkflowTriggerResponse = WorkflowTriggerResult | WorkflowTriggerError
 
-async function triggerWorkflow(path: string, opts: APIClientOptions): Promise<WorkflowTriggerResponse> {
+async function triggerWorkflow(path: string, opts: APIClientOptions, reqBody?: Record<string, unknown>): Promise<WorkflowTriggerResponse> {
   const url = `${opts.baseUrl.replace(/\/$/, '')}${path}`
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000)
@@ -212,16 +212,20 @@ async function triggerWorkflow(path: string, opts: APIClientOptions): Promise<Wo
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'X-Ingest-Key': opts.ingestKey },
+      headers: {
+        'X-Ingest-Key': opts.ingestKey,
+        ...(reqBody ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(reqBody ? { body: JSON.stringify(reqBody) } : {}),
       signal: controller.signal,
     })
     clearTimeout(timeoutId)
 
-    const body = await response.json().catch(() => ({})) as any
+    const resBody = await response.json().catch(() => ({})) as any
     if (!response.ok) {
-      return { success: false, error: body?.error ?? `HTTP ${response.status}`, status: response.status }
+      return { success: false, error: resBody?.error ?? `HTTP ${response.status}`, status: response.status }
     }
-    return { success: true, instanceId: body.instanceId, message: body.message ?? 'triggered' }
+    return { success: true, instanceId: resBody.instanceId, message: resBody.message ?? 'triggered' }
   } catch (err: any) {
     clearTimeout(timeoutId)
     return { success: false, error: err.name === 'AbortError' ? 'Timeout' : (err.message ?? String(err)) }
@@ -250,6 +254,10 @@ export interface VerifiedIdlImportStatus {
   verified_missing_idl: number
 }
 
+export interface VerifiedAnalysisQueueStatus {
+  pending: number
+}
+
 /** Trigger WF1: match OSEC verified list against DB + AI analysis. */
 export async function triggerVerifiedMatch(opts: APIClientOptions): Promise<WorkflowTriggerResponse> {
   return triggerWorkflow('/api/admin/sync/trigger-verified-match', opts)
@@ -266,6 +274,15 @@ export async function triggerVerifiedIdlImport(opts: APIClientOptions): Promise<
 
 export async function getVerifiedIdlImportStatus(baseUrl: string): Promise<VerifiedIdlImportStatus | { error: string }> {
   return getStatus<VerifiedIdlImportStatus>(baseUrl, '/api/admin/sync/verified-idl-import-status')
+}
+
+/** Trigger AI doc generation for verified+IDL programs missing an ai_analyses row (or all, if force). */
+export async function triggerVerifiedAnalysis(opts: APIClientOptions, force = false): Promise<WorkflowTriggerResponse> {
+  return triggerWorkflow('/api/admin/sync/trigger-verified-analysis', opts, { force })
+}
+
+export async function getVerifiedAnalysisQueue(baseUrl: string): Promise<VerifiedAnalysisQueueStatus | { error: string }> {
+  return getStatus<VerifiedAnalysisQueueStatus>(baseUrl, '/api/admin/sync/verified-analysis-queue')
 }
 
 /**

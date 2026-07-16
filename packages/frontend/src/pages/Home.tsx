@@ -95,6 +95,7 @@ const mcpConfig = `{
 			"type": "http"
 		}
   }
+  //
 }`
 
 function CtaButtons(): JSX.Element {
@@ -481,6 +482,13 @@ export default function Home(): JSX.Element {
             <CodeBlock
               language="json"
               code={mcpConfig}
+              copyable={false}
+              wrapLongLines
+              maxHeightClassName="max-h-[340px]"
+            />
+            <CodeBlock
+              language="bash"
+              code="claude mcp add --transport http orquestra https://api.orquestra.dev/mcp"
               copyable={false}
               wrapLongLines
               maxHeightClassName="max-h-[340px]"

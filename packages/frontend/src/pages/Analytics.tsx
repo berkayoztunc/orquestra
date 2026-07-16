@@ -4,17 +4,17 @@ import { useAnalyticsStore } from '@/store/analytics'
 import type { DailyApiEntry, DailyMcpEntry } from '@/api/client'
 
 const MCP_TOOL_NAMES: Record<number, string> = {
-  0: 'search_programs',
-  1: 'list_instructions',
-  2: 'build_instruction',
-  3: 'list_pda_accounts',
-  4: 'derive_pda',
-  5: 'read_llms_txt',
-  6: 'get_ai_analysis',
-  7: 'fetch_pda_data',
-  8: 'simulate_instruction',
-  9: 'get_program_data',
-  10: 'simulate_transaction',
+  0: 'Search Programs',
+  1: 'List instructions',
+  2: 'Build instruction',
+  3: 'List PDA accounts',
+  4: 'Derive PDA',
+  5: 'Read LLMs TXT',
+  6: 'Get AI analysis',
+  7: 'Fetch PDA data',
+  8: 'Simulate instruction',
+  9: 'Get program data',
+  10: 'Simulate transaction',
 }
 
 const skeletonHeights = [32, 58, 42, 74, 46, 88, 62, 38, 70, 52, 84, 45, 66, 92, 56, 76, 40, 64]

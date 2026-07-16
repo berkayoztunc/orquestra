@@ -8,6 +8,7 @@
  */
 
 import { validateIDL } from './idl-parser'
+import { fetchWithTimeout } from '../utils/solana-rpc'
 
 function normalizeRpcUrls(rpcUrl: string | string[]): string[] {
   return Array.isArray(rpcUrl) ? rpcUrl : [rpcUrl]
@@ -283,7 +284,7 @@ export async function fetchAnchorIDLFromChain(
   for (const url of rpcUrls) {
     try {
       // Check both addresses in one RPC call
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -413,7 +414,7 @@ export async function hasProgramOwnedAnchorIdlAccount(
       const oldStyle = await getIdlAccountAddress(programId)
       const newStyle = await getAnchorIdlPdaAddress(programId)
 
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

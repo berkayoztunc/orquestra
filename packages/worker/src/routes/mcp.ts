@@ -31,7 +31,7 @@ import {
   resolveCodamaType,
 } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
-import { buildTransaction, simulateInstruction, simulateRawTransaction } from '../services/tx-builder'
+import { buildTransaction, simulateInstruction, simulateRawTransaction, setBlockhashCacheDisabled } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData } from '../services/account-parser'
@@ -39,6 +39,7 @@ import { queryProgramAccounts } from '../services/program-accounts'
 import { generateDocumentation } from '../services/doc-generator'
 import { searchProjects } from '../services/search'
 import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
+import { MemoCache } from '../utils/memo-cache'
 import { PROGRAM_ACCOUNTS_SELECTOR_ERROR, hasProgramAccountsSelector } from '../services/validation'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
@@ -52,14 +53,30 @@ type Bindings = {
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_DEVNET_RPC_URL?: string
   SOLANA_TESTNET_RPC_URL?: string
+  BLOCKHASH_CACHE_DISABLED?: string
 }
 
 // ── Helper: fetch IDL from KV with D1 fallback ───────────────────────────────
 
-async function fetchIDL(
+type FetchedIDL = { idl: AnchorIDL; programId: string; projectName: string; cpiMd: string | null }
+
+// Warm-isolate memo: skips the KV read + JSON.parse of large IDLs on repeated
+// tool calls. Cached objects are treated as immutable by all callers.
+const idlMemo = new MemoCache<FetchedIDL>(50, 60_000)
+
+async function fetchIDL(projectId: string, env: Bindings): Promise<FetchedIDL | null> {
+  const memoized = idlMemo.get(projectId)
+  if (memoized) return memoized
+
+  const result = await fetchIDLUncached(projectId, env)
+  if (result) idlMemo.set(projectId, result)
+  return result
+}
+
+async function fetchIDLUncached(
   projectId: string,
   env: Bindings,
-): Promise<{ idl: AnchorIDL; programId: string; projectName: string; cpiMd: string | null } | null> {
+): Promise<FetchedIDL | null> {
   // 1. Try KV cache first (same pattern as llms.ts and api.ts)
   const cached = await env.IDLS?.get(`project:${projectId}`)
   if (cached) {
@@ -103,9 +120,196 @@ async function fetchIDL(
   }
 }
 
+// ── Tool input schemas (module scope — built once per isolate, not per request) ──
+
+const searchProgramsSchema = {
+  query: z
+    .string()
+    .max(100)
+    .optional()
+    .describe('Free-text search term to match against program name or description'),
+  programId: z
+    .string()
+    .optional()
+    .describe('Exact Solana program ID (base58 public key) to look up'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .default(10)
+    .describe('Maximum number of results to return (1–20)'),
+}
+
+const listInstructionsSchema = {
+  projectId: z.string().describe('The orquestra project ID (from search_programs)'),
+}
+
+const projectIdOnlySchema = {
+  projectId: z.string().describe('The orquestra project ID'),
+}
+
+const buildInstructionSchema = {
+  projectId: z.string().describe('The orquestra project ID'),
+  instruction: z.string().describe('Instruction name (exact or camelCase/snake_case variant)'),
+  accounts: z
+    .record(z.string())
+    .describe('Map of account name → base58 public key for each required account'),
+  args: z
+    .record(z.unknown())
+    .default({})
+    .describe('Map of argument name → value. Omit or pass {} for instructions with no args.'),
+  feePayer: z.string().describe('Base58 public key of the transaction fee payer'),
+  recentBlockhash: z
+    .string()
+    .optional()
+    .describe(
+      'Recent blockhash (base58). If omitted, fetched from the RPC for `network` / `rpcUrl`.',
+    ),
+  network: z
+    .enum(['mainnet-beta', 'devnet', 'testnet'])
+    .optional()
+    .describe(
+      'Solana cluster for blockhash + simulation RPC. Defaults to mainnet-beta when omitted.',
+    ),
+  rpcUrl: z
+    .string()
+    .optional()
+    .describe(
+      'Optional full RPC URL (e.g. Helius devnet). When set, overrides the default RPC for this cluster.',
+    ),
+  simulate: z
+    .boolean()
+    .optional()
+    .describe(
+      'If true, runs simulateTransaction on the same RPC after building (preflight, unsigned).',
+    ),
+  encoding: z
+    .enum(['base58', 'base64'])
+    .optional()
+    .describe(
+      'Encoding for the serializedTransaction in the response. Defaults to base58. Use base64 for the modern Solana standard (recommended for sendTransaction with encoding: base64).',
+    ),
+}
+
+const simulateInstructionSchema = {
+  projectId: z.string().describe('The orquestra project ID'),
+  instruction: z.string().describe('Instruction name'),
+  accounts: z.record(z.string()).describe('Map of account name → base58 public key'),
+  args: z.record(z.unknown()).default({}).describe('Map of argument name → value'),
+  feePayer: z.string().describe('Base58 public key of the fee payer (still required for the message header even though no signature is produced)'),
+  network: z
+    .enum(['mainnet-beta', 'devnet', 'testnet'])
+    .optional()
+    .describe('Solana cluster for the simulation RPC. Defaults to mainnet-beta.'),
+  rpcUrl: z
+    .string()
+    .optional()
+    .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over `network`.'),
+}
+
+const derivePdaSchema = {
+  projectId: z.string().describe('The orquestra project ID'),
+  instruction: z.string().describe('Instruction name that contains the PDA account'),
+  account: z.string().describe('Account name to derive the PDA for'),
+  seedValues: z
+    .record(z.unknown())
+    .describe(
+      'Map of seed name → value. For pubkey seeds, pass a base58 string. For string/bytes seeds, pass the plain string. For account_field seeds (dot-notation like "board.round_id"), provide the resolved address of the parent account (e.g. "board": "<base58>"). Check list_pda_accounts for required seed names.',
+    ),
+  network: z
+    .enum(['mainnet-beta', 'devnet', 'testnet'])
+    .optional()
+    .describe('Solana cluster to query when a seed requires fetching on-chain data (account_field seeds). Defaults to mainnet-beta.'),
+}
+
+const fetchPdaDataSchema = {
+  projectId: z.string().describe('The orquestra project ID'),
+  address: z.string().describe('The Solana account address to fetch (base58 public key)'),
+  cluster: z
+    .enum(['mainnet-beta', 'devnet', 'testnet'])
+    .optional()
+    .describe('Solana cluster to query. Defaults to mainnet-beta.'),
+}
+
+const getProgramDataSchema = {
+  projectId: z.string().describe('The orquestra project ID'),
+  accountType: z
+    .string()
+    .optional()
+    .describe('Optional IDL account type name. Adds the account discriminator filter and infers dataSize when fixed.'),
+  network: z
+    .enum(['mainnet-beta', 'devnet', 'testnet'])
+    .optional()
+    .describe('Solana cluster to query. Defaults to mainnet-beta.'),
+  rpcUrl: z
+    .string()
+    .optional()
+    .describe('Optional full RPC URL override. Takes precedence over network.'),
+  dataSize: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Optional Solana getProgramAccounts dataSize filter.'),
+  memcmp: z
+    .array(z.object({ offset: z.number().int().min(0), bytes: z.string().min(1) }))
+    .max(10)
+    .optional()
+    .describe('Optional raw memcmp filters with byte offset and Solana RPC bytes string.'),
+  fieldFilters: z
+    .array(z.object({ field: z.string().min(1), bytes: z.string().min(1) }))
+    .max(10)
+    .optional()
+    .describe('Optional IDL field filters. Requires accountType; only fixed-offset fields can be used.'),
+  paginationKey: z
+    .string()
+    .optional()
+    .describe('Optional Helius getProgramAccountsV2 pagination cursor returned by a previous get_program_data call.'),
+  changedSinceSlot: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Optional Helius getProgramAccountsV2 incremental update slot.'),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(25)
+    .describe('Maximum returned accounts after RPC response limiting. Defaults to 25, max 100.'),
+  includeRaw: z
+    .boolean()
+    .optional()
+    .describe('If true, include raw base64 account data in each result. Raw is also included for unknown or parse-failed accounts.'),
+}
+
+const simulateTransactionSchema = {
+  serializedTransaction: z
+    .string()
+    .describe(
+      'The serialized Solana wire transaction (legacy format). ' +
+      'Accepts base64 (modern standard, recommended) or base58 encoding.',
+    ),
+  encoding: z
+    .enum(['base64', 'base58'])
+    .default('base64')
+    .describe('Encoding of serializedTransaction. Defaults to base64.'),
+  network: z
+    .enum(['mainnet-beta', 'devnet', 'testnet'])
+    .optional()
+    .describe('Solana cluster for the simulation RPC. Defaults to mainnet-beta.'),
+  rpcUrl: z
+    .string()
+    .optional()
+    .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over network.'),
+}
+
 // ── MCP server factory ────────────────────────────────────────────────────────
 
 function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): McpServer {
+  setBlockhashCacheDisabled(env.BLOCKHASH_CACHE_DISABLED === '1')
   const server = new McpServer({ name: 'orquestra', version: '1.0.0' })
 
   // ── Tool 1: search_programs ──────────────────────────────────────────────────
@@ -113,24 +317,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'search_programs',
     'Search the orquestra registry for Solana programs. Supply either a text query (matches name/description/category) or a Solana programId (base58 public key). Results are sorted by weekly active users descending — prefer programs near the top as they are more widely used and validated. Each result includes weeklyUsers, weeklyTxCount, and weeklyFeesSol (7-day Solana Compass data) so you can assess program activity before interacting.',
-    {
-      query: z
-        .string()
-        .max(100)
-        .optional()
-        .describe('Free-text search term to match against program name or description'),
-      programId: z
-        .string()
-        .optional()
-        .describe('Exact Solana program ID (base58 public key) to look up'),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(20)
-        .default(10)
-        .describe('Maximum number of results to return (1–20)'),
-    },
+    searchProgramsSchema,
     async ({ query, programId, limit }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.search_programs })
@@ -281,9 +468,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'list_instructions',
     'List all instructions for a given project, including their arguments (with types) and accounts (with mutability/signer flags). Use this before build_instruction to understand what inputs are required.',
-    {
-      projectId: z.string().describe('The orquestra project ID (from search_programs)'),
-    },
+    listInstructionsSchema,
     async ({ projectId }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.list_instructions, projectId })
@@ -382,48 +567,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'build_instruction',
       'Build a serialized Solana transaction for a specific instruction. Returns a base58 transaction string by default (pass `encoding: "base64"` for the modern Solana standard). The result can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-      instruction: z.string().describe('Instruction name (exact or camelCase/snake_case variant)'),
-      accounts: z
-        .record(z.string())
-        .describe('Map of account name → base58 public key for each required account'),
-      args: z
-        .record(z.unknown())
-        .default({})
-        .describe('Map of argument name → value. Omit or pass {} for instructions with no args.'),
-      feePayer: z.string().describe('Base58 public key of the transaction fee payer'),
-      recentBlockhash: z
-        .string()
-        .optional()
-        .describe(
-          'Recent blockhash (base58). If omitted, fetched from the RPC for `network` / `rpcUrl`.',
-        ),
-      network: z
-        .enum(['mainnet-beta', 'devnet', 'testnet'])
-        .optional()
-        .describe(
-          'Solana cluster for blockhash + simulation RPC. Defaults to mainnet-beta when omitted.',
-        ),
-      rpcUrl: z
-        .string()
-        .optional()
-        .describe(
-          'Optional full RPC URL (e.g. Helius devnet). When set, overrides the default RPC for this cluster.',
-        ),
-      simulate: z
-        .boolean()
-        .optional()
-        .describe(
-          'If true, runs simulateTransaction on the same RPC after building (preflight, unsigned).',
-        ),
-      encoding: z
-        .enum(['base58', 'base64'])
-        .optional()
-        .describe(
-          'Encoding for the serializedTransaction in the response. Defaults to base58. Use base64 for the modern Solana standard (recommended for sendTransaction with encoding: base64).',
-        ),
-    },
+    buildInstructionSchema,
     async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate, encoding }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.build_instruction, projectId })
@@ -510,21 +654,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'simulate_instruction',
     'Preflight an instruction against the Solana RPC without signing. Builds the transaction internally (same as build_instruction), runs simulateTransaction with sigVerify=false, and returns success/failure, compute units, raw logs, and a decoded Anchor error (when the on-chain log matches the IDL `errors[]` table). Use this BEFORE asking the user to sign — it catches missing seeds, bad account states, and program-side guards without any wallet involvement.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-      instruction: z.string().describe('Instruction name'),
-      accounts: z.record(z.string()).describe('Map of account name → base58 public key'),
-      args: z.record(z.unknown()).default({}).describe('Map of argument name → value'),
-      feePayer: z.string().describe('Base58 public key of the fee payer (still required for the message header even though no signature is produced)'),
-      network: z
-        .enum(['mainnet-beta', 'devnet', 'testnet'])
-        .optional()
-        .describe('Solana cluster for the simulation RPC. Defaults to mainnet-beta.'),
-      rpcUrl: z
-        .string()
-        .optional()
-        .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over `network`.'),
-    },
+    simulateInstructionSchema,
     async ({ projectId, instruction, accounts, args, feePayer, network, rpcUrl }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_instruction, projectId })
@@ -593,9 +723,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'list_pda_accounts',
     'List all PDA-derivable accounts for a project, including the seed schemas needed to derive each one. Use this before derive_pda to understand which accounts can be derived and what seed values are required.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-    },
+    projectIdOnlySchema,
     async ({ projectId }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.list_pda_accounts, projectId })
@@ -661,20 +789,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'derive_pda',
     'Derive a Program Derived Address (PDA) for a specific account in a project. Provide the instruction name, account name, and the seed values shown by list_pda_accounts. Returns the derived public key and bump seed.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-      instruction: z.string().describe('Instruction name that contains the PDA account'),
-      account: z.string().describe('Account name to derive the PDA for'),
-      seedValues: z
-        .record(z.unknown())
-        .describe(
-          'Map of seed name → value. For pubkey seeds, pass a base58 string. For string/bytes seeds, pass the plain string. For account_field seeds (dot-notation like "board.round_id"), provide the resolved address of the parent account (e.g. "board": "<base58>"). Check list_pda_accounts for required seed names.',
-        ),
-      network: z
-        .enum(['mainnet-beta', 'devnet', 'testnet'])
-        .optional()
-        .describe('Solana cluster to query when a seed requires fetching on-chain data (account_field seeds). Defaults to mainnet-beta.'),
-    },
+    derivePdaSchema,
     async ({ projectId, instruction, account, seedValues, network }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.derive_pda, projectId })
@@ -734,9 +849,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'read_llms_txt',
     'Fetch the full AI-ready documentation for a project in llms.txt format (structured Markdown). Includes overview, all instruction details with parameter descriptions, account types, error codes, and integration examples. Best used for deep understanding of a program before building transactions.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-    },
+    projectIdOnlySchema,
     async ({ projectId }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.read_llms_txt, projectId })
@@ -817,9 +930,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'get_ai_analysis',
     'Get the AI-generated analysis for a project: a short description, detailed analysis, tags, instruction/account counts, and the model used. Useful for quickly understanding what a program does before exploring its instructions.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-    },
+    projectIdOnlySchema,
     async ({ projectId }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.get_ai_analysis, projectId })
@@ -926,14 +1037,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'fetch_pda_data',
     'Fetch a Solana account by address and parse its data according to the project\'s IDL. Detects the account type from the on-chain discriminator, then deserializes all fields into JSON. Returns null for `data` if the account type is not recognized in the IDL. Use `derive_pda` first to compute the address if you only have seed values.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-      address: z.string().describe('The Solana account address to fetch (base58 public key)'),
-      cluster: z
-        .enum(['mainnet-beta', 'devnet', 'testnet'])
-        .optional()
-        .describe('Solana cluster to query. Defaults to mainnet-beta.'),
-    },
+    fetchPdaDataSchema,
     async ({ projectId, address, cluster }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.fetch_pda_data, projectId })
@@ -1011,58 +1115,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
   server.tool(
     'get_program_data',
     'Query Solana program-owned accounts for a project using getProgramAccounts. Requires at least one selector: accountType, dataSize, memcmp, fieldFilters, paginationKey, or changedSinceSlot. Decodes matching accounts with the project IDL by default.',
-    {
-      projectId: z.string().describe('The orquestra project ID'),
-      accountType: z
-        .string()
-        .optional()
-        .describe('Optional IDL account type name. Adds the account discriminator filter and infers dataSize when fixed.'),
-      network: z
-        .enum(['mainnet-beta', 'devnet', 'testnet'])
-        .optional()
-        .describe('Solana cluster to query. Defaults to mainnet-beta.'),
-      rpcUrl: z
-        .string()
-        .optional()
-        .describe('Optional full RPC URL override. Takes precedence over network.'),
-      dataSize: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe('Optional Solana getProgramAccounts dataSize filter.'),
-      memcmp: z
-        .array(z.object({ offset: z.number().int().min(0), bytes: z.string().min(1) }))
-        .max(10)
-        .optional()
-        .describe('Optional raw memcmp filters with byte offset and Solana RPC bytes string.'),
-      fieldFilters: z
-        .array(z.object({ field: z.string().min(1), bytes: z.string().min(1) }))
-        .max(10)
-        .optional()
-        .describe('Optional IDL field filters. Requires accountType; only fixed-offset fields can be used.'),
-      paginationKey: z
-        .string()
-        .optional()
-        .describe('Optional Helius getProgramAccountsV2 pagination cursor returned by a previous get_program_data call.'),
-      changedSinceSlot: z
-        .number()
-        .int()
-        .min(0)
-        .optional()
-        .describe('Optional Helius getProgramAccountsV2 incremental update slot.'),
-      limit: z
-        .number()
-        .int()
-        .min(1)
-        .max(100)
-        .default(25)
-        .describe('Maximum returned accounts after RPC response limiting. Defaults to 25, max 100.'),
-      includeRaw: z
-        .boolean()
-        .optional()
-        .describe('If true, include raw base64 account data in each result. Raw is also included for unknown or parse-failed accounts.'),
-    },
+    getProgramDataSchema,
     async ({ projectId, accountType, network, rpcUrl, dataSize, memcmp, fieldFilters, paginationKey, changedSinceSlot, limit, includeRaw }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.get_program_data, projectId })
@@ -1151,26 +1204,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
     'No IDL or projectId is required — useful when the transaction was built externally ' +
     '(e.g. with a custom 1-byte discriminator) and you need preflight validation. ' +
     'Returns success/failure, compute units consumed, and the raw RPC logs.',
-    {
-      serializedTransaction: z
-        .string()
-        .describe(
-          'The serialized Solana wire transaction (legacy format). ' +
-          'Accepts base64 (modern standard, recommended) or base58 encoding.',
-        ),
-      encoding: z
-        .enum(['base64', 'base58'])
-        .default('base64')
-        .describe('Encoding of serializedTransaction. Defaults to base64.'),
-      network: z
-        .enum(['mainnet-beta', 'devnet', 'testnet'])
-        .optional()
-        .describe('Solana cluster for the simulation RPC. Defaults to mainnet-beta.'),
-      rpcUrl: z
-        .string()
-        .optional()
-        .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over network.'),
-    },
+    simulateTransactionSchema,
     async ({ serializedTransaction, encoding, network, rpcUrl }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_transaction })

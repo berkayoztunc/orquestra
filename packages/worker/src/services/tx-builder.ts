@@ -11,6 +11,8 @@
 import type { AnchorIDL, AnchorInstruction, AnchorAccountMeta, AnchorType, AnchorError, CodamaIDL, CodamaTypeNode, CodamaInstructionArgument, CodamaValueNode } from './idl-parser'
 import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeAccountMeta, normalizeField, getIDLProgramName, detectIDLFormat, getCodamaInstruction, getCodamaDiscriminatorBytes, getCodamaUserArgs } from './idl-parser'
 import type { ResolvedCluster } from '../utils/solana-rpc'
+import { rpcFetch, RPC_TIMEOUTS } from '../utils/solana-rpc'
+import { MemoCache } from '../utils/memo-cache'
 
 export type RiskLevel = 'low' | 'medium' | 'high'
 
@@ -919,20 +921,34 @@ export function validateBuildRequest(
   return { valid: errors.length === 0, errors }
 }
 
+// Warm-isolate blockhash cache. Blockhashes stay valid ~60–90s on-chain; reusing
+// one for ≤15s trims an RPC round trip per build/simulate while leaving clients a
+// wide signing window. Kill switch: setBlockhashCacheDisabled(true) (env-driven).
+const blockhashCache = new MemoCache<{ blockhash: string; lastValidBlockHeight?: number }>(8, 15_000)
+let blockhashCacheDisabled = false
+
+export function setBlockhashCacheDisabled(disabled: boolean): void {
+  blockhashCacheDisabled = disabled
+}
+
 async function fetchLatestBlockhash(
   rpcUrl: string,
 ): Promise<{ blockhash: string; lastValidBlockHeight?: number }> {
+  if (!blockhashCacheDisabled) {
+    const cached = blockhashCache.get(rpcUrl)
+    if (cached) return cached
+  }
   try {
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await rpcFetch(
+      rpcUrl,
+      JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
         method: 'getLatestBlockhash',
         params: [{ commitment: 'finalized' }],
       }),
-    })
+      RPC_TIMEOUTS.blockhash,
+    )
 
     const data = (await response.json()) as {
       result?: { value?: { blockhash: string; lastValidBlockHeight?: number } }
@@ -945,6 +961,9 @@ async function fetchLatestBlockhash(
       }
       if (typeof value.lastValidBlockHeight === 'number') {
         out.lastValidBlockHeight = value.lastValidBlockHeight
+      }
+      if (!blockhashCacheDisabled) {
+        blockhashCache.set(rpcUrl, out)
       }
       return out
     }
@@ -969,10 +988,9 @@ async function simulateTransactionRpc(
 ): Promise<{ err: unknown | null; logs: string[] }> {
   const base64 = uint8ArrayToBase64(wireBytes)
   try {
-    const response = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await rpcFetch(
+      rpcUrl,
+      JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
         method: 'simulateTransaction',
@@ -985,7 +1003,8 @@ async function simulateTransactionRpc(
           },
         ],
       }),
-    })
+      RPC_TIMEOUTS.simulate,
+    )
     const data = (await response.json()) as {
       result?: { value?: { err: unknown; logs?: string[] } }
       error?: { message?: string }

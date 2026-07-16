@@ -14,6 +14,7 @@ import {
   detectCodamaAccountType,
 } from './account-parser'
 import type { ResolvedCluster } from '../utils/solana-rpc'
+import { rpcFetch, RPC_TIMEOUTS } from '../utils/solana-rpc'
 
 export interface ProgramAccountMemcmpFilter {
   offset: number
@@ -466,16 +467,16 @@ export async function queryProgramAccounts(opts: {
       if (input.changedSinceSlot != null) config.changedSinceSlot = input.changedSinceSlot
     }
 
-    const response = await fetch(opts.rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const response = await rpcFetch(
+      opts.rpcUrl,
+      JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
         method,
         params: [opts.programId, config],
       }),
-    })
+      RPC_TIMEOUTS.programAccounts,
+    )
 
     if (!response.ok) {
       throw new Error(`RPC request failed: HTTP ${response.status}`)

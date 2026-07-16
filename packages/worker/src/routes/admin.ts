@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { runDailyIdlSync } from '../services/idl-sync'
 import { importProgramMetrics } from '../services/program-metrics'
+import { fetchWithTimeout } from '../utils/solana-rpc'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -458,7 +459,7 @@ app.get('/sync/verified-build-total', async (c) => {
       }
     }
 
-    const response = await fetch('https://verify.osec.io/verified-programs', {
+    const response = await fetchWithTimeout('https://verify.osec.io/verified-programs', {
       method: 'GET',
       headers: { Accept: 'application/json' },
     })

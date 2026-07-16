@@ -91,6 +91,73 @@ export function resolveSolanaRpcUrl(opts: {
   }
 }
 
+// ────────────────────────────────────────────────────────
+// Fetch with timeout + failover
+// ────────────────────────────────────────────────────────
+
+export const RPC_TIMEOUTS = {
+  /** getLatestBlockhash and other light lookups */
+  blockhash: 5_000,
+  /** getAccountInfo */
+  accountInfo: 8_000,
+  /** simulateTransaction */
+  simulate: 15_000,
+  /** getProgramAccounts — can return large payloads */
+  programAccounts: 20_000,
+  /** generic third-party HTTP calls */
+  thirdParty: 10_000,
+} as const
+
+/**
+ * fetch() with an AbortSignal timeout. Throws on timeout like any network error
+ * so existing catch blocks keep producing the same error responses.
+ */
+export function fetchWithTimeout(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs: number = RPC_TIMEOUTS.thirdParty,
+): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
+}
+
+/**
+ * JSON-RPC POST with timeout and URL failover.
+ * Tries each URL in order; advances on timeout, network error, or HTTP 5xx/429.
+ * Non-retryable responses (4xx other than 429) are returned as-is so callers
+ * keep their existing error handling.
+ */
+export async function rpcFetch(
+  urls: string | string[],
+  body: string,
+  timeoutMs: number,
+): Promise<Response> {
+  const list = Array.isArray(urls) ? urls : [urls]
+  let lastError: unknown
+
+  for (const url of list) {
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        },
+        timeoutMs,
+      )
+      if (response.status >= 500 || response.status === 429) {
+        lastError = new Error(`RPC request failed: HTTP ${response.status}`)
+        continue
+      }
+      return response
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('RPC request failed: all endpoints unreachable')
+}
+
 /** Hostname only — avoids logging full URLs with API keys. */
 export function rpcUrlHost(rpcUrl: string): string {
   try {
@@ -132,11 +199,7 @@ export async function fetchAccountInfo(
     params: [address, { encoding: 'base64', commitment: 'confirmed' }],
   })
 
-  const response = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  })
+  const response = await rpcFetch(rpcUrl, body, RPC_TIMEOUTS.accountInfo)
 
   if (!response.ok) {
     throw new Error(`RPC request failed: HTTP ${response.status}`)

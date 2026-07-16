@@ -77,8 +77,13 @@ export function rateLimiter(opts: RateLimitOptions) {
         )
       }
 
-      // Store updated count with TTL
-      await cache.put(key, JSON.stringify(entry), { expirationTtl: windowSec + 10 })
+      // Store updated count with TTL — deferred so the KV write never blocks the response
+      const putPromise = cache.put(key, JSON.stringify(entry), { expirationTtl: windowSec + 10 })
+      if (c.executionCtx?.waitUntil) {
+        c.executionCtx.waitUntil(putPromise.catch(() => {}))
+      } else {
+        await putPromise
+      }
     } catch {
       // On KV errors, allow the request through
     }

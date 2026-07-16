@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '../utils/solana-rpc'
+
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 500  // Compass API hard cap per page
 const BATCH_SIZE = 40 // D1 batch() limit: ~430 vars total; 9 vars/row → max 47, use 40
@@ -43,7 +45,7 @@ export async function importProgramMetrics(env: { DB: any }): Promise<{ imported
 
     let programs: CompassProgram[]
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } })
+      const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } })
       if (!res.ok) {
         console.error(`[program-metrics] Compass API page ${page} returned ${res.status}`)
         break

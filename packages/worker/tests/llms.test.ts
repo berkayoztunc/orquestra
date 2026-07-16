@@ -42,6 +42,7 @@ function makeEnv(externalApiRows: any[] = []) {
                 return null
               },
               async all() {
+                if (sql.includes('FROM projects')) return { results: [projectRow] }
                 if (sql.includes('FROM known_addresses')) return { results: [] }
                 if (sql.includes('FROM custom_api_endpoints')) return { results: externalApiRows }
                 return { results: [] }
@@ -49,6 +50,9 @@ function makeEnv(externalApiRows: any[] = []) {
             }
           },
         }
+      },
+      async batch(statements: any[]) {
+        return Promise.all(statements.map((stmt) => stmt.all()))
       },
     },
     IDLS: {},

@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { beforeEach, describe, expect, test } from 'bun:test'
 import apiApp from '../src/routes/api'
 import {
   buildIdlSummary,
+  clearIdlSummaryMemo,
   getPublicIdlSummary,
   idlSummaryCacheKey,
 } from '../src/services/idl-summary'
@@ -84,6 +85,10 @@ function makeDb(options: { allowIdlLookup?: boolean; idlLookups?: { count: numbe
 }
 
 describe('IDL summary cache', () => {
+  beforeEach(() => {
+    clearIdlSummaryMemo()
+  })
+
   test('builds normalized schema summary for Anchor IDLs', () => {
     const summary = buildIdlSummary({ projectId: 'proj_test', programId: PROGRAM_ID, version: 1, idl })
     expect(summary.schemaVersion).toBe(1)

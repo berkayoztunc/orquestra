@@ -4,7 +4,7 @@ import { buildRateLimit } from '../middleware/rate-limit'
 import { invalidateCache } from '../middleware/cache'
 import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL, detectIDLFormat, getCodamaInstruction, getCodamaUserArgs, resolveCodamaType, describeCodamaDiscriminator, resolveCodamaAccountFields } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
-import { buildTransaction, validateBuildRequest, simulateRawTransaction } from '../services/tx-builder'
+import { buildTransaction, validateBuildRequest, simulateRawTransaction, setBlockhashCacheDisabled } from '../services/tx-builder'
 import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData, detectCodamaAccountType, deserializeCodamaAccountData } from '../services/account-parser'
@@ -183,15 +183,15 @@ const app = new Hono<Env>()
 app.get('/stats', async (c) => {
   const db = c.env.DB
   try {
-    const [users, projects, addresses] = await Promise.all([
-      db.prepare('SELECT COUNT(*) as count FROM users WHERE id != ?').bind('system').first(),
-      db.prepare('SELECT COUNT(*) as count FROM projects WHERE is_public = 1').first(),
-      db.prepare('SELECT COUNT(*) as count FROM known_addresses').first(),
+    const [usersRes, projectsRes, addressesRes] = await db.batch([
+      db.prepare('SELECT COUNT(*) as count FROM users WHERE id != ?').bind('system'),
+      db.prepare('SELECT COUNT(*) as count FROM projects WHERE is_public = 1'),
+      db.prepare('SELECT COUNT(*) as count FROM known_addresses'),
     ])
     return c.json({
-      total_users: (users?.count as number) ?? 0,
-      total_projects: (projects?.count as number) ?? 0,
-      total_known_addresses: (addresses?.count as number) ?? 0,
+      total_users: ((usersRes?.results?.[0] as any)?.count as number) ?? 0,
+      total_projects: ((projectsRes?.results?.[0] as any)?.count as number) ?? 0,
+      total_known_addresses: ((addressesRes?.results?.[0] as any)?.count as number) ?? 0,
     })
   } catch {
     return c.json({ error: 'Failed to fetch stats' }, 500)
@@ -340,9 +340,12 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
         ${whereClause}
       `
 
-      const results = await db.prepare(selectSQL).bind(...bindParams, limit, offset).all()
-      const countResult = await db.prepare(countSQL).bind(...bindParams).first()
-      const total = Number((countResult as any)?.count ?? 0)
+      // Single D1 round trip for list + count
+      const [results, countRes] = await db.batch([
+        db.prepare(selectSQL).bind(...bindParams, limit, offset),
+        db.prepare(countSQL).bind(...bindParams),
+      ])
+      const total = Number((countRes?.results?.[0] as any)?.count ?? 0)
 
       return c.json({
         projects: results?.results || [],
@@ -522,27 +525,30 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
   try {
     const db = c.env?.DB
 
+    if (!db) {
+      return c.json({ error: 'Project not found' }, 404)
+    }
+
     // Batch related queries for performance — single round-trip to D1
-    const [projectResult, latestIdlResult, socialsResult] = await Promise.all([
+    const [projectRes, latestIdlRes, socialsRes] = await db.batch([
       db
-        ?.prepare(
+        .prepare(
           'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.id = ?'
         )
-        .bind(projectId)
-        .first(),
+        .bind(projectId),
       db
-        ?.prepare(
+        .prepare(
           'SELECT id, version, created_at FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
         )
-        .bind(projectId)
-        .first(),
+        .bind(projectId),
       db
-        ?.prepare('SELECT twitter, discord, telegram, github, website FROM project_socials WHERE project_id = ?')
-        .bind(projectId)
-        .first(),
+        .prepare('SELECT twitter, discord, telegram, github, website FROM project_socials WHERE project_id = ?')
+        .bind(projectId),
     ])
+    const latestIdlResult = latestIdlRes?.results?.[0] as { version?: number; created_at?: string } | undefined
+    const socialsResult = socialsRes?.results?.[0]
 
-    const project = projectResult
+    const project = projectRes?.results?.[0] as any
 
     if (!project) {
       return c.json({ error: 'Project not found' }, 404)
@@ -915,6 +921,7 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
       env: c.env,
     })
 
+    setBlockhashCacheDisabled((c.env as any)?.BLOCKHASH_CACHE_DISABLED === '1')
     const result = await buildTransaction(
       data.idl,
       instructionName,

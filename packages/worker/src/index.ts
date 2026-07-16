@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 
 // MCP
@@ -25,7 +24,7 @@ export { VerifiedIdlImportWorkflow } from './workflows/verified-idl-import-workf
 import { errorHandler } from './middleware/error-handler'
 import { apiRateLimit } from './middleware/rate-limit'
 import { requestLogger } from './middleware/request-logger'
-import { publicApiCache } from './middleware/cache'
+import { statsCache, projectListCache, idlReadCache } from './middleware/cache'
 import { performanceMonitor, compressionHeaders } from './middleware/performance'
 
 // Routes
@@ -59,6 +58,7 @@ type Env = {
     API_BASE_URL: string
     CORS_ORIGIN: string
     INGEST_API_KEY: string
+    RESPONSE_CACHE_DISABLED?: string
     AI: Ai
     AI_ANALYSIS_MODEL?: string
     PROGRAM_METRICS_WORKFLOW: any
@@ -79,7 +79,6 @@ const app = new Hono<Env>()
 // Middleware
 app.use('*', performanceMonitor)
 app.use('*', compressionHeaders)
-app.use('*', logger())
 app.use('*', errorHandler)
 app.use(
   '*',
@@ -101,11 +100,22 @@ app.use(
 // Routes
 app.route('/health', healthRoutes)
 app.route('/auth', authRoutes)
+app.use('/project/:projectId/llms.txt', idlReadCache)
 app.route('/', llmsRoutes)
 app.route('/', discoveryRoutes)
 app.use('/api/*', requestLogger)
 app.use('/api/*', apiRateLimit)
-// app.use('/api/*', publicApiCache)
+// Response caching — route-scoped, anonymous GETs only (auth-header requests bypass).
+// Kill switch: set RESPONSE_CACHE_DISABLED=1 to bypass without a redeploy.
+app.use('/api/stats', statsCache)
+app.use('/api/projects', projectListCache)
+app.use('/api/:projectId/idl', idlReadCache)
+app.use('/api/:projectId/instructions', idlReadCache)
+app.use('/api/:projectId/instructions/:name', idlReadCache)
+app.use('/api/:projectId/accounts', idlReadCache)
+app.use('/api/:projectId/errors', idlReadCache)
+app.use('/api/:projectId/events', idlReadCache)
+app.use('/api/:projectId/types', idlReadCache)
 app.route('/api/idl', idlRoutes)
 app.route('/api/ingest', ingestRoutes)
 app.route('/api/admin', adminRoutes)

@@ -3,6 +3,7 @@ import { generateJWT, verifyJWT } from '../services/jwt'
 import { authMiddleware } from '../middleware/auth'
 import { authRateLimit } from '../middleware/rate-limit'
 import { generateId } from '../utils/id'
+import { fetchWithTimeout } from '../utils/solana-rpc'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -47,7 +48,7 @@ app.get('/github/callback', async (c) => {
 
   try {
     // Exchange code for access token
-    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    const tokenResponse = await fetchWithTimeout('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -73,7 +74,7 @@ app.get('/github/callback', async (c) => {
     }
 
     // Fetch user info from GitHub
-    const userResponse = await fetch('https://api.github.com/user', {
+    const userResponse = await fetchWithTimeout('https://api.github.com/user', {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: 'application/json',
@@ -92,7 +93,7 @@ app.get('/github/callback', async (c) => {
     // Fetch primary email if not available
     let email = githubUser.email
     if (!email) {
-      const emailResponse = await fetch('https://api.github.com/user/emails', {
+      const emailResponse = await fetchWithTimeout('https://api.github.com/user/emails', {
         headers: {
           Authorization: `Bearer ${tokenData.access_token}`,
           Accept: 'application/json',
@@ -167,7 +168,7 @@ app.post('/github/callback', async (c) => {
 
   try {
     // Exchange code for access token
-    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    const tokenResponse = await fetchWithTimeout('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -191,7 +192,7 @@ app.post('/github/callback', async (c) => {
     }
 
     // Fetch user info
-    const userResponse = await fetch('https://api.github.com/user', {
+    const userResponse = await fetchWithTimeout('https://api.github.com/user', {
       headers: {
         Authorization: `Bearer ${tokenData.access_token}`,
         Accept: 'application/json',

@@ -14,6 +14,16 @@ import {
 import type { AnchorIDL, CodamaIDL } from './idl-parser'
 import { listCodamaPdaAccounts, listPdaAccounts } from './pda'
 import { generateDocumentation } from './doc-generator'
+import { MemoCache } from '../utils/memo-cache'
+
+// Warm-isolate memo: avoids re-reading + re-parsing the (large) summary JSON
+// from KV on every sub-resource request. Values are treated as immutable.
+const summaryMemo = new MemoCache<IdlSummary>(50, 60_000)
+
+/** Test hook — resets the warm-isolate memo between test cases. */
+export function clearIdlSummaryMemo(): void {
+  summaryMemo.clear()
+}
 
 export const IDL_SUMMARY_SCHEMA_VERSION = 1
 export const IDL_SUMMARY_TTL_SECONDS = 604800
@@ -104,9 +114,11 @@ export async function writeIdlSummaryCache(opts: {
   if (opts.version != null) {
     await opts.kv.put(idlSummaryCacheKey(opts.projectId, opts.version), value, { expirationTtl: IDL_SUMMARY_TTL_SECONDS })
   }
+  summaryMemo.deleteByPrefix(`${opts.projectId}:`)
 }
 
 export async function deleteIdlSummaryCache(kv: KVLike | undefined, projectId: string): Promise<void> {
+  summaryMemo.deleteByPrefix(`${projectId}:`)
   if (!kv?.delete) return
   await kv.delete(idlSummaryCacheKey(projectId))
 }
@@ -133,6 +145,11 @@ export async function getPublicIdlSummary(opts: {
   apiBaseUrl?: string
   includeDocs?: boolean
 }): Promise<IdlSummary | null> {
+  const versionKey = opts.version ?? null
+  const memoKey = `${opts.projectId}:${versionKey ?? 'latest'}:${opts.includeDocs ? 'docs' : 'nodocs'}`
+  const memoized = summaryMemo.get(memoKey)
+  if (memoized) return memoized
+
   const project = await opts.db
     ?.prepare('SELECT id, program_id, is_public FROM projects WHERE id = ?')
     .bind(opts.projectId)
@@ -140,10 +157,12 @@ export async function getPublicIdlSummary(opts: {
 
   if (!project || !project.is_public) return null
 
-  const versionKey = opts.version ?? null
   const cacheKey = idlSummaryCacheKey(opts.projectId, versionKey ?? 'latest')
   const cached = await readCachedSummary(opts.kv, cacheKey, opts.projectId, project.program_id)
-  if (cached && (!opts.includeDocs || cached.docs)) return cached
+  if (cached && (!opts.includeDocs || cached.docs)) {
+    summaryMemo.set(memoKey, cached)
+    return cached
+  }
 
   const row = await fetchSummaryVersionRow(opts.db, opts.projectId, versionKey)
   if (!row) return null
@@ -164,6 +183,7 @@ export async function getPublicIdlSummary(opts: {
     await opts.kv.put(cacheKey, JSON.stringify(summary), { expirationTtl: IDL_SUMMARY_TTL_SECONDS })
   }
 
+  summaryMemo.set(memoKey, summary)
   return summary
 }
 

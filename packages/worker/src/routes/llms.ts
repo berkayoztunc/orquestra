@@ -84,10 +84,28 @@ app.get('/project/:projectId/llms.txt', async (c) => {
 
   try {
     const db = c.env?.DB
-    const project = await db
-      ?.prepare('SELECT name, program_id, is_public, custom_docs FROM projects WHERE id = ?')
-      .bind(projectId)
-      .first()
+    if (!db) {
+      return c.text('Not Found', 404)
+    }
+
+    // One D1 round trip for all per-project reads (extra rows on 403/404 are harmless)
+    const [projectRes, aiAnalysisRes, knownAddressesRes, externalApisRes] = await db.batch([
+      db.prepare('SELECT name, program_id, is_public, custom_docs FROM projects WHERE id = ?').bind(projectId),
+      db
+        .prepare('SELECT detailed_analysis_json FROM ai_analyses WHERE project_id = ? ORDER BY generated_at DESC LIMIT 1')
+        .bind(projectId),
+      db
+        .prepare('SELECT label, address, description FROM known_addresses WHERE project_id = ? ORDER BY label ASC')
+        .bind(projectId),
+      db
+        .prepare(
+          'SELECT name, method, url, purpose, parameters_json, example_request, response_notes, auth_notes FROM custom_api_endpoints WHERE project_id = ? ORDER BY created_at ASC'
+        )
+        .bind(projectId),
+    ])
+    const project = projectRes?.results?.[0] as
+      | { name: string; program_id: string; is_public: number; custom_docs: string | null }
+      | undefined
 
     if (!project) {
       return c.text('Not Found', 404)
@@ -136,10 +154,7 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       }
     }
 
-    const aiAnalysisRow = await db
-      ?.prepare('SELECT detailed_analysis_json FROM ai_analyses WHERE project_id = ? ORDER BY generated_at DESC LIMIT 1')
-      .bind(projectId)
-      .first()
+    const aiAnalysisRow = aiAnalysisRes?.results?.[0] as { detailed_analysis_json: string } | undefined
     const aiAnalysis: {
       instructionFlows?: Array<{ name: string; steps: string[]; description: string }>
       crossProgramAccounts?: Array<{ account: string; program: string; note: string }>
@@ -147,12 +162,7 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       ? (() => { try { return JSON.parse(aiAnalysisRow.detailed_analysis_json as string) } catch { return null } })()
       : null
 
-    const knownAddresses = await db
-      ?.prepare(
-        'SELECT label, address, description FROM known_addresses WHERE project_id = ? ORDER BY label ASC'
-      )
-      .bind(projectId)
-      .all()
+    const knownAddresses = knownAddressesRes
 
     const projectName = (project.name as string) || projectId
     const apiBase = `${apiBaseUrl}/api/${projectId}`
@@ -169,12 +179,7 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       knownAddressesSection.push('')
     }
 
-    const externalApis = await db
-      ?.prepare(
-        'SELECT name, method, url, purpose, parameters_json, example_request, response_notes, auth_notes FROM custom_api_endpoints WHERE project_id = ? ORDER BY created_at ASC'
-      )
-      .bind(projectId)
-      .all()
+    const externalApis = externalApisRes
 
     const externalApisSection: string[] = []
     if (externalApis?.results?.length) {

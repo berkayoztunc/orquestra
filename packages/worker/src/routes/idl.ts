@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { authMiddleware } from '../middleware/auth'
+import { invalidateCache } from '../middleware/cache'
 import { uploadRateLimit } from '../middleware/rate-limit'
 import { validateIDL, parseIDL, detectIDLFormat } from '../services/idl-parser'
 import { generateDocumentation } from '../services/doc-generator'
@@ -161,6 +162,9 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
     const docs = generateDocumentation(body.idl, body.programId, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+      c.executionCtx?.waitUntil(
+        invalidateCache(c.env.CACHE, [`api:/api/${projectId}/`, `api:/project/${projectId}/`])
+      )
     }
     try {
       await writeIdlSummaryCache({
@@ -373,6 +377,9 @@ app.put('/:projectId', authMiddleware, async (c) => {
     const docs = generateDocumentation(body.idl, project.program_id as string, apiBaseUrl, projectId, body.cpiMd)
     if (c.env?.CACHE) {
       await c.env.CACHE.put(`docs:${projectId}`, docs.full, { expirationTtl: 604800 })
+      c.executionCtx?.waitUntil(
+        invalidateCache(c.env.CACHE, [`api:/api/${projectId}/`, `api:/project/${projectId}/`])
+      )
     }
     try {
       await writeIdlSummaryCache({
@@ -468,6 +475,9 @@ app.delete('/:projectId', authMiddleware, async (c) => {
     }
     if (c.env?.CACHE) {
       await c.env.CACHE.delete(`docs:${projectId}`)
+      c.executionCtx?.waitUntil(
+        invalidateCache(c.env.CACHE, [`api:/api/${projectId}/`, `api:/project/${projectId}/`])
+      )
     }
 
     return c.json({ message: 'Project and all associated data deleted', projectId })

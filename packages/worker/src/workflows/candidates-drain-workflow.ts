@@ -7,17 +7,22 @@ import { generateId } from '../utils/id'
 const TAG = '[candidates-drain-workflow]'
 
 /**
- * Candidates per durable step. Each candidate costs ~2-4 RPC subrequests
- * (fetch + ownership check, with RPC fallbacks), so 250 stays well under the
- * 1000-subrequest-per-step cap.
+ * Candidates per durable step. Each candidate costs ~2-4 subrequests (RPC
+ * fetch + ownership check + D1 writes). The Workflows engine can pack
+ * several fast consecutive steps into ONE Worker invocation, and the
+ * 1000-subrequest limit accumulates across them — so chunks are kept small
+ * and a periodic step.sleep forces hibernation (= fresh invocation budget).
  */
-const CHUNK = 250
+const CHUNK = 100
 
-/** Chunks per instance (~10k candidates) — keeps step count far below limits. */
-const MAX_CHUNKS = 40
+/** Chunks between forced hibernations (~300 candidates ≈ <900 subrequests). */
+const CHUNKS_PER_BREATHER = 3
 
-/** Safety valve on self-continuation depth (40 × 10k = 400k candidates max). */
-const MAX_ROUNDS = 40
+/** Chunks per instance (~6k candidates) — keeps step count far below limits. */
+const MAX_CHUNKS = 60
+
+/** Safety valve on self-continuation depth (60 × 6k = 360k candidates max). */
+const MAX_ROUNDS = 60
 
 type Env = SyncEnv & {
   CANDIDATES_DRAIN_WORKFLOW: any
@@ -96,6 +101,12 @@ export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesD
         if (result.checked === 0) {
           drained = true
           break
+        }
+
+        // Hibernate periodically so the next chunks get a fresh Worker
+        // invocation (resets the per-invocation subrequest counter).
+        if ((i + 1) % CHUNKS_PER_BREATHER === 0) {
+          await step.sleep(`cooldown after chunk ${i + 1}`, '1 minute')
         }
       }
     } catch (err) {

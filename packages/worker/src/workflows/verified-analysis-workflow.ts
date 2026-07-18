@@ -209,6 +209,12 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
       })
 
       if (ok) processed++; else errors++
+
+      // Periodic hibernation — consecutive fast steps can share one Worker
+      // invocation's 1000-subrequest budget; sleeping resets it.
+      if ((i + 1) % 20 === 0) {
+        await step.sleep(`cooldown after project ${i + 1}`, '1 minute')
+      }
     }
 
     // Self-continue while a full chunk was returned (more rows likely remain).

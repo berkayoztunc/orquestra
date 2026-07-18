@@ -101,6 +101,12 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
       skipped += counts.skipped
       errors += counts.errors
       categorized += counts.categorized
+
+      // The engine may pack consecutive fast steps into one Worker invocation,
+      // sharing its 1000-subrequest budget — hibernate periodically to reset it.
+      if ((i + 1) % 10 === 0) {
+        await step.sleep(`cooldown after batch ${i + 1}`, '1 minute')
+      }
     }
 
     console.log(`${TAG} phase 1 complete: updated=${updated} unchanged=${unchanged} skipped=${skipped} errors=${errors} categorized=${categorized}`)

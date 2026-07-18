@@ -725,6 +725,37 @@ export async function getVerifiedBuildTotal(): Promise<VerifiedBuildTotal> {
   return res.data
 }
 
+export interface PipelineHealthCheck {
+  name: string
+  ok: boolean
+  severity: 'warn' | 'critical'
+  detail: string
+  value?: number
+}
+
+export interface PipelineHealth {
+  status: 'ok' | 'degraded' | 'critical'
+  checkedAt: string
+  checks: PipelineHealthCheck[]
+  remediations: string[]
+  cached?: boolean
+}
+
+export async function getPipelineHealth(fresh = false): Promise<PipelineHealth> {
+  const res = await api.get('/admin/sync/pipeline-health', { params: fresh ? { fresh: 1 } : undefined })
+  return res.data
+}
+
+export async function remediatePipeline(): Promise<PipelineHealth> {
+  const res = await api.post('/admin/sync/remediate')
+  return res.data
+}
+
+export async function triggerDrain(mode: 'drain' | 'full-sweep' = 'drain'): Promise<{ triggered: boolean; instanceId?: string; reason?: string }> {
+  const res = await api.post('/admin/sync/trigger-drain', { mode })
+  return res.data
+}
+
 export interface ProgramMetrics {
   program_id: string
   tx_count_7d: number

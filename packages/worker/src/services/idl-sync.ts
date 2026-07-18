@@ -57,11 +57,11 @@ const CHECKPOINT_KEY = 'sync:progress:cursor'
 /** How many pending candidates to verify + auto-import per regular cron run */
 const CANDIDATES_PER_RUN = 3000
 
-/** How many candidates to process in the dedicated nightly burst cron */
-const CANDIDATES_BURST_LIMIT = 12000
-
 /** How many stale no_idl entries to recheck per run */
 const NO_IDL_RECHECK_LIMIT = 500
+
+/** Errors tolerated per candidate before it dead-letters to status 'failed' */
+const MAX_CANDIDATE_ATTEMPTS = 5
 
 /** Parallel workers for candidate verification/import */
 const CANDIDATE_CONCURRENCY = 20
@@ -240,9 +240,11 @@ async function upsertProjectByProgramId(
 }
 
 async function markCandidateNoIdl(db: D1Database, programId: string): Promise<void> {
+  // Jittered recheck window (25-35 days) so a bulk import doesn't create a
+  // thundering herd of simultaneous rechecks a month later.
   await db
     .prepare(
-      "UPDATE program_candidates SET status = 'no_idl', last_checked_at = CURRENT_TIMESTAMP, recheck_after = datetime('now', '+30 days') WHERE program_id = ?",
+      "UPDATE program_candidates SET status = 'no_idl', last_checked_at = CURRENT_TIMESTAMP, recheck_after = datetime('now', '+' || (25 + abs(random()) % 11) || ' days') WHERE program_id = ?",
     )
     .bind(programId)
     .run()
@@ -421,6 +423,15 @@ export async function processCandidates(
   wallStart: number,
   aiCallCount: number,
   limit: number = CANDIDATES_PER_RUN,
+  opts?: {
+    /**
+     * Full-sweep mode: recheck every no_idl candidate not yet checked since
+     * this ISO timestamp, ignoring recheck_after. Used by the weekly
+     * "all IDL" sweep — each processed row gets a fresh last_checked_at, so
+     * repeated chunked calls walk the whole pool exactly once per sweep.
+     */
+    sweepBefore?: string
+  },
 ): Promise<{ checked: number; imported: number; aiCallsUsed: number }> {
   // Pending candidates + stale no_idl entries due for recheck
   const { results: pending } = await db
@@ -430,14 +441,23 @@ export async function processCandidates(
     .bind('pending', limit)
     .all<CandidateRow>()
 
-  const { results: stale } = await db
-    .prepare(
-      `SELECT program_id FROM program_candidates
-       WHERE status = 'no_idl' AND recheck_after IS NOT NULL AND recheck_after < datetime('now')
-       ORDER BY recheck_after ASC LIMIT ?`,
-    )
-    .bind(NO_IDL_RECHECK_LIMIT)
-    .all<CandidateRow>()
+  const { results: stale } = opts?.sweepBefore
+    ? await db
+        .prepare(
+          `SELECT program_id FROM program_candidates
+           WHERE status = 'no_idl' AND (last_checked_at IS NULL OR last_checked_at < ?)
+           ORDER BY last_checked_at ASC LIMIT ?`,
+        )
+        .bind(opts.sweepBefore, limit)
+        .all<CandidateRow>()
+    : await db
+        .prepare(
+          `SELECT program_id FROM program_candidates
+           WHERE status = 'no_idl' AND recheck_after IS NOT NULL AND recheck_after < datetime('now')
+           ORDER BY recheck_after ASC LIMIT ?`,
+        )
+        .bind(NO_IDL_RECHECK_LIMIT)
+        .all<CandidateRow>()
 
   // Reset stale no_idl back to pending so the loop below processes them normally
   for (const row of stale ?? []) {
@@ -478,12 +498,19 @@ export async function processCandidates(
         imported += result.imported
       } catch (err) {
         console.error(`[idl-sync] Candidate processing failed for ${programId}:`, err)
-        // Requeue failed candidates for a future run.
+        // Requeue with an attempt counter; after MAX_CANDIDATE_ATTEMPTS the
+        // candidate dead-letters to 'failed' so it stops burning RPC calls.
+        const message = err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500)
         await db
           .prepare(
-            "UPDATE program_candidates SET status = 'pending' WHERE program_id = ?",
+            `UPDATE program_candidates
+             SET attempts = attempts + 1,
+                 last_error = ?,
+                 last_checked_at = CURRENT_TIMESTAMP,
+                 status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE 'pending' END
+             WHERE program_id = ?`,
           )
-          .bind(programId)
+          .bind(message, MAX_CANDIDATE_ATTEMPTS, programId)
           .run()
       }
     }
@@ -495,13 +522,6 @@ export async function processCandidates(
 }
 
 // ── Public entry points ───────────────────────────────────────────────────────
-
-/**
- * Nightly candidates burst (cron: 0 2 * * *).
- * Skips Phase 1 (existing project sync — handled by the 6h cron) and
- * focuses entirely on draining the discovery queue with a higher limit.
- * AI generates human-readable names + descriptions for all auto-imported programs.
- */
 
 export interface SyncBatchResult {
   updated: number
@@ -554,49 +574,6 @@ export async function syncProjectBatch(
   }
 
   return { updated, unchanged, skipped, errors, categorized }
-}
-
-export async function runCandidatesBurst(env: SyncEnv): Promise<void> {
-  const rpcUrls = buildMainnetRpcUrlList(env)
-  const wallStart = Date.now()
-
-  const runId = generateId()
-  await env.DB
-    .prepare(
-      "INSERT INTO sync_runs (id, started_at, trigger, status) VALUES (?, CURRENT_TIMESTAMP, 'cron-burst', 'running')",
-    )
-    .bind(runId)
-    .run()
-
-  console.log(`[idl-sync] Candidates burst started (limit=${CANDIDATES_BURST_LIMIT})`)
-
-  let candidatesChecked = 0
-  let candidatesImported = 0
-
-  try {
-    const result = await processCandidates(env.DB, rpcUrls, env.AI, wallStart, 0, CANDIDATES_BURST_LIMIT)
-    candidatesChecked = result.checked
-    candidatesImported = result.imported
-  } catch (err) {
-    console.error('[idl-sync] Burst candidates error:', err)
-  }
-
-  const elapsed = Math.round((Date.now() - wallStart) / 1000)
-  await env.DB
-    .prepare(
-      `UPDATE sync_runs
-       SET completed_at = CURRENT_TIMESTAMP, status = 'complete',
-           total_checked = 0, total_programs = 0,
-           candidates_checked = ?, candidates_imported = ?
-       WHERE id = ?`,
-    )
-    .bind(candidatesChecked, candidatesImported, runId)
-    .run()
-
-  console.log(
-    `[idl-sync] Burst complete in ${elapsed}s — ` +
-    `candidates: ${candidatesImported} imported of ${candidatesChecked} checked`,
-  )
 }
 
 /**

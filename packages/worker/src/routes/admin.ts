@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { runDailyIdlSync } from '../services/idl-sync'
+import { recordWorkflowInstance } from '../services/workflow-registry'
+import { computePipelineHealth, runPipelineHealthCheck, startCandidatesDrain, HEALTH_KV_KEY } from '../services/pipeline-health'
 import { importProgramMetrics } from '../services/program-metrics'
 import { fetchWithTimeout } from '../utils/solana-rpc'
 
@@ -661,8 +663,9 @@ app.get('/sync/verified-analysis-queue', async (c) => {
 /**
  * POST /api/admin/sync/trigger-verified-builds
  *
- * Triggers VerifiedBuildsWorkflow — fetches OSEC list, resets is_verified on all projects,
- * then marks matching programs as verified in batches.
+ * DEPRECATED: the monolith VerifiedBuildsWorkflow is replaced by the split
+ * chain osec-discover → candidates-drain → verified-match → verified-analysis
+ * (all scheduled). Kept as a manual fallback only.
  * Auth: X-Ingest-Key header required.
  */
 app.post('/sync/trigger-verified-builds', ingestKeyMiddleware, async (c) => {
@@ -671,7 +674,11 @@ app.post('/sync/trigger-verified-builds', ingestKeyMiddleware, async (c) => {
 
   try {
     const instance = await workflow.create({ params: { trigger: 'manual' } })
-    return c.json({ triggered: true, instanceId: instance.id, message: 'VerifiedBuildsWorkflow started' })
+    return c.json({
+      triggered: true,
+      instanceId: instance.id,
+      message: 'VerifiedBuildsWorkflow started (DEPRECATED — prefer trigger-osec-discover + trigger-verified-match)',
+    })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)
   }
@@ -717,6 +724,7 @@ app.post('/sync/trigger-osec-discover', ingestKeyMiddleware, async (c) => {
   if (!wf) return c.json({ error: 'OSEC_DISCOVER_WORKFLOW not bound' }, 500)
   try {
     const instance = await wf.create({ params: { trigger: 'admin' } })
+    await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'osec-discover', trigger: 'admin' })
     return c.json({ instanceId: instance.id, status: 'started', message: 'OSEC discover workflow started. Check queue status, then trigger IDL sync to import.' })
   } catch (err) {
     console.error('[admin] trigger-osec-discover error:', err)
@@ -845,6 +853,67 @@ app.get('/sync/verified-idl-import-status', async (c) => {
   } catch (err) {
     console.error('[admin] sync/verified-idl-import-status error:', err)
     return c.json({ error: 'Failed to fetch verified idl import status', details: String(err) }, 500)
+  }
+})
+
+// ── Pipeline Health ("smooth checker") ────────────────────────────────────────
+
+/**
+ * GET /api/admin/sync/pipeline-health
+ * Full health detail: per-check status, values, last remediations.
+ * Serves the cached result when fresh (5 min TTL); pass ?fresh=1 to recompute.
+ * Public read — no auth required (no secrets in the payload).
+ */
+app.get('/sync/pipeline-health', async (c) => {
+  const env = c.env as any
+  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+  try {
+    if (c.req.query('fresh') !== '1') {
+      const cached = await env.CACHE.get(HEALTH_KV_KEY, 'json')
+      if (cached) return c.json({ ...cached, cached: true })
+    }
+    const health = await computePipelineHealth(env)
+    return c.json(health)
+  } catch (err) {
+    console.error('[admin] sync/pipeline-health error:', err)
+    return c.json({ error: 'Failed to compute pipeline health', details: String(err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/remediate
+ * Runs the full health check + auto-remediation immediately (same code path
+ * as the 45 * * * * cron). Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/remediate', ingestKeyMiddleware, async (c) => {
+  const env = c.env as any
+  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
+  try {
+    const health = await runPipelineHealthCheck(env)
+    return c.json(health)
+  } catch (err) {
+    console.error('[admin] sync/remediate error:', err)
+    return c.json({ error: 'Remediation failed', details: String(err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-drain
+ * Manually starts CandidatesDrainWorkflow. Body: { mode?: 'drain' | 'full-sweep' }.
+ * Skips when a drain instance is already active. Auth: X-Ingest-Key required.
+ */
+app.post('/sync/trigger-drain', ingestKeyMiddleware, async (c) => {
+  const env = c.env as any
+  if (!env?.CANDIDATES_DRAIN_WORKFLOW) {
+    return c.json({ error: 'CANDIDATES_DRAIN_WORKFLOW binding not available' }, 500)
+  }
+  const body = await c.req.json().catch(() => ({})) as { mode?: 'drain' | 'full-sweep' }
+  const mode = body?.mode === 'full-sweep' ? 'full-sweep' : 'drain'
+  try {
+    const res = await startCandidatesDrain(env, 'admin', mode)
+    return c.json({ triggered: res.started, instanceId: res.instanceId, reason: res.reason, mode })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
   }
 })
 

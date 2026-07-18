@@ -40,14 +40,14 @@
     "clean": "rm -rf packages/*/dist packages/*/node_modules node_modules"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
     "@types/node": "^20.10.5",
-    "tsx": "^4.7.0",
-    "prettier": "^3.1.1",
-    "eslint": "^8.56.0",
     "@typescript-eslint/eslint-plugin": "^6.16.0",
     "@typescript-eslint/parser": "^6.16.0",
-    "wrangler": "^3.17.1"
+    "eslint": "^8.56.0",
+    "prettier": "^3.1.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^4.112.0"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -1,8 +1,16 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
+import { recordWorkflowInstance } from '../services/workflow-registry'
 
 const TAG = '[verified-match]'
 const DB_BATCH = 100 // max IDs per IN() clause
+
+/**
+ * Refuse to unmark verified programs when the fetched OSEC list is smaller
+ * than this fraction of our current verified count — a partial/broken OSEC
+ * response must never mass-clear is_verified flags.
+ */
+const UNMARK_SAFETY_RATIO = 0.8
 
 type Env = {
   DB: any
@@ -56,9 +64,19 @@ export class VerifiedMatchWorkflow extends WorkflowEntrypoint<Env, Params> {
         const osecSet = new Set(programIds)
         const { results: verifiedRows } = await this.env.DB
           .prepare(`SELECT program_id FROM projects WHERE is_verified = 1`).all()
-        const toUnmarkIds = (verifiedRows ?? [])
+        const currentVerified = (verifiedRows ?? []).length
+        let toUnmarkIds = (verifiedRows ?? [])
           .map((r: any) => r.program_id as string)
           .filter((id: string) => !osecSet.has(id))
+
+        // Safety: a suspiciously small OSEC list means partial data, not
+        // mass de-verification. Keep existing flags in that case.
+        if (currentVerified > 0 && programIds.length < currentVerified * UNMARK_SAFETY_RATIO) {
+          console.warn(
+            `${TAG} [2] OSEC list (${programIds.length}) < ${UNMARK_SAFETY_RATIO} × current verified (${currentVerified}) — skipping unmark`,
+          )
+          toUnmarkIds = []
+        }
 
         const matchedIds = [...inDb]
         const missingIds = programIds.filter(id => !inDb.has(id))
@@ -105,7 +123,12 @@ export class VerifiedMatchWorkflow extends WorkflowEntrypoint<Env, Params> {
       { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
       async () => {
         try {
-          await this.env.VERIFIED_ANALYSIS_WORKFLOW.create({ params: { trigger: 'admin' } })
+          const instance = await this.env.VERIFIED_ANALYSIS_WORKFLOW.create({ params: { trigger: 'admin' } })
+          await recordWorkflowInstance(this.env.DB, {
+            instanceId: instance.id,
+            workflow: 'verified-analysis',
+            trigger: 'continuation',
+          })
           console.log(`${TAG} [4] ✓ VerifiedAnalysisWorkflow started`)
         } catch (err) {
           console.error(`${TAG} [4] Failed to trigger VerifiedAnalysisWorkflow:`, String(err))

@@ -1,29 +1,44 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { syncProjectBatch, processCandidates, type SyncEnv } from '../services/idl-sync'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
+import { recordWorkflowInstance } from '../services/workflow-registry'
 import { generateId } from '../utils/id'
 
 const TAG = '[idl-sync-workflow]'
 const BATCH_SIZE = 20 // matches CONCURRENCY in idl-sync.ts
 const CANDIDATES_PER_RUN = 3000
 
+/**
+ * Batches per instance — keeps step counts far below the Workflow step limit.
+ * Larger registries continue in a fresh instance carrying the same runId.
+ */
+const MAX_BATCHES_PER_INSTANCE = 400
+
 type Env = {
   DB: any
   IDLS: any
   CACHE: any
   AI?: any
+  IDL_SYNC_WORKFLOW: any
   SOLANA_RPC_URL: string
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_FALLBACK_RPC_URLS?: string
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
 }
 
-type Params = { trigger?: 'cron' | 'manual' }
+type Params = {
+  trigger?: 'cron' | 'manual' | 'continuation'
+  /** Continuation state: project offset + sync_runs row + accumulated counts */
+  startOffset?: number
+  runId?: string
+  carried?: { updated: number; unchanged: number; skipped: number; errors: number; categorized: number }
+}
 
 export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'cron'
-    console.log(`${TAG} started (trigger=${trigger})`)
+    const startOffset = event.payload?.startOffset ?? 0
+    console.log(`${TAG} started (trigger=${trigger}, startOffset=${startOffset})`)
 
     // ── Step 1: init — count projects, create sync_runs row ──────────────────
     const { runId, total } = await step.do(
@@ -35,23 +50,34 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
           .first()
         const total = Number((countRow as any)?.total ?? 0)
 
-        const runId = generateId()
-        await this.env.DB
-          .prepare(`INSERT INTO sync_runs (id, started_at, trigger, status) VALUES (?, CURRENT_TIMESTAMP, ?, 'running')`)
-          .bind(runId, trigger)
-          .run()
-
-        console.log(`${TAG} sync_runs row created (id=${runId}), ${total} public projects`)
+        // Continuations reuse the original run's sync_runs row
+        let runId = event.payload?.runId
+        if (!runId) {
+          runId = generateId()
+          await this.env.DB
+            .prepare(`INSERT INTO sync_runs (id, started_at, trigger, status) VALUES (?, CURRENT_TIMESTAMP, ?, 'running')`)
+            .bind(runId, trigger === 'continuation' ? 'cron' : trigger)
+            .run()
+          console.log(`${TAG} sync_runs row created (id=${runId}), ${total} public projects`)
+        }
         return { runId, total }
       },
     )
 
     // ── Steps 2..N: sync batches ─────────────────────────────────────────────
-    const totalBatches = Math.ceil(total / BATCH_SIZE)
-    let updated = 0, unchanged = 0, skipped = 0, errors = 0, categorized = 0
+    const remainingBatches = Math.ceil(Math.max(total - startOffset, 0) / BATCH_SIZE)
+    const totalBatches = Math.min(remainingBatches, MAX_BATCHES_PER_INSTANCE)
+    const carried = event.payload?.carried
+    let updated = carried?.updated ?? 0,
+      unchanged = carried?.unchanged ?? 0,
+      skipped = carried?.skipped ?? 0,
+      errors = carried?.errors ?? 0,
+      categorized = carried?.categorized ?? 0
+
+    try {
 
     for (let i = 0; i < totalBatches; i++) {
-      const offset = i * BATCH_SIZE
+      const offset = startOffset + i * BATCH_SIZE
       const counts = await step.do(
         `sync batch ${i + 1} of ${totalBatches}`,
         { timeout: '2 minutes', retries: { limit: 2, delay: 10000, backoff: 'exponential' } },
@@ -78,6 +104,33 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
     }
 
     console.log(`${TAG} phase 1 complete: updated=${updated} unchanged=${unchanged} skipped=${skipped} errors=${errors} categorized=${categorized}`)
+
+    // ── Continuation: more project batches than fit in this instance ─────────
+    const nextOffset = startOffset + totalBatches * BATCH_SIZE
+    if (nextOffset < total) {
+      await step.do(
+        'spawn continuation',
+        { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
+        async () => {
+          const params: Params = {
+            trigger: 'continuation',
+            startOffset: nextOffset,
+            runId,
+            carried: { updated, unchanged, skipped, errors, categorized },
+          }
+          const instance = await this.env.IDL_SYNC_WORKFLOW.create({ params })
+          await recordWorkflowInstance(this.env.DB, {
+            instanceId: instance.id,
+            workflow: 'idl-sync',
+            trigger: 'continuation',
+            params: { startOffset: nextOffset, runId },
+          })
+          console.log(`${TAG} continuation spawned at offset ${nextOffset} (instance ${instance.id})`)
+        },
+      )
+      // Candidates + finalize happen on the last leg only.
+      return { runId, total, continuedAt: nextOffset }
+    }
 
     // ── Step N+1: process candidates ─────────────────────────────────────────
     const candidates = await step.do(
@@ -128,5 +181,31 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
     const result = { runId, total, updated, unchanged, skipped, errors, categorized, candidatesChecked: candidates.checked, candidatesImported: candidates.imported }
     console.log(`${TAG} workflow complete`, result)
     return result
+
+    } catch (err) {
+      // Never leave the sync_runs row stuck at 'running' when the instance
+      // errors out — mark it failed with whatever counts we accumulated.
+      await step.do(
+        'finalize sync run (failed)',
+        { timeout: '15 seconds', retries: { limit: 3, delay: 3000, backoff: 'exponential' } },
+        async () => {
+          await this.env.DB
+            .prepare(`
+              UPDATE sync_runs SET
+                completed_at = CURRENT_TIMESTAMP,
+                status = 'failed',
+                total_programs = ?,
+                updated_count = ?,
+                unchanged_count = ?,
+                skipped_count = ?,
+                error_count = ?
+              WHERE id = ? AND status = 'running'
+            `)
+            .bind(total, updated, unchanged, skipped, errors, runId)
+            .run()
+        },
+      )
+      throw err
+    }
   }
 }

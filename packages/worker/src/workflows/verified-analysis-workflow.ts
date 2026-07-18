@@ -4,9 +4,19 @@ import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
 import { writeIdlSummaryCache } from '../services/idl-summary'
+import { recordWorkflowInstance } from '../services/workflow-registry'
 import { generateId } from '../utils/id'
 
 const TAG = '[verified-analysis-workflow]'
+
+/**
+ * Projects per instance. Keeps the step count (and step-1 output size) well
+ * under Workflow limits; remaining work continues in a fresh instance.
+ */
+const CHUNK_SIZE = 200
+
+/** Max self-continuation rounds (50 × 200 = 10k projects per full refresh). */
+const MAX_ROUNDS = 50
 
 type Env = {
   DB: any
@@ -14,11 +24,21 @@ type Env = {
   CACHE: any
   IDLS: any
   API_BASE_URL: string
+  VERIFIED_ANALYSIS_WORKFLOW: any
 }
 
 type Params = {
-  trigger?: 'manual' | 'admin' | 'cron'
+  trigger?: 'manual' | 'admin' | 'cron' | 'continuation'
   force?: boolean
+  /** Continuation round (0 = first instance) */
+  round?: number
+}
+
+/** AI failures that will never succeed on retry (bad input, not rate limits). */
+function isNonRetryableAiError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  if (/\b429\b|rate.?limit/i.test(msg)) return false
+  return /\b4\d\d\b|invalid|too large|context length|bad request/i.test(msg)
 }
 
 type ProjectRow = {
@@ -33,7 +53,8 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'manual'
     const force = event.payload?.force ?? false
-    console.log(`${TAG} started (trigger=${trigger} force=${force})`)
+    const round = event.payload?.round ?? 0
+    console.log(`${TAG} started (trigger=${trigger} force=${force} round=${round})`)
 
     // ── Step 1: query verified programs that have IDLs ────────────────────────
     // force=false → only programs missing AI analysis (new programs)
@@ -47,6 +68,11 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
         // IDL for every eligible project in this single step blows past that cap
         // once the queue grows past a couple dozen programs, so each project's
         // IDL/cpi_md is fetched individually inside its own step below instead.
+        // Chunked to CHUNK_SIZE per instance — remaining work self-continues.
+        // force=false: the eligible set shrinks as analyses are inserted, so
+        //   each round re-selects from the top (no OFFSET).
+        // force=true: rows stay eligible all refresh long, so pages advance
+        //   by round using OFFSET.
         const { results } = await this.env.DB
           .prepare(
             force
@@ -58,6 +84,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
                 WHERE p.is_verified = 1 AND p.is_public = 1
                 GROUP BY p.id
                 ORDER BY p.name ASC
+                LIMIT ? OFFSET ?
               `
               : `
                 SELECT p.id, p.name, p.program_id,
@@ -68,12 +95,14 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
                 WHERE p.is_verified = 1 AND p.is_public = 1 AND aa.id IS NULL
                 GROUP BY p.id
                 ORDER BY p.name ASC
+                LIMIT ?
               `,
           )
+          .bind(...(force ? [CHUNK_SIZE, round * CHUNK_SIZE] : [CHUNK_SIZE]))
           .all()
 
         const list = (results ?? []) as ProjectRow[]
-        console.log(`${TAG} found ${list.length} programs to process (force=${force})`)
+        console.log(`${TAG} round ${round}: ${list.length} programs to process (force=${force})`)
         return list
       },
     )
@@ -130,29 +159,40 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
               .run()
           }
 
-          // 4. Run AI analysis
-          await generateAndStoreAIAnalysis({
-            db: this.env.DB,
-            ai: this.env.AI,
-            id: generateId(),
-            projectId: p.id,
-            idlVersionId: p.version_id,
-            idl,
-            docsText,
-            programId: p.program_id,
-            projectName: p.name,
-          })
+          // 4. Run AI analysis + categorization. Non-retryable AI failures
+          // (bad input / oversized prompt) skip the project instead of
+          // burning step retries — rate limits and 5xx still retry.
+          let category = 'skipped'
+          try {
+            await generateAndStoreAIAnalysis({
+              db: this.env.DB,
+              ai: this.env.AI,
+              id: generateId(),
+              projectId: p.id,
+              idlVersionId: p.version_id,
+              idl,
+              docsText,
+              programId: p.program_id,
+              projectName: p.name,
+            })
 
-          // 5. Categorize
-          const instructions = extractInstructionNames(idl)
-          const accounts = extractAccountNames(idl)
-          const cat = await categorizeProgramWithAI(this.env.AI, {
-            name: p.name,
-            programId: p.program_id,
-            instructions,
-            accounts,
-          })
-          await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases)
+            const instructions = extractInstructionNames(idl)
+            const accounts = extractAccountNames(idl)
+            const cat = await categorizeProgramWithAI(this.env.AI, {
+              name: p.name,
+              programId: p.program_id,
+              instructions,
+              accounts,
+            })
+            await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases)
+            category = cat.category
+          } catch (err) {
+            if (isNonRetryableAiError(err)) {
+              console.error(`${TAG} [${i + 1}/${projects.length}] non-retryable AI error for ${p.name} — skipping:`, String(err))
+              return false
+            }
+            throw err
+          }
 
           // 6. Invalidate stale cache entries
           await Promise.allSettled([
@@ -160,7 +200,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
             this.env.CACHE.delete(`project:${p.id}`),
           ])
 
-          console.log(`${TAG} [${i + 1}/${projects.length}] done: ${p.name} → ${cat.category}`)
+          console.log(`${TAG} [${i + 1}/${projects.length}] done: ${p.name} → ${category}`)
           return true
         },
       ).catch((err) => {
@@ -171,7 +211,30 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
       if (ok) processed++; else errors++
     }
 
-    const result = { processed, errors, total: projects.length }
+    // Self-continue while a full chunk was returned (more rows likely remain).
+    // force=false with zero progress must NOT continue — the same failing
+    // projects would be re-selected forever.
+    const mayHaveMore = projects.length === CHUNK_SIZE
+    const madeProgress = force || processed > 0
+    if (mayHaveMore && madeProgress && round < MAX_ROUNDS) {
+      await step.do(
+        'spawn continuation',
+        { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
+        async () => {
+          const instance = await this.env.VERIFIED_ANALYSIS_WORKFLOW.create({
+            params: { trigger: 'continuation', force, round: round + 1 },
+          })
+          await recordWorkflowInstance(this.env.DB, {
+            instanceId: instance.id,
+            workflow: 'verified-analysis',
+            trigger: 'continuation',
+          })
+          console.log(`${TAG} continuation spawned (round ${round + 1}, instance ${instance.id})`)
+        },
+      )
+    }
+
+    const result = { processed, errors, total: projects.length, round }
     console.log(`${TAG} complete`, result)
     return result
   }

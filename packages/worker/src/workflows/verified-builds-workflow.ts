@@ -1,3 +1,11 @@
+/**
+ * DEPRECATED: replaced by the split chain
+ *   osec-discover (daily) → candidates-drain (hourly) → verified-match (weekly)
+ *   → verified-analysis.
+ * Unscheduled since 2026-07; kept as a manual fallback via
+ * POST /api/admin/sync/trigger-verified-builds. Remove binding + class once
+ * the split chain has run clean for a few weeks.
+ */
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount } from '../services/idl-fetcher'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'

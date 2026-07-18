@@ -6,10 +6,11 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { handleMcpRequest } from './routes/mcp'
 
 // Scheduled
-import { runDailyIdlSync, runCandidatesBurst } from './services/idl-sync'
+import { startCandidatesDrain, runPipelineHealthCheck } from './services/pipeline-health'
 
 // Workflows
 export { ProgramMetricsWorkflow } from './workflows/program-metrics-workflow'
+export { CandidatesDrainWorkflow } from './workflows/candidates-drain-workflow'
 export { AiAnalysisWorkflow } from './workflows/ai-analysis-workflow'
 export { IdlSyncWorkflow } from './workflows/idl-sync-workflow'
 export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
@@ -71,6 +72,7 @@ type Env = {
     OSEC_DISCOVER_WORKFLOW: any
     VERIFIED_MATCH_WORKFLOW: any
     VERIFIED_IDL_IMPORT_WORKFLOW: any
+    CANDIDATES_DRAIN_WORKFLOW: any
   }
 }
 
@@ -139,12 +141,24 @@ export default {
     return app.fetch(request, env, ctx)
   },
 
-  async scheduled(_controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
-    // 15 * * * * and 0 2 * * * → candidates burst (drain discovery queue)
-    // 0 */6 * * *              → handled by IdlSyncWorkflow schedule (not this handler)
-    // 0 3 * * *                → handled by ProgramMetricsWorkflow schedule
-    if (_controller.cron === '0 2 * * *' || _controller.cron === '15 * * * *') {
-      ctx.waitUntil(runCandidatesBurst(env as any))
+  async scheduled(controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
+    // 15 * * * * / 0 2 * * * → CandidatesDrainWorkflow (drain discovery queue)
+    // 0 5 * * 6              → CandidatesDrainWorkflow full sweep (recheck ALL candidates)
+    // 45 * * * *             → pipeline health check + auto-remediation
+    // Workflow-native schedules (registered via wrangler.toml `schedules`):
+    //   0 */6 * * * IdlSyncWorkflow · 0 3 * * * ProgramMetricsWorkflow
+    //   0 1 * * *   OsecDiscoverWorkflow · 0 4 * * 1 VerifiedMatchWorkflow
+    switch (controller.cron) {
+      case '15 * * * *':
+      case '0 2 * * *':
+        ctx.waitUntil(startCandidatesDrain(env as any, 'cron', 'drain'))
+        break
+      case '0 5 * * 6':
+        ctx.waitUntil(startCandidatesDrain(env as any, 'cron', 'full-sweep'))
+        break
+      case '45 * * * *':
+        ctx.waitUntil(runPipelineHealthCheck(env as any))
+        break
     }
   },
 }

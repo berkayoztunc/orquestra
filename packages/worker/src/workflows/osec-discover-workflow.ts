@@ -1,12 +1,13 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
+import { fetchOsecVerifiedProgramIds } from '../services/osec'
+import { LAST_DISCOVERY_KV_KEY } from '../services/pipeline-health'
 
-const OSEC_URL = 'https://verify.osec.io/verified-programs'
 const TAG = '[osec-discover-workflow]'
 const CHECK_BATCH = 100  // max IDs per IN() query
 const INSERT_BATCH = 100 // max IDs per INSERT step
 
-type Env = { DB: any }
-type Params = { trigger?: 'manual' | 'admin' }
+type Env = { DB: any; CACHE: any }
+type Params = { trigger?: 'manual' | 'admin' | 'remediation' }
 
 export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
@@ -18,34 +19,30 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
       'fetch osec verified list',
       { timeout: '3 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const fetchPage = async (page: number): Promise<{ ids: string[]; totalPages: number }> => {
-          const res = await fetch(`${OSEC_URL}/${page}`, { headers: { Accept: 'application/json' } })
-          if (!res.ok) throw new Error(`OSEC API ${res.status} on page ${page}`)
-          const json = await res.json() as any
-          const ids: string[] = (json.verified_programs ?? [])
-            .map((p: any) => typeof p === 'string' ? p : (p?.program_id ?? ''))
-            .filter((id: string) => id.length > 0)
-          return { ids, totalPages: json.meta?.total_pages ?? 1 }
-        }
-
-        const first = await fetchPage(1)
-        const all: string[] = [...first.ids]
-
-        for (let page = 2; page <= first.totalPages; page++) {
-          const { ids } = await fetchPage(page)
-          if (ids.length === 0) break
-          all.push(...ids)
-        }
-
-        console.log(`${TAG} fetched ${all.length} verified program IDs from OSEC`)
-        return all
+        const { programIds } = await fetchOsecVerifiedProgramIds()
+        console.log(`${TAG} fetched ${programIds.length} verified program IDs from OSEC`)
+        return programIds
       },
     )
+
+    // Health stamp: the pipeline checker treats a missing/old stamp as stale
+    // discovery and re-triggers this workflow.
+    const stampDiscovery = async () => {
+      await step.do(
+        'stamp discovery freshness',
+        { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+        async () => {
+          await this.env.CACHE.put(LAST_DISCOVERY_KV_KEY, new Date().toISOString())
+        },
+      )
+    }
 
     if (osecIds.length === 0) {
       console.log(`${TAG} empty OSEC list — aborting`)
       return { total: 0, alreadyInDb: 0, alreadyQueued: 0, queued: 0 }
     }
+
+    await stampDiscovery()
 
     // ── Step 2: find which IDs are NOT already in projects table ─────────────
     const newIds = await step.do(

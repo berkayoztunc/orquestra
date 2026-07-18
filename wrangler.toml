@@ -38,8 +38,11 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 [ai]
 binding = "AI"
 
+# 15 * * * * / 0 2 * * *  → candidates drain workflow
+# 0 5 * * 6               → weekly full IDL sweep (recheck entire candidate pool)
+# 45 * * * *              → pipeline health check + auto-remediation
 [triggers]
-crons = ["15 * * * *", "0 2 * * *"]
+crons = ["15 * * * *", "0 2 * * *", "0 5 * * 6", "45 * * * *"]
 
 # Workflow: daily Solana Compass program metrics import (runs durably, one step per page)
 [[workflows]]
@@ -73,12 +76,12 @@ name = "bulk-recategorize"
 binding = "BULK_RECATEGORIZE_WORKFLOW"
 class_name = "BulkRecategorizeWorkflow"
 
-# Workflow: weekly OSEC verified build sync — sets is_verified on projects
+# Workflow: DEPRECATED monolith (match+import in one) — unscheduled, manual fallback only.
+# Production path is the split chain: osec-discover → candidates-drain → verified-match → verified-analysis.
 [[workflows]]
 name = "verified-builds"
 binding = "VERIFIED_BUILDS_WORKFLOW"
 class_name = "VerifiedBuildsWorkflow"
-schedules = ["0 4 * * 1"]
 
 # Workflow: generate AI analysis for verified programs that have IDL but no analysis yet
 [[workflows]]
@@ -91,18 +94,28 @@ class_name = "VerifiedAnalysisWorkflow"
 name = "osec-discover"
 binding = "OSEC_DISCOVER_WORKFLOW"
 class_name = "OsecDiscoverWorkflow"
+schedules = ["0 1 * * *"]
 
 # Workflow: match OSEC-verified programs against existing DB rows + trigger AI analysis
 [[workflows]]
 name = "verified-match"
 binding = "VERIFIED_MATCH_WORKFLOW"
 class_name = "VerifiedMatchWorkflow"
+schedules = ["0 4 * * 1"]
 
 # Workflow: fetch on-chain IDL (rate-limit-throttled) for OSEC-verified programs missing from DB or missing an IDL
 [[workflows]]
 name = "verified-idl-import"
 binding = "VERIFIED_IDL_IMPORT_WORKFLOW"
 class_name = "VerifiedIdlImportWorkflow"
+
+# Workflow: durable candidate drain (hourly) + weekly full IDL sweep.
+# Started from the scheduled() handler (crons 15 * * * *, 0 2 * * *, 0 5 * * 6)
+# and self-continues in ~10k-candidate rounds. Replaces the old runCandidatesBurst.
+[[workflows]]
+name = "candidates-drain"
+binding = "CANDIDATES_DRAIN_WORKFLOW"
+class_name = "CandidatesDrainWorkflow"
 
 # Environment: Production
 [env.production]
@@ -129,7 +142,7 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 binding = "AI"
 
 [env.production.triggers]
-crons = ["15 * * * *", "0 2 * * *"]
+crons = ["15 * * * *", "0 2 * * *", "0 5 * * 6", "45 * * * *"]
 
 [[env.production.workflows]]
 name = "program-metrics-import-prod"
@@ -162,7 +175,6 @@ class_name = "BulkRecategorizeWorkflow"
 name = "verified-builds-prod"
 binding = "VERIFIED_BUILDS_WORKFLOW"
 class_name = "VerifiedBuildsWorkflow"
-schedules = ["0 4 * * 1"]
 
 [[env.production.workflows]]
 name = "verified-analysis-prod"
@@ -173,16 +185,23 @@ class_name = "VerifiedAnalysisWorkflow"
 name = "osec-discover-prod"
 binding = "OSEC_DISCOVER_WORKFLOW"
 class_name = "OsecDiscoverWorkflow"
+schedules = ["0 1 * * *"]
 
 [[env.production.workflows]]
 name = "verified-match-prod"
 binding = "VERIFIED_MATCH_WORKFLOW"
 class_name = "VerifiedMatchWorkflow"
+schedules = ["0 4 * * 1"]
 
 [[env.production.workflows]]
 name = "verified-idl-import-prod"
 binding = "VERIFIED_IDL_IMPORT_WORKFLOW"
 class_name = "VerifiedIdlImportWorkflow"
+
+[[env.production.workflows]]
+name = "candidates-drain-prod"
+binding = "CANDIDATES_DRAIN_WORKFLOW"
+class_name = "CandidatesDrainWorkflow"
 
 # Environment: Development
 [env.development]

@@ -14,6 +14,8 @@ export interface OsecFetchOptions {
 export interface OsecFetchResult {
   programIds: string[]
   total: number
+  /** True only when every advertised page was fetched and non-empty. */
+  complete: boolean
 }
 
 export async function fetchOsecVerifiedProgramIds(opts: OsecFetchOptions = {}): Promise<OsecFetchResult> {
@@ -33,9 +35,13 @@ export async function fetchOsecVerifiedProgramIds(opts: OsecFetchOptions = {}): 
   const all: string[] = [...first.ids]
   for (let page = 2; page <= first.totalPages; page++) {
     const { ids } = await fetchPage(page)
-    if (ids.length === 0) break
+    if (ids.length === 0) {
+      // A truncated list must never be treated as the full verified set —
+      // consumers clear is_verified flags based on it.
+      throw new Error(`OSEC pagination truncated: empty page ${page} of ${first.totalPages}`)
+    }
     all.push(...ids)
   }
 
-  return { programIds: all, total: all.length }
+  return { programIds: all, total: all.length, complete: true }
 }

@@ -5,11 +5,14 @@ import {
   getScanMetadata,
   getVerifiedBuildTotal,
   getPublicStats,
+  getPipelineHealth,
+  remediatePipeline,
   type SyncRun,
   type CandidateStats,
   type ScanMetadata,
   type VerifiedBuildTotal,
   type PublicStats,
+  type PipelineHealth,
 } from '@/api/client'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -113,6 +116,8 @@ export default function Sync(): JSX.Element {
   const [candidates, setCandidates] = useState<CandidateStats | null>(null)
   const [scanMeta, setScanMeta] = useState<ScanMetadata | null>(null)
   const [verifiedBuildTotal, setVerifiedBuildTotal] = useState<VerifiedBuildTotal | null>(null)
+  const [health, setHealth] = useState<PipelineHealth | null>(null)
+  const [remediating, setRemediating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -154,7 +159,26 @@ export default function Sync(): JSX.Element {
       // non-fatal
     }
 
+    try {
+      const healthData = await getPipelineHealth()
+      setHealth(healthData)
+    } catch {
+      // non-fatal
+    }
+
     setLoading(false)
+  }, [])
+
+  const handleRemediate = useCallback(async () => {
+    setRemediating(true)
+    try {
+      const result = await remediatePipeline()
+      setHealth(result)
+    } catch (err: any) {
+      setError(err?.response?.data?.error ?? err?.message ?? 'Remediation failed')
+    } finally {
+      setRemediating(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -203,6 +227,74 @@ export default function Sync(): JSX.Element {
           {error}
         </div>
       )}
+
+      {/* ── Pipeline Health ── */}
+      <section>
+        <SectionHeading>Pipeline Health</SectionHeading>
+        {loading ? (
+          <SkeletonGrid cols={3} count={3} />
+        ) : health ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-2 border px-3 py-1.5 text-sm font-semibold uppercase tracking-wider ${
+                  health.status === 'ok'
+                    ? 'border-green-800/40 bg-green-950/20 text-green-400'
+                    : health.status === 'degraded'
+                      ? 'border-yellow-800/40 bg-yellow-950/20 text-yellow-400'
+                      : 'border-red-800/40 bg-red-950/20 text-red-400'
+                }`}
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    health.status === 'ok' ? 'bg-green-500' : health.status === 'degraded' ? 'bg-yellow-400' : 'animate-pulse bg-red-500'
+                  }`}
+                />
+                {health.status}
+              </span>
+              <span className="text-xs text-sand-900">
+                checked {formatRelative(health.checkedAt)}
+                {health.cached ? ' (cached)' : ''}
+              </span>
+              <button
+                onClick={handleRemediate}
+                disabled={remediating}
+                className="ml-auto border border-border-low bg-bg2 px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-sand-1200 hover:bg-bg3 disabled:opacity-50"
+              >
+                {remediating ? 'Remediating…' : 'Check + Remediate'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {health.checks.map((check) => (
+                <div
+                  key={check.name}
+                  className={`flex items-start gap-2 border px-3 py-2 ${
+                    check.ok ? 'border-border-low bg-bg2' : 'border-red-800/40 bg-red-950/20'
+                  }`}
+                >
+                  <span className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${check.ok ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-sand-1400">{check.name.replace(/_/g, ' ')}</p>
+                    <p className="truncate text-[11px] text-sand-900">{check.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {health.remediations.length > 0 && (
+              <div className="border border-border-low bg-bg2 px-3 py-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-sand-900">Last remediations</p>
+                <ul className="mt-1 space-y-0.5 text-xs text-sand-1200">
+                  {health.remediations.map((r, i) => (
+                    <li key={i}>· {r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <EmptyState title="Health data unavailable" sub="Checker runs at :45 every hour." />
+        )}
+      </section>
 
       {/* ── Overview ── */}
       <section>

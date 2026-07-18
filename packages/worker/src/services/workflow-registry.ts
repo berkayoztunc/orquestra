@@ -38,7 +38,7 @@ export async function recordWorkflowInstance(
 
 /**
  * True when a recent instance of `workflow` is still running/queued.
- * Used by the scheduled handler to avoid stacking drain instances.
+ * Used by the scheduled handler to avoid stacking import instances.
  */
 export async function hasActiveInstance(
   db: D1Database,

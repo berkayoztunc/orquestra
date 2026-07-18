@@ -48,58 +48,60 @@ function formatDuration(startIso: string, endIso: string | null): string {
   return `${mins}m ${remSecs}s`
 }
 
+const HEALTH_TONES = {
+  ok: { text: 'text-sand-1600', badge: 'border-border-low bg-sand-100 text-sand-1500', dot: 'bg-sand-1600' },
+  degraded: { text: 'text-[#b75000]', badge: 'border-[#b75000]/20 bg-[#b75000]/5 text-[#b75000]', dot: 'bg-[#b75000]' },
+  critical: { text: 'text-[#b71c00]', badge: 'border-[#b71c00]/20 bg-[#b71c00]/5 text-[#b71c00]', dot: 'bg-[#b71c00] motion-safe:animate-pulse' },
+} as const
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatCard({
   label,
   value,
   sub,
-  highlight,
 }: {
   label: string
   value: string | number
   sub?: string
-  highlight?: boolean
 }) {
   return (
-    <div
-      className={`flex flex-col gap-0.5 border px-4 py-3 ${
-        highlight
-          ? 'border-green-800/40 bg-green-950/20'
-          : 'border-border-low bg-bg2'
-      }`}
-    >
-      <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">{label}</span>
-      <span className="text-xl font-bold tabular-nums text-sand-1600">{value}</span>
-      {sub && <span className="text-[10px] text-sand-800">{sub}</span>}
+    <div className="border border-border-low bg-bg1 p-5">
+      <p className="text-xs font-medium uppercase tracking-[0.16em] text-sand-1100">{label}</p>
+      <p className="mt-2 text-2xl font-black tabular-nums tracking-tight text-sand-1600">{value}</p>
+      {sub && <p className="mt-1 text-sm text-sand-1200">{sub}</p>}
     </div>
   )
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
+function SectionHeader({ eyebrow, title, badge }: { eyebrow: string; title: string; badge?: React.ReactNode }) {
   return (
-    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-sand-1000">
-      {children}
-    </h2>
-  )
-}
-
-function EmptyState({ title, sub }: { title: string; sub?: string }) {
-  return (
-    <div className="border border-border-low px-6 py-8 text-center">
-      <p className="font-medium text-sand-1200">{title}</p>
-      {sub && <p className="mt-1 text-sm text-sand-900">{sub}</p>}
+    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">{eyebrow}</p>
+        <h2 className="mt-1 text-xl font-bold text-sand-1600">{title}</h2>
+      </div>
+      {badge}
     </div>
   )
 }
 
-function SkeletonGrid({ cols = 4, count }: { cols?: number; count: number }) {
+function EmptyState({ title, desc }: { title: string; desc?: string }) {
   return (
-    <div className={`grid grid-cols-2 gap-3 sm:grid-cols-${cols}`}>
+    <div className="flex min-h-32 flex-col items-center justify-center border border-dashed border-border-low bg-sand-50 px-4 py-8 text-center">
+      <p className="font-semibold text-sand-1600">{title}</p>
+      {desc && <p className="mt-1 max-w-sm text-sm leading-6 text-sand-1200">{desc}</p>}
+    </div>
+  )
+}
+
+function SkeletonGrid({ count }: { count: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="animate-pulse border border-border-low bg-bg2 px-5 py-4">
-          <div className="mb-2 h-3 w-20 rounded bg-sand-200" />
-          <div className="h-7 w-16 rounded bg-sand-300" />
+        <div key={i} className="border border-border-low bg-bg1 p-5">
+          <div className="h-3 w-24 bg-sand-200 motion-safe:animate-pulse" />
+          <div className="mt-3 h-8 w-20 bg-sand-200 motion-safe:animate-pulse" />
         </div>
       ))}
     </div>
@@ -189,127 +191,121 @@ export default function Sync(): JSX.Element {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const syncStatusDot = run?.status === 'running'
-    ? 'animate-pulse bg-yellow-400'
-    : run?.status === 'partial'
-      ? 'bg-orange-400'
-      : run?.completed_at
-        ? 'bg-green-500'
-        : 'bg-sand-600'
-
   const syncStatusText = run
     ? run.status === 'running'
-      ? `Sync running (started ${formatRelative(run.started_at)})`
+      ? `Sync running — started ${formatRelative(run.started_at)}`
       : run.status === 'partial'
         ? `Partial run ${formatRelative(run.completed_at!)} — resumed via checkpoint`
         : `Last sync ${formatRelative(run.completed_at!)}`
     : loading ? 'Loading…' : 'No sync runs recorded yet'
 
+  const healthTone = HEALTH_TONES[health?.status ?? 'ok']
+
   return (
-    <div className="space-y-10 px-6 py-10 sm:px-8 sm:py-12">
+    <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
 
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-sand-1600">Sync Dashboard</h1>
-          <p className="mt-1 text-sand-1000">
-            IDL sync · verified builds · discovery queue
+      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <h1 className="text-balance text-4xl font-semibold tracking-tight text-sand-1600 md:text-5xl">
+            Sync pipeline
+          </h1>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-sand-1200 md:text-base">
+            IDL sync, verified builds, and the program discovery queue — with an hourly
+            health checker that repairs stalls automatically.
           </p>
+          <p className="mt-3 text-sm text-sand-1200">{syncStatusText}</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-sand-900">
-          <span className={`inline-block h-2 w-2 rounded-full ${syncStatusDot}`} />
-          {syncStatusText}
-        </div>
-      </div>
+
+        <button
+          type="button"
+          onClick={handleRemediate}
+          disabled={remediating}
+          className="inline-flex min-h-11 items-center justify-center gap-2 border border-border-low bg-bg1 px-4 text-sm font-semibold text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {remediating ? 'Checking…' : 'Check + repair'}
+        </button>
+      </section>
 
       {error && (
-        <div className="border border-red-800 bg-red-950 px-4 py-3 text-sm text-red-300">
-          {error}
+        <div className="border border-[#b75000]/20 bg-[#b75000]/5 p-4 text-sm">
+          <p className="font-semibold text-[#b75000]">Something failed to load</p>
+          <p className="mt-1 text-[#b75000]/80">{error}</p>
         </div>
       )}
 
       {/* ── Pipeline Health ── */}
-      <section>
-        <SectionHeading>Pipeline Health</SectionHeading>
-        {loading ? (
-          <SkeletonGrid cols={3} count={3} />
-        ) : health ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-flex items-center gap-2 border px-3 py-1.5 text-sm font-semibold uppercase tracking-wider ${
-                  health.status === 'ok'
-                    ? 'border-green-800/40 bg-green-950/20 text-green-400'
-                    : health.status === 'degraded'
-                      ? 'border-yellow-800/40 bg-yellow-950/20 text-yellow-400'
-                      : 'border-red-800/40 bg-red-950/20 text-red-400'
-                }`}
-              >
-                <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    health.status === 'ok' ? 'bg-green-500' : health.status === 'degraded' ? 'bg-yellow-400' : 'animate-pulse bg-red-500'
-                  }`}
-                />
+      <section className="border border-border-low bg-bg1 p-5">
+        <SectionHeader
+          eyebrow="Smooth checker"
+          title="Pipeline health"
+          badge={
+            health && (
+              <span className={`inline-flex w-fit items-center gap-2 border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${healthTone.badge}`}>
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${healthTone.dot}`} aria-hidden="true" />
                 {health.status}
               </span>
-              <span className="text-xs text-sand-900">
-                checked {formatRelative(health.checkedAt)}
-                {health.cached ? ' (cached)' : ''}
-              </span>
-              <button
-                onClick={handleRemediate}
-                disabled={remediating}
-                className="ml-auto border border-border-low bg-bg2 px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-sand-1200 hover:bg-bg3 disabled:opacity-50"
-              >
-                {remediating ? 'Remediating…' : 'Check + Remediate'}
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            )
+          }
+        />
+        {loading ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-16 border border-border-low bg-sand-200 motion-safe:animate-pulse" />
+            ))}
+          </div>
+        ) : health ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {health.checks.map((check) => (
                 <div
                   key={check.name}
-                  className={`flex items-start gap-2 border px-3 py-2 ${
-                    check.ok ? 'border-border-low bg-bg2' : 'border-red-800/40 bg-red-950/20'
-                  }`}
+                  className={`border p-3 ${check.ok ? 'border-border-low bg-sand-50' : 'border-[#b75000]/20 bg-[#b75000]/5'}`}
                 >
-                  <span className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${check.ok ? 'bg-green-500' : 'bg-red-500'}`} />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-sand-1400">{check.name.replace(/_/g, ' ')}</p>
-                    <p className="truncate text-[11px] text-sand-900">{check.detail}</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${check.ok ? 'text-sand-1500' : 'text-[#b75000]'}`}>
+                      {check.name.replace(/_/g, ' ')}
+                    </p>
+                    <span className={`text-xs font-bold ${check.ok ? 'text-sand-1100' : 'text-[#b75000]'}`}>
+                      {check.ok ? 'pass' : 'fail'}
+                    </span>
                   </div>
+                  <p className="mt-1.5 truncate text-sm text-sand-1200">{check.detail}</p>
                 </div>
               ))}
             </div>
+            <p className="mt-4 text-xs text-sand-1100">
+              Checked {formatRelative(health.checkedAt)}{health.cached ? ' · cached' : ''} · auto-repair runs hourly at :45
+            </p>
             {health.remediations.length > 0 && (
-              <div className="border border-border-low bg-bg2 px-3 py-2">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-sand-900">Last remediations</p>
-                <ul className="mt-1 space-y-0.5 text-xs text-sand-1200">
+              <div className="mt-3 border border-border-low bg-sand-50 p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Repairs applied</p>
+                <ul className="mt-2 space-y-1 text-sm text-sand-1200">
                   {health.remediations.map((r, i) => (
-                    <li key={i}>· {r}</li>
+                    <li key={i}>{r}</li>
                   ))}
                 </ul>
               </div>
             )}
-          </div>
+          </>
         ) : (
-          <EmptyState title="Health data unavailable" sub="Checker runs at :45 every hour." />
+          <EmptyState title="Health data unavailable" desc="The checker publishes its first report at the next :45 tick." />
         )}
       </section>
 
       {/* ── Overview ── */}
       <section>
-        <SectionHeading>Overview</SectionHeading>
         {loading ? (
-          <SkeletonGrid cols={4} count={4} />
+          <SkeletonGrid count={4} />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <StatCard
-              label="Active Programs"
+              label="Active programs"
               value={(publicStats?.total_projects ?? 0).toLocaleString()}
               sub="public indexed programs"
             />
             <StatCard
-              label="IDL Updated Today"
+              label="IDL updated today"
               value={updatedToday.toLocaleString()}
               sub={updatedToday > 0 ? 'new versions detected' : 'no changes yet today'}
             />
@@ -317,10 +313,9 @@ export default function Sync(): JSX.Element {
               label="Verified in DB"
               value={verifiedCount.toLocaleString()}
               sub="OSEC verified + imported"
-              highlight={verifiedCount > 0}
             />
             <StatCard
-              label="OSEC Live Total"
+              label="OSEC live total"
               value={(verifiedBuildTotal?.total ?? 0).toLocaleString()}
               sub={verifiedBuildTotal?.fetched_at ? `fetched ${formatRelative(verifiedBuildTotal.fetched_at)}` : 'not fetched yet'}
             />
@@ -329,127 +324,86 @@ export default function Sync(): JSX.Element {
       </section>
 
       {/* ── Latest IDL Sync Run ── */}
-      <section>
-        <SectionHeading>Latest IDL Sync Run</SectionHeading>
+      <section className="border border-border-low bg-bg1 p-5">
+        <SectionHeader
+          eyebrow="Durable workflow"
+          title="Latest sync run"
+          badge={
+            run && (
+              <span className="w-fit border border-border-low bg-sand-100 px-3 py-1 text-xs font-medium text-sand-1500">
+                {run.trigger === 'manual' ? 'manual trigger' : run.trigger}
+              </span>
+            )
+          }
+        />
         {loading ? (
-          <SkeletonGrid cols={3} count={6} />
+          <SkeletonGrid count={4} />
         ) : run ? (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <StatCard
-                label="Programs Checked"
+                label="Checked"
                 value={`${(run.total_checked ?? 0).toLocaleString()}${
                   (run.total_programs ?? 0) > 0 && run.total_programs !== run.total_checked
                     ? ` / ${(run.total_programs ?? 0).toLocaleString()}`
                     : ''
                 }`}
-                sub={run.status === 'partial' ? 'partial — resumed next run' : 'this run'}
+                sub={run.status === 'partial' ? 'partial — resumes next run' : 'this run'}
               />
-              <StatCard
-                label="Updated"
-                value={(run.updated_count ?? 0).toLocaleString()}
-                sub="new IDL versions"
-              />
-              <StatCard
-                label="Unchanged"
-                value={(run.unchanged_count ?? 0).toLocaleString()}
-                sub="no changes"
-              />
-              <StatCard
-                label="Skipped"
-                value={(run.skipped_count ?? 0).toLocaleString()}
-                sub="no on-chain IDL"
-              />
+              <StatCard label="Updated" value={(run.updated_count ?? 0).toLocaleString()} sub="new IDL versions" />
+              <StatCard label="Unchanged" value={(run.unchanged_count ?? 0).toLocaleString()} sub="no changes" />
+              <StatCard label="Skipped" value={(run.skipped_count ?? 0).toLocaleString()} sub="no on-chain IDL" />
               <StatCard
                 label="Errors"
                 value={(run.error_count ?? 0).toLocaleString()}
                 sub={(run.error_count ?? 0) > 0 ? 'check logs' : 'clean run'}
               />
-              <StatCard
-                label="Duration"
-                value={formatDuration(run.started_at, run.completed_at)}
-                sub={run.trigger === 'manual' ? 'manual trigger' : 'scheduled cron'}
-              />
+              <StatCard label="Duration" value={formatDuration(run.started_at, run.completed_at)} sub="wall clock" />
             </div>
-            <p className="mt-2 text-xs text-sand-900">
-              Started: {formatDate(run.started_at)}
-              {run.completed_at && ` · Completed: ${formatDate(run.completed_at)}`}
+            <p className="mt-4 text-xs text-sand-1100">
+              Started {formatDate(run.started_at)}
+              {run.completed_at && ` · completed ${formatDate(run.completed_at)}`}
             </p>
           </>
         ) : (
           <EmptyState
             title="No sync runs yet"
-            sub="First sync runs automatically at next 6-hour tick (0 */6 * * *)."
-          />
-        )}
-      </section>
-
-      {/* ── Last Full Chain Scan ── */}
-      <section>
-        <SectionHeading>Last Full Chain Scan</SectionHeading>
-        {loading ? (
-          <SkeletonGrid cols={4} count={4} />
-        ) : scanMeta ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard
-              label="Programs Found"
-              value={(scanMeta.programs_found ?? 0).toLocaleString()}
-              sub="total on-chain programs"
-            />
-            <StatCard
-              label="Queued"
-              value={(scanMeta.queued ?? 0).toLocaleString()}
-              sub="added to discovery queue"
-            />
-            <StatCard
-              label="Skipped"
-              value={(scanMeta.skipped ?? 0).toLocaleString()}
-              sub="invalid program IDs"
-            />
-            <div className="flex flex-col gap-1 border border-border-low bg-bg2 px-4 py-3">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">Scanned At</span>
-              <span className="text-lg font-bold text-sand-1600">{formatDate(scanMeta.scanned_at)}</span>
-              <span className="text-[10px] text-sand-800">{formatRelative(scanMeta.scanned_at)}</span>
-            </div>
-          </div>
-        ) : (
-          <EmptyState
-            title="No scan data yet"
-            sub="Daily scan runs at 1am UTC via GitHub Actions."
+            desc="The first sync starts automatically at the next 6-hour tick."
           />
         )}
       </section>
 
       {/* ── Discovery Queue ── */}
-      <section>
-        <SectionHeading>Discovery Queue</SectionHeading>
+      <section className="border border-border-low bg-bg1 p-5">
+        <SectionHeader eyebrow="Auto-import" title="Discovery queue" />
         {loading ? (
-          <SkeletonGrid cols={4} count={4} />
+          <SkeletonGrid count={4} />
         ) : candidates ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard
-              label="Total in Queue"
-              value={(candidates.total ?? 0).toLocaleString()}
-              sub="unique program IDs"
-            />
-            <StatCard
-              label="Pending"
-              value={(candidates.pending ?? 0).toLocaleString()}
-              sub="awaiting cron check"
-            />
-            <StatCard
-              label="Has IDL"
-              value={(candidates.has_idl ?? 0).toLocaleString()}
-              sub="verified + imported"
-            />
-            <StatCard
-              label="No IDL"
-              value={(candidates.no_idl ?? 0).toLocaleString()}
-              sub="no on-chain IDL"
-            />
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard label="Total in queue" value={(candidates.total ?? 0).toLocaleString()} sub="unique program IDs" />
+            <StatCard label="Pending" value={(candidates.pending ?? 0).toLocaleString()} sub="awaiting import" />
+            <StatCard label="Has IDL" value={(candidates.has_idl ?? 0).toLocaleString()} sub="verified + imported" />
+            <StatCard label="No IDL" value={(candidates.no_idl ?? 0).toLocaleString()} sub="rechecked weekly" />
           </div>
         ) : (
-          <EmptyState title="No candidates queued yet" />
+          <EmptyState title="No candidates queued yet" desc="Daily OSEC discovery fills this queue at 01:00 UTC." />
+        )}
+      </section>
+
+      {/* ── Last Full Chain Scan ── */}
+      <section className="border border-border-low bg-bg1 p-5">
+        <SectionHeader eyebrow="Chain scan" title="Last full chain scan" />
+        {loading ? (
+          <SkeletonGrid count={4} />
+        ) : scanMeta ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatCard label="Programs found" value={(scanMeta.programs_found ?? 0).toLocaleString()} sub="total on-chain programs" />
+            <StatCard label="Queued" value={(scanMeta.queued ?? 0).toLocaleString()} sub="added to discovery queue" />
+            <StatCard label="Skipped" value={(scanMeta.skipped ?? 0).toLocaleString()} sub="invalid program IDs" />
+            <StatCard label="Scanned" value={formatRelative(scanMeta.scanned_at)} sub={formatDate(scanMeta.scanned_at)} />
+          </div>
+        ) : (
+          <EmptyState title="No scan data yet" desc="The daily chain scan runs at 1am UTC." />
         )}
       </section>
 

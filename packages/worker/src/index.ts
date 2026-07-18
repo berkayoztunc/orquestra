@@ -6,11 +6,11 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { handleMcpRequest } from './routes/mcp'
 
 // Scheduled
-import { startCandidatesDrain, runPipelineHealthCheck } from './services/pipeline-health'
+import { startCandidatesImport, runPipelineHealthCheck } from './services/pipeline-health'
 
 // Workflows
 export { ProgramMetricsWorkflow } from './workflows/program-metrics-workflow'
-export { CandidatesDrainWorkflow } from './workflows/candidates-drain-workflow'
+export { CandidatesImportWorkflow } from './workflows/candidates-import-workflow'
 export { AiAnalysisWorkflow } from './workflows/ai-analysis-workflow'
 export { IdlSyncWorkflow } from './workflows/idl-sync-workflow'
 export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
@@ -72,7 +72,7 @@ type Env = {
     OSEC_DISCOVER_WORKFLOW: any
     VERIFIED_MATCH_WORKFLOW: any
     VERIFIED_IDL_IMPORT_WORKFLOW: any
-    CANDIDATES_DRAIN_WORKFLOW: any
+    CANDIDATES_IMPORT_WORKFLOW: any
   }
 }
 
@@ -142,8 +142,8 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env['Bindings'], ctx: ExecutionContext): Promise<void> {
-    // 15 * * * * / 0 2 * * * → CandidatesDrainWorkflow (drain discovery queue)
-    // 0 5 * * 6              → CandidatesDrainWorkflow full sweep (recheck ALL candidates)
+    // 15 * * * * / 0 2 * * * → CandidatesImportWorkflow (process discovery queue)
+    // 0 5 * * 6              → CandidatesImportWorkflow full sweep (recheck ALL candidates)
     // 45 * * * *             → pipeline health check + auto-remediation
     // Workflow-native schedules (registered via wrangler.toml `schedules`):
     //   0 */6 * * * IdlSyncWorkflow · 0 3 * * * ProgramMetricsWorkflow
@@ -151,10 +151,10 @@ export default {
     switch (controller.cron) {
       case '15 * * * *':
       case '0 2 * * *':
-        ctx.waitUntil(startCandidatesDrain(env as any, 'cron', 'drain'))
+        ctx.waitUntil(startCandidatesImport(env as any, 'cron', 'import'))
         break
       case '0 5 * * 6':
-        ctx.waitUntil(startCandidatesDrain(env as any, 'cron', 'full-sweep'))
+        ctx.waitUntil(startCandidatesImport(env as any, 'cron', 'full-sweep'))
         break
       case '45 * * * *':
         ctx.waitUntil(runPipelineHealthCheck(env as any))

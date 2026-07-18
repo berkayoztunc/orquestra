@@ -4,7 +4,7 @@ import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { generateId } from '../utils/id'
 
-const TAG = '[candidates-drain-workflow]'
+const TAG = '[candidates-import-workflow]'
 
 /**
  * Candidates per durable step. Each candidate costs ~2-4 subrequests (RPC
@@ -25,27 +25,27 @@ const MAX_CHUNKS = 60
 const MAX_ROUNDS = 60
 
 type Env = SyncEnv & {
-  CANDIDATES_DRAIN_WORKFLOW: any
+  CANDIDATES_IMPORT_WORKFLOW: any
 }
 
-export type CandidatesDrainParams = {
+export type CandidatesImportParams = {
   trigger?: string
   /**
-   * 'drain'      — process pending candidates + due no_idl rechecks (hourly cron)
+   * 'import'     — process pending candidates + due no_idl rechecks (hourly cron)
    * 'full-sweep' — walk the ENTIRE candidate pool ignoring recheck_after
    *                (weekly "all IDL" scan)
    */
-  mode?: 'drain' | 'full-sweep'
+  mode?: 'import' | 'full-sweep'
   /** Continuation round (0 = first instance of a run) */
   round?: number
   /** Sweep marker: rows last checked before this ISO timestamp are due */
   sweepStart?: string
 }
 
-export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesDrainParams> {
-  async run(event: WorkflowEvent<CandidatesDrainParams>, step: WorkflowStep) {
+export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, CandidatesImportParams> {
+  async run(event: WorkflowEvent<CandidatesImportParams>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'cron'
-    const mode = event.payload?.mode ?? 'drain'
+    const mode = event.payload?.mode ?? 'import'
     const round = event.payload?.round ?? 0
     // For full sweeps the marker is fixed on round 0 and carried through
     // continuations, so each row is visited exactly once per sweep.
@@ -65,7 +65,7 @@ export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesD
           .prepare(
             "INSERT INTO sync_runs (id, started_at, trigger, status) VALUES (?, CURRENT_TIMESTAMP, ?, 'running')",
           )
-          .bind(runId, mode === 'full-sweep' ? 'full-sweep' : 'drain')
+          .bind(runId, mode === 'full-sweep' ? 'full-sweep' : 'import')
           .run()
         return runId
       },
@@ -73,7 +73,7 @@ export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesD
 
     let checked = 0
     let imported = 0
-    let drained = false
+    let queueEmpty = false
 
     try {
       for (let i = 0; i < MAX_CHUNKS; i++) {
@@ -99,7 +99,7 @@ export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesD
         imported += result.imported
 
         if (result.checked === 0) {
-          drained = true
+          queueEmpty = true
           break
         }
 
@@ -148,21 +148,21 @@ export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesD
     )
 
     // Self-continue while work remains — each instance stays small and durable.
-    if (!drained && round < MAX_ROUNDS) {
+    if (!queueEmpty && round < MAX_ROUNDS) {
       await step.do(
         'spawn continuation',
         { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
         async () => {
-          const params: CandidatesDrainParams = {
+          const params: CandidatesImportParams = {
             trigger: 'continuation',
             mode,
             round: round + 1,
             sweepStart,
           }
-          const instance = await this.env.CANDIDATES_DRAIN_WORKFLOW.create({ params })
+          const instance = await this.env.CANDIDATES_IMPORT_WORKFLOW.create({ params })
           await recordWorkflowInstance(this.env.DB, {
             instanceId: instance.id,
-            workflow: 'candidates-drain',
+            workflow: 'candidates-import',
             trigger: 'continuation',
             params,
           })
@@ -171,7 +171,7 @@ export class CandidatesDrainWorkflow extends WorkflowEntrypoint<Env, CandidatesD
       )
     }
 
-    const summary = { runId, mode, round, checked, imported, drained }
+    const summary = { runId, mode, round, checked, imported, queueEmpty }
     console.log(`${TAG} complete`, summary)
     return summary
   }

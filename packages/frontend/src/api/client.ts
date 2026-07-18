@@ -751,8 +751,8 @@ export async function remediatePipeline(): Promise<PipelineHealth> {
   return res.data
 }
 
-export async function triggerDrain(mode: 'drain' | 'full-sweep' = 'drain'): Promise<{ triggered: boolean; instanceId?: string; reason?: string }> {
-  const res = await api.post('/admin/sync/trigger-drain', { mode })
+export async function triggerImport(mode: 'import' | 'full-sweep' = 'import'): Promise<{ triggered: boolean; instanceId?: string; reason?: string }> {
+  const res = await api.post('/admin/sync/trigger-import', { mode })
   return res.data
 }
 

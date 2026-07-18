@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_program_candidates_status_attempts
 
 CREATE TABLE IF NOT EXISTS workflow_instances (
   instance_id TEXT PRIMARY KEY,
-  workflow    TEXT NOT NULL,          -- binding-level name, e.g. 'candidates-drain'
+  workflow    TEXT NOT NULL,          -- binding-level name, e.g. 'candidates-import'
   trigger     TEXT,                   -- 'cron' | 'schedule' | 'admin' | 'continuation' | 'remediation'
   params_json TEXT,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

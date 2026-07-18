@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { runDailyIdlSync } from '../services/idl-sync'
 import { recordWorkflowInstance } from '../services/workflow-registry'
-import { computePipelineHealth, runPipelineHealthCheck, startCandidatesDrain, HEALTH_KV_KEY } from '../services/pipeline-health'
+import { computePipelineHealth, runPipelineHealthCheck, startCandidatesImport, HEALTH_KV_KEY } from '../services/pipeline-health'
 import { importProgramMetrics } from '../services/program-metrics'
 import { fetchWithTimeout } from '../utils/solana-rpc'
 
@@ -664,7 +664,7 @@ app.get('/sync/verified-analysis-queue', async (c) => {
  * POST /api/admin/sync/trigger-verified-builds
  *
  * DEPRECATED: the monolith VerifiedBuildsWorkflow is replaced by the split
- * chain osec-discover → candidates-drain → verified-match → verified-analysis
+ * chain osec-discover → candidates-import → verified-match → verified-analysis
  * (all scheduled). Kept as a manual fallback only.
  * Auth: X-Ingest-Key header required.
  */
@@ -898,19 +898,19 @@ app.post('/sync/remediate', ingestKeyMiddleware, async (c) => {
 })
 
 /**
- * POST /api/admin/sync/trigger-drain
- * Manually starts CandidatesDrainWorkflow. Body: { mode?: 'drain' | 'full-sweep' }.
- * Skips when a drain instance is already active. Auth: X-Ingest-Key required.
+ * POST /api/admin/sync/trigger-import
+ * Manually starts CandidatesImportWorkflow. Body: { mode?: 'import' | 'full-sweep' }.
+ * Skips when a import instance is already active. Auth: X-Ingest-Key required.
  */
-app.post('/sync/trigger-drain', ingestKeyMiddleware, async (c) => {
+app.post('/sync/trigger-import', ingestKeyMiddleware, async (c) => {
   const env = c.env as any
-  if (!env?.CANDIDATES_DRAIN_WORKFLOW) {
-    return c.json({ error: 'CANDIDATES_DRAIN_WORKFLOW binding not available' }, 500)
+  if (!env?.CANDIDATES_IMPORT_WORKFLOW) {
+    return c.json({ error: 'CANDIDATES_IMPORT_WORKFLOW binding not available' }, 500)
   }
-  const body = await c.req.json().catch(() => ({})) as { mode?: 'drain' | 'full-sweep' }
-  const mode = body?.mode === 'full-sweep' ? 'full-sweep' : 'drain'
+  const body = await c.req.json().catch(() => ({})) as { mode?: 'import' | 'full-sweep' }
+  const mode = body?.mode === 'full-sweep' ? 'full-sweep' : 'import'
   try {
-    const res = await startCandidatesDrain(env, 'admin', mode)
+    const res = await startCandidatesImport(env, 'admin', mode)
     return c.json({ triggered: res.started, instanceId: res.instanceId, reason: res.reason, mode })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)

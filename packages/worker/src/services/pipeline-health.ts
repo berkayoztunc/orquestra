@@ -1,14 +1,14 @@
 import type { SyncEnv } from './idl-sync'
 import { recordWorkflowInstance, hasActiveInstance } from './workflow-registry'
-import type { CandidatesDrainParams } from '../workflows/candidates-drain-workflow'
+import type { CandidatesImportParams } from '../workflows/candidates-import-workflow'
 
 /**
  * Pipeline health checker + auto-remediation ("smooth checker").
  *
  * Runs from the 45 * * * * cron. Detects a stalled import pipeline
- * (stuck sync runs, stale discovery, drained-but-idle queue, errored
+ * (stuck sync runs, stale discovery, queueEmpty-but-idle queue, errored
  * workflow instances, growing dead-letter) and auto-heals what it can:
- * marks stuck runs failed, re-triggers discovery, restarts the drain.
+ * marks stuck runs failed, re-triggers discovery, restarts the import.
  *
  * Result cached 5 minutes in CACHE KV under 'health:pipeline' and served
  * by GET /health/pipeline (public, names only) and
@@ -22,12 +22,12 @@ export const LAST_DISCOVERY_KV_KEY = 'health:last-discovery'
 
 const STUCK_RUN_HOURS = 2
 const DISCOVERY_STALE_HOURS = 48
-const DRAIN_STALL_HOURS = 3
+const IMPORT_STALL_HOURS = 3
 const ERRORED_LOOKBACK_HOURS = 72
 const DEAD_LETTER_THRESHOLD = 1000
 
 export type HealthEnv = SyncEnv & {
-  CANDIDATES_DRAIN_WORKFLOW: any
+  CANDIDATES_IMPORT_WORKFLOW: any
   OSEC_DISCOVER_WORKFLOW: any
 }
 
@@ -46,29 +46,29 @@ export interface PipelineHealth {
   remediations: string[]
 }
 
-// ── Drain starter (shared by cron, health remediation, and admin trigger) ────
+// ── Import starter (shared by cron, health remediation, and admin trigger) ────
 
-export async function startCandidatesDrain(
+export async function startCandidatesImport(
   env: HealthEnv,
   trigger: 'cron' | 'admin' | 'remediation',
-  mode: 'drain' | 'full-sweep',
+  mode: 'import' | 'full-sweep',
 ): Promise<{ started: boolean; instanceId?: string; reason?: string }> {
-  // Never stack instances — a running drain already self-continues.
-  const active = await hasActiveInstance(env.DB, env.CANDIDATES_DRAIN_WORKFLOW, 'candidates-drain')
+  // Never stack instances — a running import already self-continues.
+  const active = await hasActiveInstance(env.DB, env.CANDIDATES_IMPORT_WORKFLOW, 'candidates-import')
   if (active) {
-    console.log(`${TAG} drain already active — skipping ${mode} start`)
+    console.log(`${TAG} import already active — skipping ${mode} start`)
     return { started: false, reason: 'already-running' }
   }
 
-  const params: CandidatesDrainParams = { trigger, mode, round: 0 }
-  const instance = await env.CANDIDATES_DRAIN_WORKFLOW.create({ params })
+  const params: CandidatesImportParams = { trigger, mode, round: 0 }
+  const instance = await env.CANDIDATES_IMPORT_WORKFLOW.create({ params })
   await recordWorkflowInstance(env.DB, {
     instanceId: instance.id,
-    workflow: 'candidates-drain',
+    workflow: 'candidates-import',
     trigger: trigger === 'cron' ? 'cron' : trigger,
     params,
   })
-  console.log(`${TAG} started candidates-drain (mode=${mode}, instance=${instance.id})`)
+  console.log(`${TAG} started candidates-import (mode=${mode}, instance=${instance.id})`)
   return { started: true, instanceId: instance.id }
 }
 
@@ -109,25 +109,25 @@ export async function computePipelineHealth(env: HealthEnv): Promise<PipelineHea
     value: discoveryAgeHours === null ? -1 : Math.round(discoveryAgeHours * 10) / 10,
   })
 
-  // 3. Drain throughput: pending work but no recent drain completion
+  // 3. Import throughput: pending work but no recent import completion
   const pendingRow = await env.DB
     .prepare(`SELECT COUNT(*) AS n FROM program_candidates WHERE status = 'pending'`)
     .first<{ n: number }>()
   const pending = pendingRow?.n ?? 0
-  const recentDrain = await env.DB
+  const recentImport = await env.DB
     .prepare(
       `SELECT COUNT(*) AS n FROM sync_runs
-       WHERE trigger IN ('drain', 'full-sweep')
-         AND started_at > datetime('now', '-${DRAIN_STALL_HOURS} hours')`,
+       WHERE trigger IN ('import', 'full-sweep', 'drain')
+         AND started_at > datetime('now', '-${IMPORT_STALL_HOURS} hours')`,
     )
     .first<{ n: number }>()
-  const drainStalled = pending > 0 && (recentDrain?.n ?? 0) === 0
+  const importStalled = pending > 0 && (recentImport?.n ?? 0) === 0
   checks.push({
-    name: 'drain_throughput',
-    ok: !drainStalled,
+    name: 'import_throughput',
+    ok: !importStalled,
     severity: 'critical',
-    detail: drainStalled
-      ? `${pending} pending candidate(s) but no drain run in ${DRAIN_STALL_HOURS}h`
+    detail: importStalled
+      ? `${pending} pending candidate(s) but no import run in ${IMPORT_STALL_HOURS}h`
       : `${pending} pending candidate(s)`,
     value: pending,
   })
@@ -142,8 +142,8 @@ export async function computePipelineHealth(env: HealthEnv): Promise<PipelineHea
     )
     .all<{ instance_id: string; workflow: string }>()
   const bindingFor = (workflow: string): any =>
-    workflow === 'candidates-drain'
-      ? env.CANDIDATES_DRAIN_WORKFLOW
+    workflow === 'candidates-import'
+      ? env.CANDIDATES_IMPORT_WORKFLOW
       : workflow === 'osec-discover'
         ? env.OSEC_DISCOVER_WORKFLOW
         : null
@@ -225,9 +225,9 @@ export async function remediatePipeline(env: HealthEnv, health: PipelineHealth):
     }
   }
 
-  if (failing.has('drain_throughput')) {
-    const res = await startCandidatesDrain(env, 'remediation', 'drain')
-    actions.push(res.started ? `restarted candidates drain (instance ${res.instanceId})` : `drain restart skipped (${res.reason})`)
+  if (failing.has('import_throughput')) {
+    const res = await startCandidatesImport(env, 'remediation', 'import')
+    actions.push(res.started ? `restarted candidates import (instance ${res.instanceId})` : `import restart skipped (${res.reason})`)
   }
 
   if (actions.length) console.log(`${TAG} remediation:`, actions)

@@ -1,6 +1,6 @@
 /**
  * DEPRECATED: replaced by the split chain
- *   osec-discover (daily) → candidates-drain (hourly) → verified-match (weekly)
+ *   osec-discover (daily) → candidates-import (hourly) → verified-match (weekly)
  *   → verified-analysis.
  * Unscheduled since 2026-07; kept as a manual fallback via
  * POST /api/admin/sync/trigger-verified-builds. Remove binding + class once

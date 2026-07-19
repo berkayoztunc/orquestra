@@ -1,9 +1,9 @@
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
-import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount } from './idl-fetcher'
+import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount, getIdlAccountAddress, getAnchorIdlPdaAddress } from './idl-fetcher'
 import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, toTitleCase } from './ai-categorization'
 import { setCategoryAndAliases } from './search'
 import { generateId } from '../utils/id'
-import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
+import { buildMainnetRpcUrlList, getSignaturesForAddress } from '../utils/solana-rpc'
 
 export interface SyncEnv {
   DB: D1Database
@@ -100,6 +100,43 @@ interface SyncProjectResult {
   version: number
 }
 
+/**
+ * Cheap pre-check: does either derived IDL account address (legacy
+ * createWithSeed or Anchor >=0.30 PDA — mirrors the dual-check in
+ * hasProgramOwnedAnchorIdlAccount) have any signature newer than `cursor`?
+ * Used to skip the expensive fetchIdlWithSource() call when nothing has
+ * touched the on-chain IDL account since the last full sync.
+ */
+async function hasIdlAccountActivitySince(
+  programId: string,
+  rpcUrls: string[],
+  cursor: string,
+): Promise<boolean> {
+  const [oldAddress, newAddress] = await Promise.all([
+    getIdlAccountAddress(programId),
+    getAnchorIdlPdaAddress(programId),
+  ])
+  const [oldSigs, newSigs] = await Promise.all([
+    getSignaturesForAddress(rpcUrls, oldAddress, { limit: 1, until: cursor }),
+    getSignaturesForAddress(rpcUrls, newAddress, { limit: 1, until: cursor }),
+  ])
+  return oldSigs.length > 0 || newSigs.length > 0
+}
+
+/** Newest signature across both IDL account address styles — becomes the new cursor. */
+async function latestIdlAccountSignature(programId: string, rpcUrls: string[]): Promise<string | null> {
+  const [oldAddress, newAddress] = await Promise.all([
+    getIdlAccountAddress(programId),
+    getAnchorIdlPdaAddress(programId),
+  ])
+  const [oldSigs, newSigs] = await Promise.all([
+    getSignaturesForAddress(rpcUrls, oldAddress, { limit: 1 }),
+    getSignaturesForAddress(rpcUrls, newAddress, { limit: 1 }),
+  ])
+  const candidates = [...oldSigs, ...newSigs].sort((a, b) => b.slot - a.slot)
+  return candidates[0]?.signature ?? null
+}
+
 async function syncProject(
   db: D1Database,
   cache: KVNamespace,
@@ -114,6 +151,39 @@ async function syncProject(
     version: 0,
   }
 
+  // Cheap-check-first: skip the full IDL fetch when a cursor exists and
+  // neither derived IDL account has new activity since it. Most programs
+  // never touch their IDL account again after deploy — this avoids an
+  // expensive fetchIdlWithSource() round trip for the common case.
+  const cursorRow = await db
+    .prepare('SELECT last_signature FROM project_idl_cursors WHERE project_id = ?')
+    .bind(project.id)
+    .first<{ last_signature: string | null }>()
+
+  if (cursorRow?.last_signature) {
+    try {
+      const hasActivity = await withTimeout(
+        hasIdlAccountActivitySince(project.program_id, rpcUrls, cursorRow.last_signature),
+        PROGRAM_TIMEOUT_MS,
+      )
+      if (hasActivity === false) {
+        await db
+          .prepare('UPDATE project_idl_cursors SET checked_at = CURRENT_TIMESTAMP WHERE project_id = ?')
+          .bind(project.id)
+          .run()
+        const latest = await db
+          .prepare('SELECT version FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1')
+          .bind(project.id)
+          .first<{ version: number }>()
+        return { ...base, status: 'unchanged', isFirstVersion: false, version: latest?.version ?? 0 }
+      }
+      // hasActivity === true or === null (timeout) → fall through to full fetch.
+    } catch {
+      // Cheap check failed (RPC error) — fall through to full fetch rather
+      // than silently skip; the full fetch has its own error handling.
+    }
+  }
+
   // Fetch on-chain IDL with per-program timeout guard.
   // null → no on-chain IDL or timeout → skip this program.
   let onChain: { idl: any; idlJson: string; source: 'pmp' | 'anchor' } | null
@@ -126,6 +196,27 @@ async function syncProject(
     return { ...base, status: 'skipped', isFirstVersion: false }
   }
   if (!onChain) return { ...base, status: 'skipped', isFirstVersion: false }
+
+  // Seed/update the cursor now that a full fetch happened — only 1 extra
+  // light getSignaturesForAddress(limit:1) call, on changed projects only.
+  try {
+    const newCursor = await withTimeout(latestIdlAccountSignature(project.program_id, rpcUrls), PROGRAM_TIMEOUT_MS)
+    if (newCursor) {
+      await db
+        .prepare(
+          `INSERT INTO project_idl_cursors (project_id, last_signature, checked_at)
+           VALUES (?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(project_id) DO UPDATE SET
+             last_signature = excluded.last_signature,
+             checked_at = CURRENT_TIMESTAMP`,
+        )
+        .bind(project.id, newCursor)
+        .run()
+    }
+  } catch {
+    // Cursor seeding is best-effort — a missing cursor just means the next
+    // run does another full fetch, not a correctness issue.
+  }
 
   const newHash = await hashIdl(onChain.idlJson)
 

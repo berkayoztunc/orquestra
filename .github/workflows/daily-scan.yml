@@ -1,9 +1,13 @@
 name: Daily Solana Program Scan
 
+# Scheduled trigger disabled 2026-07-19: replaced by ChainDiscoveryWorkflow
+# (Cloudflare Workflow, schedule "30 1 * * *" in wrangler.toml), which uses
+# an incremental getSignaturesForAddress cursor instead of a full
+# getProgramAccounts sweep (~500k accounts/day, regardless of new activity).
+# This workflow is kept as a manual/debug full-resync fallback only
+# (e.g. recovering a corrupted discovery_cursors row) — trigger it by hand
+# from the GitHub Actions UI if ever needed.
 on:
-  schedule:
-    # 1am UTC daily — completes before the 2am nightly candidates burst cron
-    - cron: '0 1 * * *'
   workflow_dispatch:
     # Allow manual runs from the GitHub Actions UI
     inputs:

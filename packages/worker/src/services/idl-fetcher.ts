@@ -150,7 +150,7 @@ async function createWithSeed(
 
 // ── Anchor IDL account address derivation ──
 
-async function getIdlAccountAddress(programIdStr: string): Promise<string> {
+export async function getIdlAccountAddress(programIdStr: string): Promise<string> {
   const programIdBytes = base58Decode(programIdStr)
 
   // base = findProgramAddress([], programId)
@@ -162,7 +162,7 @@ async function getIdlAccountAddress(programIdStr: string): Promise<string> {
   return base58Encode(idlAddress)
 }
 
-async function getAnchorIdlPdaAddress(programIdStr: string): Promise<string> {
+export async function getAnchorIdlPdaAddress(programIdStr: string): Promise<string> {
   const programIdBytes = base58Decode(programIdStr)
   const [pda] = await findProgramAddress(
     [new TextEncoder().encode('anchor:idl'), programIdBytes],

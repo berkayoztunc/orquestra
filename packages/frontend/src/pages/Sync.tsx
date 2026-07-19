@@ -6,7 +6,6 @@ import {
   getVerifiedBuildTotal,
   getPublicStats,
   getPipelineHealth,
-  remediatePipeline,
   type SyncRun,
   type CandidateStats,
   type ScanMetadata,
@@ -119,7 +118,6 @@ export default function Sync(): JSX.Element {
   const [scanMeta, setScanMeta] = useState<ScanMetadata | null>(null)
   const [verifiedBuildTotal, setVerifiedBuildTotal] = useState<VerifiedBuildTotal | null>(null)
   const [health, setHealth] = useState<PipelineHealth | null>(null)
-  const [remediating, setRemediating] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -171,18 +169,6 @@ export default function Sync(): JSX.Element {
     setLoading(false)
   }, [])
 
-  const handleRemediate = useCallback(async () => {
-    setRemediating(true)
-    try {
-      const result = await remediatePipeline()
-      setHealth(result)
-    } catch (err: any) {
-      setError(err?.response?.data?.error ?? err?.message ?? 'Remediation failed')
-    } finally {
-      setRemediating(false)
-    }
-  }, [])
-
   useEffect(() => {
     fetchStatus()
     const interval = setInterval(fetchStatus, 30_000)
@@ -205,26 +191,15 @@ export default function Sync(): JSX.Element {
     <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
 
       {/* Header */}
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="max-w-3xl">
-          <h1 className="text-balance text-4xl font-semibold tracking-tight text-sand-1600 md:text-5xl">
-            Sync pipeline
-          </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-sand-1200 md:text-base">
-            IDL sync, verified builds, and the program discovery queue — with an hourly
-            health checker that repairs stalls automatically.
-          </p>
-          <p className="mt-3 text-sm text-sand-1200">{syncStatusText}</p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleRemediate}
-          disabled={remediating}
-          className="inline-flex min-h-11 items-center justify-center gap-2 border border-border-low bg-bg1 px-4 text-sm font-semibold text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {remediating ? 'Checking…' : 'Check + repair'}
-        </button>
+      <section className="max-w-3xl">
+        <h1 className="text-balance text-4xl font-semibold tracking-tight text-sand-1600 md:text-5xl">
+          Sync pipeline
+        </h1>
+        <p className="mt-4 max-w-2xl text-sm leading-6 text-sand-1200 md:text-base">
+          IDL sync, verified builds, and the program discovery queue — with an hourly
+          health checker that repairs stalls automatically.
+        </p>
+        <p className="mt-3 text-sm text-sand-1200">{syncStatusText}</p>
       </section>
 
       {error && (

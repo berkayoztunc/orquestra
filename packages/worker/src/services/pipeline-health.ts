@@ -19,9 +19,11 @@ const TAG = '[pipeline-health]'
 
 export const HEALTH_KV_KEY = 'health:pipeline'
 export const LAST_DISCOVERY_KV_KEY = 'health:last-discovery'
+export const LAST_CHAIN_DISCOVERY_KV_KEY = 'health:last-chain-discovery'
 
 const STUCK_RUN_HOURS = 2
 const DISCOVERY_STALE_HOURS = 48
+const CHAIN_DISCOVERY_STALE_HOURS = 48
 const IMPORT_STALL_HOURS = 3
 const ERRORED_LOOKBACK_HOURS = 72
 const DEAD_LETTER_THRESHOLD = 1000
@@ -29,6 +31,7 @@ const DEAD_LETTER_THRESHOLD = 1000
 export type HealthEnv = SyncEnv & {
   CANDIDATES_IMPORT_WORKFLOW: any
   OSEC_DISCOVER_WORKFLOW: any
+  CHAIN_DISCOVERY_WORKFLOW: any
 }
 
 export interface HealthCheck {
@@ -109,6 +112,23 @@ export async function computePipelineHealth(env: HealthEnv): Promise<PipelineHea
     value: discoveryAgeHours === null ? -1 : Math.round(discoveryAgeHours * 10) / 10,
   })
 
+  // 2b. Chain discovery freshness (ChainDiscoveryWorkflow stamps KV on completion)
+  let chainDiscoveryAgeHours: number | null = null
+  try {
+    const stamp = await env.CACHE.get(LAST_CHAIN_DISCOVERY_KV_KEY)
+    if (stamp) chainDiscoveryAgeHours = (Date.now() - new Date(stamp).getTime()) / 3_600_000
+  } catch { /* KV miss is handled below */ }
+  checks.push({
+    name: 'chain_discovery_freshness',
+    ok: chainDiscoveryAgeHours !== null && chainDiscoveryAgeHours < CHAIN_DISCOVERY_STALE_HOURS,
+    severity: 'critical',
+    detail:
+      chainDiscoveryAgeHours === null
+        ? 'no chain discovery run recorded yet'
+        : `last chain discovery ${chainDiscoveryAgeHours.toFixed(1)}h ago`,
+    value: chainDiscoveryAgeHours === null ? -1 : Math.round(chainDiscoveryAgeHours * 10) / 10,
+  })
+
   // 3. Import throughput: pending work but no recent import completion
   const pendingRow = await env.DB
     .prepare(`SELECT COUNT(*) AS n FROM program_candidates WHERE status = 'pending'`)
@@ -146,7 +166,9 @@ export async function computePipelineHealth(env: HealthEnv): Promise<PipelineHea
       ? env.CANDIDATES_IMPORT_WORKFLOW
       : workflow === 'osec-discover'
         ? env.OSEC_DISCOVER_WORKFLOW
-        : null
+        : workflow === 'chain-discovery'
+          ? env.CHAIN_DISCOVERY_WORKFLOW
+          : null
   for (const row of toPoll ?? []) {
     const binding = bindingFor(row.workflow)
     if (!binding) continue
@@ -222,6 +244,20 @@ export async function remediatePipeline(env: HealthEnv, health: PipelineHealth):
       actions.push(`re-triggered OSEC discovery (instance ${instance.id})`)
     } catch (err) {
       actions.push(`failed to re-trigger discovery: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  if (failing.has('chain_discovery_freshness')) {
+    try {
+      const instance = await env.CHAIN_DISCOVERY_WORKFLOW.create({ params: { trigger: 'remediation' } })
+      await recordWorkflowInstance(env.DB, {
+        instanceId: instance.id,
+        workflow: 'chain-discovery',
+        trigger: 'remediation',
+      })
+      actions.push(`re-triggered chain discovery (instance ${instance.id})`)
+    } catch (err) {
+      actions.push(`failed to re-trigger chain discovery: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 

@@ -96,6 +96,16 @@ binding = "OSEC_DISCOVER_WORKFLOW"
 class_name = "OsecDiscoverWorkflow"
 schedules = ["0 1 * * *"]
 
+# Workflow: incremental on-chain program discovery via getSignaturesForAddress
+# (replaces the daily-scan.yml full getProgramAccounts sweep — 500k+ accounts
+# every day regardless of activity — with a signature cursor that only fetches
+# transactions since the last run)
+[[workflows]]
+name = "chain-discovery"
+binding = "CHAIN_DISCOVERY_WORKFLOW"
+class_name = "ChainDiscoveryWorkflow"
+schedules = ["30 1 * * *"]
+
 # Workflow: match OSEC-verified programs against existing DB rows + trigger AI analysis
 [[workflows]]
 name = "verified-match"
@@ -186,6 +196,12 @@ name = "osec-discover-prod"
 binding = "OSEC_DISCOVER_WORKFLOW"
 class_name = "OsecDiscoverWorkflow"
 schedules = ["0 1 * * *"]
+
+[[env.production.workflows]]
+name = "chain-discovery-prod"
+binding = "CHAIN_DISCOVERY_WORKFLOW"
+class_name = "ChainDiscoveryWorkflow"
+schedules = ["30 1 * * *"]
 
 [[env.production.workflows]]
 name = "verified-match-prod"

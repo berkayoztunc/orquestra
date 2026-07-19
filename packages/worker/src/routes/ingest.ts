@@ -416,8 +416,17 @@ app.post('/candidates', ingestKeyMiddleware, async (c) => {
 /**
  * POST /api/ingest/scan-metadata
  *
- * Called by the GitHub Actions daily scan workflow after `cli:queue` completes.
- * Stores a lightweight summary in KV so the dashboard can display "Last full scan".
+ * DEPRECATED as a scheduled path: previously called by the GitHub Actions
+ * daily scan workflow (full getProgramAccounts sweep, ~500k programs/day)
+ * after `cli:queue` completed. That cron is now disabled — ChainDiscoveryWorkflow
+ * writes the same 'scan:metadata' KV shape directly (see chain-discovery-workflow.ts),
+ * so this endpoint is kept only for the manual `workflow_dispatch` fallback in
+ * daily-scan.yml.
+ *
+ * IMPORTANT semantic change: `programs_found` now means "new signatures/deploys
+ * processed this run" (small, tens-low hundreds) when reported by the incremental
+ * path, not the old full chain-wide program count (~500k). Don't be alarmed that
+ * this number never reaches six figures again — that's the point of the change.
  *
  * Auth: X-Ingest-Key
  * Body: { programs_found: number, queued: number, skipped: number, rpc_url?: string }

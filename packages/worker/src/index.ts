@@ -11,6 +11,7 @@ import { startCandidatesImport, runPipelineHealthCheck } from './services/pipeli
 // Workflows
 export { ProgramMetricsWorkflow } from './workflows/program-metrics-workflow'
 export { CandidatesImportWorkflow } from './workflows/candidates-import-workflow'
+export { ChainDiscoveryWorkflow } from './workflows/chain-discovery-workflow'
 export { AiAnalysisWorkflow } from './workflows/ai-analysis-workflow'
 export { IdlSyncWorkflow } from './workflows/idl-sync-workflow'
 export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
@@ -73,6 +74,7 @@ type Env = {
     VERIFIED_MATCH_WORKFLOW: any
     VERIFIED_IDL_IMPORT_WORKFLOW: any
     CANDIDATES_IMPORT_WORKFLOW: any
+    CHAIN_DISCOVERY_WORKFLOW: any
   }
 }
 

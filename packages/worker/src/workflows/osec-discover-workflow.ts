@@ -1,18 +1,66 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
 import { LAST_DISCOVERY_KV_KEY } from '../services/pipeline-health'
+import { recordWorkflowInstance } from '../services/workflow-registry'
 
 const TAG = '[osec-discover-workflow]'
 const CHECK_BATCH = 100  // max IDs per IN() query
 const INSERT_BATCH = 100 // max IDs per INSERT step
 
-type Env = { DB: any; CACHE: any }
+type Env = { DB: any; CACHE: any; OSEC_DISCOVER_WORKFLOW: any }
 type Params = { trigger?: 'manual' | 'admin' | 'remediation' }
 
 export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'manual'
-    console.log(`${TAG} started (trigger=${trigger})`)
+    console.log(`${TAG} started (trigger=${trigger}, instance=${event.instanceId})`)
+
+    await step.do(
+      'register instance',
+      { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+      async () => {
+        await recordWorkflowInstance(this.env.DB, {
+          instanceId: event.instanceId,
+          workflow: 'osec-discover',
+          trigger,
+          params: event.payload,
+        })
+      },
+    )
+
+    // Concurrency guard: the daily schedule fires independently of a manual
+    // admin/remediation trigger.
+    const shouldAbort = await step.do(
+      'check concurrency',
+      { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+      async () => {
+        const { results } = await this.env.DB
+          .prepare(
+            `SELECT instance_id FROM workflow_instances
+             WHERE workflow = 'osec-discover' AND instance_id != ?
+               AND created_at > datetime('now', '-2 hours')
+             ORDER BY created_at DESC LIMIT 10`,
+          )
+          .bind(event.instanceId)
+          .all()
+
+        for (const row of (results ?? []) as { instance_id: string }[]) {
+          try {
+            const instance = await this.env.OSEC_DISCOVER_WORKFLOW.get(row.instance_id)
+            const { status } = await instance.status()
+            if (status === 'running' || status === 'queued' || status === 'paused' || status === 'waiting') {
+              return true
+            }
+          } catch { /* instance gone — ignore */ }
+        }
+        return false
+      },
+    )
+
+    if (shouldAbort) {
+      console.log(`${TAG} another osec-discover instance is already active — skipping this run`)
+      return { skipped: true, reason: 'already-running' }
+    }
 
     // ── Step 1: fetch all OSEC program IDs ───────────────────────────────────
     const osecIds = await step.do(

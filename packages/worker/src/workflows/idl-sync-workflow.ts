@@ -38,7 +38,58 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'cron'
     const startOffset = event.payload?.startOffset ?? 0
-    console.log(`${TAG} started (trigger=${trigger}, startOffset=${startOffset})`)
+    const isContinuation = trigger === 'continuation'
+    console.log(`${TAG} started (trigger=${trigger}, startOffset=${startOffset}, instance=${event.instanceId})`)
+
+    await step.do(
+      'register instance',
+      { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+      async () => {
+        await recordWorkflowInstance(this.env.DB, {
+          instanceId: event.instanceId,
+          workflow: 'idl-sync',
+          trigger: trigger === 'cron' ? 'cron' : trigger,
+          params: event.payload,
+        })
+      },
+    )
+
+    // Concurrency guard: the 6h schedule fires independently of a manual
+    // POST /sync/trigger — only fresh starts (not continuations) check for
+    // and yield to another active full-sweep instance.
+    if (!isContinuation) {
+      const shouldAbort = await step.do(
+        'check concurrency',
+        { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+        async () => {
+          const { results } = await this.env.DB
+            .prepare(
+              `SELECT instance_id FROM workflow_instances
+               WHERE workflow = 'idl-sync' AND instance_id != ?
+                 AND created_at > datetime('now', '-2 hours')
+               ORDER BY created_at DESC LIMIT 10`,
+            )
+            .bind(event.instanceId)
+            .all()
+
+          for (const row of (results ?? []) as { instance_id: string }[]) {
+            try {
+              const instance = await this.env.IDL_SYNC_WORKFLOW.get(row.instance_id)
+              const { status } = await instance.status()
+              if (status === 'running' || status === 'queued' || status === 'paused' || status === 'waiting') {
+                return true
+              }
+            } catch { /* instance gone — ignore */ }
+          }
+          return false
+        },
+      )
+
+      if (shouldAbort) {
+        console.log(`${TAG} another idl-sync instance is already active — skipping this run`)
+        return { skipped: true, reason: 'already-running' }
+      }
+    }
 
     // ── Step 1: init — count projects, create sync_runs row ──────────────────
     const { runId, total } = await step.do(

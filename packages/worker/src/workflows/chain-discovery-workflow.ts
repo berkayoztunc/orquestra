@@ -51,9 +51,65 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'schedule'
     const round = event.payload?.round ?? 0
-    console.log(`${TAG} started (trigger=${trigger}, round=${round})`)
+    const isContinuation = trigger === 'continuation'
+    console.log(`${TAG} started (trigger=${trigger}, round=${round}, instance=${event.instanceId})`)
 
     const rpcUrls = buildMainnetRpcUrlList(this.env)
+
+    // Self-register immediately so the concurrency check below (and other
+    // instances' checks) can see this instance regardless of how it was
+    // triggered (workflow-native schedule, admin API, or remediation).
+    await step.do(
+      'register instance',
+      { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+      async () => {
+        await recordWorkflowInstance(this.env.DB, {
+          instanceId: event.instanceId,
+          workflow: 'chain-discovery',
+          trigger: trigger === 'schedule' ? 'cron' : trigger,
+          params: event.payload,
+        })
+      },
+    )
+
+    // Concurrency guard: the schedule fires independently of our own code,
+    // so an admin/remediation trigger can land at the same moment. Only
+    // fresh starts (not continuations of an already-running logical run)
+    // check for and yield to another active instance — avoids duplicate
+    // signature/transaction RPC work and a cursor-advance race.
+    if (!isContinuation) {
+      const shouldAbort = await step.do(
+        'check concurrency',
+        { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
+        async () => {
+          const { results } = await this.env.DB
+            .prepare(
+              `SELECT instance_id FROM workflow_instances
+               WHERE workflow = 'chain-discovery' AND instance_id != ?
+                 AND created_at > datetime('now', '-2 hours')
+               ORDER BY created_at DESC LIMIT 10`,
+            )
+            .bind(event.instanceId)
+            .all<{ instance_id: string }>()
+
+          for (const row of results ?? []) {
+            try {
+              const instance = await this.env.CHAIN_DISCOVERY_WORKFLOW.get(row.instance_id)
+              const { status } = await instance.status()
+              if (status === 'running' || status === 'queued' || status === 'paused' || status === 'waiting') {
+                return true
+              }
+            } catch { /* instance gone — ignore */ }
+          }
+          return false
+        },
+      )
+
+      if (shouldAbort) {
+        console.log(`${TAG} another chain-discovery instance is already active — skipping this run`)
+        return { skipped: true, reason: 'already-running' }
+      }
+    }
 
     const { runId, cursor } = await step.do(
       'init run',

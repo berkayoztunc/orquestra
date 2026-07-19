@@ -10,7 +10,7 @@ import type { D1Database } from '@cloudflare/workers-types'
 export interface WorkflowInstanceRecord {
   instanceId: string
   workflow: string
-  trigger: 'cron' | 'schedule' | 'admin' | 'continuation' | 'remediation'
+  trigger: 'cron' | 'schedule' | 'admin' | 'manual' | 'continuation' | 'remediation'
   params?: unknown
 }
 

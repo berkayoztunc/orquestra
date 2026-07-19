@@ -25,6 +25,7 @@ Orquestra is an IDL-to-API platform for Solana programs. It accepts Anchor and C
 - [API Reference](./api-reference.md)
 - [MCP Tools](./mcp-tools.md)
 - [Agent Skills](./agent-skills.md)
+- [Published Packages](./packages.md)
 - [User CLI](./user-cli.md)
 - [CLI Discovery Tools](./cli-discovery.md)
 - [Deployment](./deployment.md)

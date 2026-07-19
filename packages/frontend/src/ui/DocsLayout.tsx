@@ -7,6 +7,7 @@ const docsNav = [
   { href: '/docs/api', label: 'API', section: 'Reference' },
   { href: '/docs/mcp', label: 'MCP Server', section: 'Reference' },
   { href: '/docs/cli', label: 'CLI', section: 'Reference' },
+  { href: '/docs/packages', label: 'Published Packages', section: 'Reference' },
   { href: '/docs/sign-and-send', label: 'Sign & Send', section: 'Guides' },
 ]
 

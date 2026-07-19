@@ -10,7 +10,9 @@ The `agents` directory defines Orquestra skill contracts for agentic Solana work
 | `orquestra-pda-explorer` | Account resolution | Orquestra MCP | Derive PDAs and fetch decoded account data |
 | `orquestra-tx-builder` | Construction | Orquestra MCP | Build unsigned transactions |
 | `orquestra-simulator` | Preflight | Orquestra MCP | Simulate instructions and decode Anchor errors |
-| `orquestra-signer` | Sign and send | `@orquestradev/signer-mcp` | Sign and submit after explicit approval |
+| `orquestra-signer` | Sign and send | [`@orquestradev/signer-mcp`](https://www.npmjs.com/package/@orquestradev/signer-mcp) | Sign and submit after explicit approval |
+
+See [Published Packages](./packages.md) for the full `@orquestradev/signer-mcp` config reference and the companion `@orquestradev/n8n-nodes-solana-signer` node.
 
 ## Install Claude Agents
 

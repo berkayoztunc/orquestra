@@ -13,6 +13,7 @@ import SignAndSend from '@/pages/SignAndSend'
 import CLI from '@/pages/CLI'
 import MCP from '@/pages/MCP'
 import API from '@/pages/API'
+import Packages from '@/pages/Packages'
 import Analytics from '@/pages/Analytics'
 import Lists from '@/pages/Lists'
 import Updates from '@/pages/Updates'
@@ -49,6 +50,7 @@ function App(): JSX.Element {
             <Route path="/docs/cli" element={<CLI />} />
             <Route path="/docs/mcp" element={<MCP />} />
             <Route path="/docs/api" element={<API />} />
+            <Route path="/docs/packages" element={<Packages />} />
           </Route>
         </Routes>
       </Router>

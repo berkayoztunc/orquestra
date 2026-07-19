@@ -7,6 +7,7 @@
 - [API Reference](api-reference.md)
 - [MCP Tools](mcp-tools.md)
 - [Agent Skills](agent-skills.md)
+- [Published Packages](packages.md)
 - [User CLI](user-cli.md)
 - [CLI Discovery Tools](cli-discovery.md)
 - [IDL Sync System](idl-sync.md)

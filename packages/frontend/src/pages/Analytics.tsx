@@ -292,7 +292,7 @@ export default function Analytics() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5 lg:grid-cols-10">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatCard
           label="Total users"
           value={stats?.total_users ?? 0}
@@ -348,6 +348,56 @@ export default function Analytics() {
             </svg>
           }
         />
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard
+          label="Programs scanned"
+          value={isLoadingAnalytics ? '-' : (analytics?.platform.total_programs ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="sync queue, all-time"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="IDL versions"
+          value={isLoadingAnalytics ? '-' : (analytics?.platform.idl_versions_total ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="all versions"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="Verified, no IDL"
+          value={isLoadingAnalytics ? '-' : Math.max((analytics?.platform.verified_programs ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="coverage gap"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="IDL, unverified"
+          value={isLoadingAnalytics ? '-' : Math.max((analytics?.platform.programs_with_idl ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="coverage gap"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+          }
+        />
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatCard
           label="Workflow runs"
           value={isLoadingAnalytics ? '-' : (analytics?.platform.workflow_runs_total ?? 0)}

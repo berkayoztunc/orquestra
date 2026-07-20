@@ -525,6 +525,7 @@ export interface PlatformStats {
   verified_programs: number
   programs_with_idl_and_verified: number
   workflow_runs_total: number
+  idl_versions_total: number
 }
 
 export interface AllTimeTotals {

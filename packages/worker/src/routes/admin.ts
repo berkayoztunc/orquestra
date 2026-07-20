@@ -37,8 +37,9 @@ const app = new Hono<Env>()
  *
  * Returns last-30-day daily breakdowns for API and MCP traffic, all-time
  * traffic totals, the top 6 most-accessed programs, and platform stats
- * (IDL coverage, verified-program rate, IDL+verified overlap, total
- * workflow runs). Public endpoint.
+ * (IDL coverage across the full program_candidates sync universe,
+ * verified-program rate, IDL+verified overlap, total workflow runs, total
+ * IDL versions). Public endpoint.
  *
  * tool_id values: -1=api, 0=search_programs, 1=list_instructions,
  *   2=build_instruction, 3=list_pda_accounts, 4=derive_pda,
@@ -50,7 +51,7 @@ app.get('/analytics', async (c) => {
   if (!db) return c.json({ error: 'Database not available' }, 500)
 
   try {
-    const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns] = await Promise.all([
+    const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns, idlVersionsTotal] = await Promise.all([
       // Daily HTTP API totals (last 30 days)
       db
         .prepare(
@@ -97,17 +98,23 @@ app.get('/analytics', async (c) => {
         )
         .first(),
 
-      // IDL-presence + verified-build coverage across public projects
+      // IDL-presence + verified-build coverage across the FULL sync universe
+      // (`program_candidates` — every program_id the discovery pipeline has
+      // ever queued/scanned, PK-deduped, ~60K+ rows), not just the small
+      // imported `projects` catalog. status='has_idl' means the sync pipeline
+      // confirmed an on-chain IDL (see idl-sync.ts). is_verified is tracked
+      // only on imported `projects` rows and set per program_id (see
+      // verified-match-workflow.ts), so dedupe verified via DISTINCT program_id.
       db
         .prepare(
           `SELECT
-             COUNT(*) AS total,
-             SUM(CASE WHEN v.project_id IS NOT NULL THEN 1 ELSE 0 END) AS with_idl,
-             SUM(CASE WHEN p.is_verified = 1 THEN 1 ELSE 0 END) AS verified,
-             SUM(CASE WHEN v.project_id IS NOT NULL AND p.is_verified = 1 THEN 1 ELSE 0 END) AS with_idl_and_verified
-           FROM projects p
-           LEFT JOIN (SELECT DISTINCT project_id FROM idl_versions) v ON v.project_id = p.id
-           WHERE p.is_public = 1`,
+             (SELECT COUNT(*) FROM program_candidates) AS total,
+             (SELECT COUNT(*) FROM program_candidates WHERE status = 'has_idl') AS with_idl,
+             (SELECT COUNT(DISTINCT program_id) FROM projects WHERE is_verified = 1) AS verified,
+             (SELECT COUNT(DISTINCT pc.program_id)
+                FROM program_candidates pc
+                INNER JOIN projects p ON p.program_id = pc.program_id
+                WHERE pc.status = 'has_idl' AND p.is_verified = 1) AS with_idl_and_verified`,
         )
         .first(),
 
@@ -115,6 +122,17 @@ app.get('/analytics', async (c) => {
       // osec-discover, candidates-import, verified-match/-analysis, ...)
       db
         .prepare(`SELECT COUNT(*) AS total FROM workflow_instances`)
+        .first(),
+
+      // Total IDL versions ever uploaded across public projects (all
+      // versions, not just latest — depth/maturity signal)
+      db
+        .prepare(
+          `SELECT COUNT(*) AS total
+           FROM idl_versions v
+           INNER JOIN projects p ON p.id = v.project_id
+           WHERE p.is_public = 1`,
+        )
         .first(),
     ])
 
@@ -133,6 +151,7 @@ app.get('/analytics', async (c) => {
         verified_programs: Number((verifiedStats as any)?.verified ?? 0),
         programs_with_idl_and_verified: Number((verifiedStats as any)?.with_idl_and_verified ?? 0),
         workflow_runs_total: Number((workflowRuns as any)?.total ?? 0),
+        idl_versions_total: Number((idlVersionsTotal as any)?.total ?? 0),
       },
     })
   } catch {

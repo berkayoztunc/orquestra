@@ -34,8 +34,10 @@ function shortId(value: string): string {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
 }
 
-function pct(n: number, total: number): string {
-  return `${total ? Math.round((n / total) * 100) : 0}%`
+function pct(n: number, total: number, decimals = 0): string {
+  if (!total) return '0%'
+  const value = (n / total) * 100
+  return `${decimals ? value.toFixed(decimals) : Math.round(value)}%`
 }
 
 const CHART_COLORS = {
@@ -328,7 +330,7 @@ export default function Analytics() {
         />
         <StatCard
           label="Verified"
-          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.verified_programs ?? 0, analytics?.platform.total_programs ?? 0)}
+          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.verified_programs ?? 0, analytics?.platform.total_programs ?? 0, 5)}
           isLoading={isLoadingAnalytics && !analytics}
           hint={analytics ? `${analytics.platform.verified_programs}/${analytics.platform.total_programs}` : undefined}
           icon={
@@ -339,7 +341,7 @@ export default function Analytics() {
         />
         <StatCard
           label="IDL + Verified"
-          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl_and_verified ?? 0, analytics?.platform.total_programs ?? 0)}
+          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl_and_verified ?? 0, analytics?.platform.total_programs ?? 0, 5)}
           isLoading={isLoadingAnalytics && !analytics}
           hint={analytics ? `${analytics.platform.programs_with_idl_and_verified}/${analytics.platform.total_programs}` : undefined}
           icon={

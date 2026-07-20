@@ -519,14 +519,12 @@ export interface TopProgram {
   total: number
 }
 
-export interface EcosystemImpact {
-  verified_programs: number
+export interface PlatformStats {
   total_programs: number
-  tx_count_7d: number
-  unique_users_7d: number
-  fees_sol_7d: number
-  tracked_programs: number
-  metrics_fetched_at: string | null
+  programs_with_idl: number
+  verified_programs: number
+  programs_with_idl_and_verified: number
+  workflow_runs_total: number
 }
 
 export interface AllTimeTotals {
@@ -539,7 +537,7 @@ export interface AdminAnalytics {
   daily_mcp: DailyMcpEntry[]
   top_programs: TopProgram[]
   totals_alltime: AllTimeTotals
-  ecosystem: EcosystemImpact
+  platform: PlatformStats
 }
 
 export async function getPublicStats(): Promise<PublicStats> {

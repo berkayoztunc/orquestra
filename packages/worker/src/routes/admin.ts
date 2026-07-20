@@ -36,9 +36,9 @@ const app = new Hono<Env>()
  * GET /api/admin/analytics
  *
  * Returns last-30-day daily breakdowns for API and MCP traffic, all-time
- * traffic totals, the top 6 most-accessed programs, and a platform-wide
- * ecosystem-impact summary (verified-build rate + aggregate on-chain
- * activity from program_metrics). Public endpoint.
+ * traffic totals, the top 6 most-accessed programs, and platform stats
+ * (IDL coverage, verified-program rate, IDL+verified overlap, total
+ * workflow runs). Public endpoint.
  *
  * tool_id values: -1=api, 0=search_programs, 1=list_instructions,
  *   2=build_instruction, 3=list_pda_accounts, 4=derive_pda,
@@ -50,7 +50,7 @@ app.get('/analytics', async (c) => {
   if (!db) return c.json({ error: 'Database not available' }, 500)
 
   try {
-    const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, programMetricsAgg] = await Promise.all([
+    const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns] = await Promise.all([
       // Daily HTTP API totals (last 30 days)
       db
         .prepare(
@@ -97,25 +97,24 @@ app.get('/analytics', async (c) => {
         )
         .first(),
 
-      // Verified-build percentage across public projects
-      db
-        .prepare(
-          `SELECT COUNT(*) AS total, SUM(CASE WHEN is_verified = 1 THEN 1 ELSE 0 END) AS verified
-           FROM projects WHERE is_public = 1`,
-        )
-        .first(),
-
-      // Platform-wide on-chain activity aggregate (last weekly-imported snapshot)
+      // IDL-presence + verified-build coverage across public projects
       db
         .prepare(
           `SELECT
-             COALESCE(SUM(tx_count_7d), 0) AS tx_count_7d,
-             COALESCE(SUM(unique_users_7d), 0) AS unique_users_7d,
-             COALESCE(SUM(fees_sol_7d), 0) AS fees_sol_7d,
-             COUNT(*) AS tracked_programs,
-             MAX(fetched_at) AS fetched_at
-           FROM program_metrics`,
+             COUNT(*) AS total,
+             SUM(CASE WHEN v.project_id IS NOT NULL THEN 1 ELSE 0 END) AS with_idl,
+             SUM(CASE WHEN p.is_verified = 1 THEN 1 ELSE 0 END) AS verified,
+             SUM(CASE WHEN v.project_id IS NOT NULL AND p.is_verified = 1 THEN 1 ELSE 0 END) AS with_idl_and_verified
+           FROM projects p
+           LEFT JOIN (SELECT DISTINCT project_id FROM idl_versions) v ON v.project_id = p.id
+           WHERE p.is_public = 1`,
         )
+        .first(),
+
+      // Total Workflow instances ever created (chain-discovery, idl-sync,
+      // osec-discover, candidates-import, verified-match/-analysis, ...)
+      db
+        .prepare(`SELECT COUNT(*) AS total FROM workflow_instances`)
         .first(),
     ])
 
@@ -128,14 +127,12 @@ app.get('/analytics', async (c) => {
         api: Number((allTimeTotals as any)?.api_total ?? 0),
         mcp: Number((allTimeTotals as any)?.mcp_total ?? 0),
       },
-      ecosystem: {
-        verified_programs: Number((verifiedStats as any)?.verified ?? 0),
+      platform: {
         total_programs: Number((verifiedStats as any)?.total ?? 0),
-        tx_count_7d: Number((programMetricsAgg as any)?.tx_count_7d ?? 0),
-        unique_users_7d: Number((programMetricsAgg as any)?.unique_users_7d ?? 0),
-        fees_sol_7d: Number((programMetricsAgg as any)?.fees_sol_7d ?? 0),
-        tracked_programs: Number((programMetricsAgg as any)?.tracked_programs ?? 0),
-        metrics_fetched_at: (programMetricsAgg as any)?.fetched_at ?? null,
+        programs_with_idl: Number((verifiedStats as any)?.with_idl ?? 0),
+        verified_programs: Number((verifiedStats as any)?.verified ?? 0),
+        programs_with_idl_and_verified: Number((verifiedStats as any)?.with_idl_and_verified ?? 0),
+        workflow_runs_total: Number((workflowRuns as any)?.total ?? 0),
       },
     })
   } catch {

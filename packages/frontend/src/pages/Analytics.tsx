@@ -30,12 +30,12 @@ function formatDate(d: number): string {
   return new Date(year, month, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function formatCompact(value: number): string {
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
-}
-
 function shortId(value: string): string {
   return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+}
+
+function pct(n: number, total: number): string {
+  return `${total ? Math.round((n / total) * 100) : 0}%`
 }
 
 const CHART_COLORS = {
@@ -261,7 +261,7 @@ export default function Analytics() {
             Analytics for API and MCP agents
           </h1>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-sand-1200 sm:text-sm">
-            Usage signals for Orquestra adoption: program traffic, API calls, MCP tool demand, and ecosystem impact.
+            Usage signals for Orquestra adoption: program traffic, API calls, and MCP tool demand.
           </p>
         </div>
 
@@ -292,7 +292,7 @@ export default function Analytics() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5 lg:grid-cols-10">
         <StatCard
           label="Total users"
           value={stats?.total_users ?? 0}
@@ -305,13 +305,57 @@ export default function Analytics() {
           }
         />
         <StatCard
-          label="Total projects"
+          label="Total programs"
           value={stats?.total_projects ?? 0}
           isLoading={isLoadingStats}
           hint="catalog"
           icon={
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="Have IDL"
+          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl ?? 0, analytics?.platform.total_programs ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint={analytics ? `${analytics.platform.programs_with_idl}/${analytics.platform.total_programs}` : undefined}
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="Verified"
+          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.verified_programs ?? 0, analytics?.platform.total_programs ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint={analytics ? `${analytics.platform.verified_programs}/${analytics.platform.total_programs}` : undefined}
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="IDL + Verified"
+          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl_and_verified ?? 0, analytics?.platform.total_programs ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint={analytics ? `${analytics.platform.programs_with_idl_and_verified}/${analytics.platform.total_programs}` : undefined}
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="Workflow runs"
+          value={isLoadingAnalytics ? '-' : (analytics?.platform.workflow_runs_total ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="total"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           }
         />
@@ -463,53 +507,6 @@ export default function Analytics() {
               ) : (
                 <EmptyState title="No program traffic yet" desc="Programs with API usage will rank here automatically." />
               )}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="mb-3 text-sm font-bold text-sand-1600">Ecosystem impact <span className="font-normal text-sand-1100">— real usage across tracked programs</span></h2>
-
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard
-                label="On-chain transactions"
-                value={analytics.ecosystem.tx_count_7d}
-                hint="7d"
-                icon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                }
-              />
-              <StatCard
-                label="Unique users touched"
-                value={analytics.ecosystem.unique_users_7d}
-                hint="7d"
-                icon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                }
-              />
-              <StatCard
-                label="Fees generated"
-                value={`${formatCompact(analytics.ecosystem.fees_sol_7d)} SOL`}
-                hint="7d"
-                icon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-              />
-              <StatCard
-                label="Verified builds"
-                value={`${analytics.ecosystem.total_programs ? Math.round((analytics.ecosystem.verified_programs / analytics.ecosystem.total_programs) * 100) : 0}%`}
-                hint={`${analytics.ecosystem.verified_programs}/${analytics.ecosystem.total_programs}`}
-                icon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-                  </svg>
-                }
-              />
             </div>
           </section>
         </>

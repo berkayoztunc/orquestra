@@ -1,8 +1,10 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { syncProjectBatch, processCandidates, type SyncEnv } from '../services/idl-sync'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
-import { recordWorkflowInstance } from '../services/workflow-registry'
+import { recordWorkflowInstance, hasActiveInstance } from '../services/workflow-registry'
 import { generateId } from '../utils/id'
+import { hibernateEvery } from '../utils/workflow-helpers'
+import { finalizeSyncRunFailed } from '../services/sync-runs'
 
 const TAG = '[idl-sync-workflow]'
 const BATCH_SIZE = 20 // matches CONCURRENCY in idl-sync.ts
@@ -61,28 +63,7 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
       const shouldAbort = await step.do(
         'check concurrency',
         { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
-        async () => {
-          const { results } = await this.env.DB
-            .prepare(
-              `SELECT instance_id FROM workflow_instances
-               WHERE workflow = 'idl-sync' AND instance_id != ?
-                 AND created_at > datetime('now', '-2 hours')
-               ORDER BY created_at DESC LIMIT 10`,
-            )
-            .bind(event.instanceId)
-            .all()
-
-          for (const row of (results ?? []) as { instance_id: string }[]) {
-            try {
-              const instance = await this.env.IDL_SYNC_WORKFLOW.get(row.instance_id)
-              const { status } = await instance.status()
-              if (status === 'running' || status === 'queued' || status === 'paused' || status === 'waiting') {
-                return true
-              }
-            } catch { /* instance gone — ignore */ }
-          }
-          return false
-        },
+        async () => hasActiveInstance(this.env.DB, this.env.IDL_SYNC_WORKFLOW, 'idl-sync', 2, event.instanceId),
       )
 
       if (shouldAbort) {
@@ -155,9 +136,7 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
 
       // The engine may pack consecutive fast steps into one Worker invocation,
       // sharing its 1000-subrequest budget — hibernate periodically to reset it.
-      if ((i + 1) % 10 === 0) {
-        await step.sleep(`cooldown after batch ${i + 1}`, '1 minute')
-      }
+      await hibernateEvery(step, i + 1, 10, `batch ${i + 1}`)
     }
 
     console.log(`${TAG} phase 1 complete: updated=${updated} unchanged=${unchanged} skipped=${skipped} errors=${errors} categorized=${categorized}`)
@@ -245,22 +224,13 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
       await step.do(
         'finalize sync run (failed)',
         { timeout: '15 seconds', retries: { limit: 3, delay: 3000, backoff: 'exponential' } },
-        async () => {
-          await this.env.DB
-            .prepare(`
-              UPDATE sync_runs SET
-                completed_at = CURRENT_TIMESTAMP,
-                status = 'failed',
-                total_programs = ?,
-                updated_count = ?,
-                unchanged_count = ?,
-                skipped_count = ?,
-                error_count = ?
-              WHERE id = ? AND status = 'running'
-            `)
-            .bind(total, updated, unchanged, skipped, errors, runId)
-            .run()
-        },
+        async () => finalizeSyncRunFailed(this.env.DB, runId, {
+          total_programs: total,
+          updated_count: updated,
+          unchanged_count: unchanged,
+          skipped_count: skipped,
+          error_count: errors,
+        }, { requireRunning: true }),
       )
       throw err
     }

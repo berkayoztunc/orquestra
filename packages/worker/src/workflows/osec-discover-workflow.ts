@@ -1,7 +1,9 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
 import { LAST_DISCOVERY_KV_KEY } from '../services/pipeline-health'
-import { recordWorkflowInstance } from '../services/workflow-registry'
+import { recordWorkflowInstance, hasActiveInstance } from '../services/workflow-registry'
+import { checkExistingIds } from '../services/db-batch'
+import { enqueueCandidates } from '../services/candidates'
 
 const TAG = '[osec-discover-workflow]'
 const CHECK_BATCH = 100  // max IDs per IN() query
@@ -33,28 +35,7 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
     const shouldAbort = await step.do(
       'check concurrency',
       { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
-      async () => {
-        const { results } = await this.env.DB
-          .prepare(
-            `SELECT instance_id FROM workflow_instances
-             WHERE workflow = 'osec-discover' AND instance_id != ?
-               AND created_at > datetime('now', '-2 hours')
-             ORDER BY created_at DESC LIMIT 10`,
-          )
-          .bind(event.instanceId)
-          .all()
-
-        for (const row of (results ?? []) as { instance_id: string }[]) {
-          try {
-            const instance = await this.env.OSEC_DISCOVER_WORKFLOW.get(row.instance_id)
-            const { status } = await instance.status()
-            if (status === 'running' || status === 'queued' || status === 'paused' || status === 'waiting') {
-              return true
-            }
-          } catch { /* instance gone — ignore */ }
-        }
-        return false
-      },
+      async () => hasActiveInstance(this.env.DB, this.env.OSEC_DISCOVER_WORKFLOW, 'osec-discover', 2, event.instanceId),
     )
 
     if (shouldAbort) {
@@ -97,16 +78,7 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
       'filter already-imported programs',
       { timeout: '2 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const existingSet = new Set<string>()
-        for (let i = 0; i < osecIds.length; i += CHECK_BATCH) {
-          const batch = osecIds.slice(i, i + CHECK_BATCH)
-          const placeholders = batch.map(() => '?').join(', ')
-          const { results } = await this.env.DB
-            .prepare(`SELECT program_id FROM projects WHERE program_id IN (${placeholders})`)
-            .bind(...batch)
-            .all()
-          for (const row of (results ?? [])) existingSet.add((row as any).program_id)
-        }
+        const existingSet = await checkExistingIds(this.env.DB, 'projects', 'program_id', osecIds, CHECK_BATCH)
         const notInDb = osecIds.filter((id) => !existingSet.has(id))
         console.log(`${TAG} ${existingSet.size} already in DB, ${notInDb.length} new`)
         return notInDb
@@ -123,16 +95,7 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
       'filter already-queued candidates',
       { timeout: '2 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const queuedSet = new Set<string>()
-        for (let i = 0; i < newIds.length; i += CHECK_BATCH) {
-          const batch = newIds.slice(i, i + CHECK_BATCH)
-          const placeholders = batch.map(() => '?').join(', ')
-          const { results } = await this.env.DB
-            .prepare(`SELECT program_id FROM program_candidates WHERE program_id IN (${placeholders})`)
-            .bind(...batch)
-            .all()
-          for (const row of (results ?? [])) queuedSet.add((row as any).program_id)
-        }
+        const queuedSet = await checkExistingIds(this.env.DB, 'program_candidates', 'program_id', newIds, CHECK_BATCH)
         const notQueued = newIds.filter((id) => !queuedSet.has(id))
         console.log(`${TAG} ${queuedSet.size} already queued, ${notQueued.length} to insert`)
         return notQueued
@@ -160,17 +123,7 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
         `enqueue batch ${i + 1} of ${totalBatches}`,
         { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
         async () => {
-          let n = 0
-          for (const programId of batch) {
-            const result = await this.env.DB
-              .prepare(
-                `INSERT OR IGNORE INTO program_candidates (program_id, status, source, added_at)
-                 VALUES (?, 'pending', 'osec', CURRENT_TIMESTAMP)`,
-              )
-              .bind(programId)
-              .run()
-            n += result?.meta?.changes ?? 0
-          }
+          const n = await enqueueCandidates(this.env.DB, batch, 'osec')
           console.log(`${TAG} batch ${i + 1}/${totalBatches}: inserted ${n} candidates`)
           return n
         },

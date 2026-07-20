@@ -38,21 +38,26 @@ export async function recordWorkflowInstance(
 
 /**
  * True when a recent instance of `workflow` is still running/queued.
- * Used by the scheduled handler to avoid stacking import instances.
+ * Used by the scheduled handler to avoid stacking import instances, and by
+ * workflows to yield to another already-active instance of themselves
+ * (pass `excludeInstanceId: event.instanceId` so a self-registered instance
+ * doesn't block itself).
  */
 export async function hasActiveInstance(
   db: D1Database,
   binding: { get(id: string): Promise<{ status(): Promise<{ status: string }> }> },
   workflow: string,
   withinHours = 6,
+  excludeInstanceId?: string,
 ): Promise<boolean> {
   const { results } = await db
     .prepare(
       `SELECT instance_id FROM workflow_instances
        WHERE workflow = ? AND created_at > datetime('now', ?)
+         ${excludeInstanceId ? 'AND instance_id != ?' : ''}
        ORDER BY created_at DESC LIMIT 10`,
     )
-    .bind(workflow, `-${withinHours} hours`)
+    .bind(...(excludeInstanceId ? [workflow, `-${withinHours} hours`, excludeInstanceId] : [workflow, `-${withinHours} hours`]))
     .all<{ instance_id: string }>()
 
   for (const row of results ?? []) {

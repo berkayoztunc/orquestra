@@ -16,7 +16,6 @@ export { AiAnalysisWorkflow } from './workflows/ai-analysis-workflow'
 export { IdlSyncWorkflow } from './workflows/idl-sync-workflow'
 export { IdlUpdateCacheWorkflow } from './workflows/idl-update-cache-workflow'
 export { BulkRecategorizeWorkflow } from './workflows/bulk-recategorize-workflow'
-export { VerifiedBuildsWorkflow } from './workflows/verified-builds-workflow'
 export { VerifiedAnalysisWorkflow } from './workflows/verified-analysis-workflow'
 export { OsecDiscoverWorkflow } from './workflows/osec-discover-workflow'
 export { VerifiedMatchWorkflow } from './workflows/verified-match-workflow'
@@ -68,7 +67,6 @@ type Env = {
     IDL_SYNC_WORKFLOW: any
     IDL_UPDATE_CACHE_WORKFLOW: any
     BULK_RECATEGORIZE_WORKFLOW: any
-    VERIFIED_BUILDS_WORKFLOW: any
     VERIFIED_ANALYSIS_WORKFLOW: any
     OSEC_DISCOVER_WORKFLOW: any
     VERIFIED_MATCH_WORKFLOW: any

@@ -2,9 +2,12 @@ import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:work
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { getSignaturesSince, getTransaction, extractDeployedProgramId, type SignatureInfo } from '../utils/solana-rpc'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
-import { recordWorkflowInstance } from '../services/workflow-registry'
+import { recordWorkflowInstance, hasActiveInstance } from '../services/workflow-registry'
 import { LAST_CHAIN_DISCOVERY_KV_KEY } from '../services/pipeline-health'
 import { generateId } from '../utils/id'
+import { hibernateEvery } from '../utils/workflow-helpers'
+import { finalizeSyncRunFailed } from '../services/sync-runs'
+import { enqueueCandidates } from '../services/candidates'
 
 const TAG = '[chain-discovery-workflow]'
 
@@ -81,28 +84,7 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
       const shouldAbort = await step.do(
         'check concurrency',
         { timeout: '15 seconds', retries: { limit: 2, delay: 3000, backoff: 'exponential' } },
-        async () => {
-          const { results } = await this.env.DB
-            .prepare(
-              `SELECT instance_id FROM workflow_instances
-               WHERE workflow = 'chain-discovery' AND instance_id != ?
-                 AND created_at > datetime('now', '-2 hours')
-               ORDER BY created_at DESC LIMIT 10`,
-            )
-            .bind(event.instanceId)
-            .all<{ instance_id: string }>()
-
-          for (const row of results ?? []) {
-            try {
-              const instance = await this.env.CHAIN_DISCOVERY_WORKFLOW.get(row.instance_id)
-              const { status } = await instance.status()
-              if (status === 'running' || status === 'queued' || status === 'paused' || status === 'waiting') {
-                return true
-              }
-            } catch { /* instance gone — ignore */ }
-          }
-          return false
-        },
+        async () => hasActiveInstance(this.env.DB, this.env.CHAIN_DISCOVERY_WORKFLOW, 'chain-discovery', 2, event.instanceId),
       )
 
       if (shouldAbort) {
@@ -183,9 +165,9 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
         for (const id of ids) discoveredIds.add(id)
         txFetched += batch.length
 
-        if (batchNum % CHUNKS_PER_BREATHER === 0 && i + TX_FETCH_BATCH < toFetch.length) {
-          await step.sleep(`cooldown after tx batch ${batchNum}`, '1 minute')
-        }
+        await hibernateEvery(step, batchNum, CHUNKS_PER_BREATHER, `tx batch ${batchNum}`, {
+          guard: i + TX_FETCH_BATCH < toFetch.length,
+        })
       }
 
       if (discoveredIds.size > 0) {
@@ -194,17 +176,7 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
           'dedupe + insert candidates',
           { timeout: '1 minute', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
           async () => {
-            let n = 0
-            for (const programId of ids) {
-              const result = await this.env.DB
-                .prepare(
-                  `INSERT OR IGNORE INTO program_candidates (program_id, status, source, added_at)
-                   VALUES (?, 'pending', 'chain-discovery', CURRENT_TIMESTAMP)`,
-                )
-                .bind(programId)
-                .run()
-              n += result?.meta?.changes ?? 0
-            }
+            const n = await enqueueCandidates(this.env.DB, ids, 'chain-discovery')
             console.log(`${TAG} inserted ${n} new candidates`)
             return n
           },
@@ -237,12 +209,7 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
       await step.do(
         'finalize run (failed)',
         { timeout: '15 seconds', retries: { limit: 3, delay: 3000, backoff: 'exponential' } },
-        async () => {
-          await this.env.DB
-            .prepare("UPDATE sync_runs SET completed_at = CURRENT_TIMESTAMP, status = 'failed' WHERE id = ? AND status = 'running'")
-            .bind(runId)
-            .run()
-        },
+        async () => finalizeSyncRunFailed(this.env.DB, runId, {}, { requireRunning: true }),
       )
       throw err
     }

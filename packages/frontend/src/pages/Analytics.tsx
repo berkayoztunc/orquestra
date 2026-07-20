@@ -401,13 +401,13 @@ export default function Analytics() {
               </div>
 
               {toolBreakdown.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {toolBreakdown.map(([toolId, count]) => {
                     const maxCount = toolBreakdown[0][1]
                     const pct = maxCount ? (count / maxCount) * 100 : 0
                     return (
-                      <div key={toolId} className="border border-border-low bg-sand-50 p-3">
-                        <div className="mb-2 flex items-center justify-between gap-3">
+                      <div key={toolId} className="border border-border-low bg-sand-50 p-2.5">
+                        <div className="mb-1.5 flex items-center justify-between gap-3">
                           <code className="truncate font-mono text-xs text-sand-1500">{MCP_TOOL_NAMES[toolId] ?? `tool_${toolId}`}</code>
                           <span className="font-mono text-xs text-sand-1200">{count.toLocaleString()}</span>
                         </div>
@@ -439,10 +439,10 @@ export default function Analytics() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border-low text-xs uppercase tracking-[0.16em] text-sand-1100">
-                        <th className="pb-3 text-left font-semibold">#</th>
-                        <th className="pb-3 text-left font-semibold">Program</th>
-                        <th className="hidden pb-3 text-left font-semibold md:table-cell">Program ID</th>
-                        <th className="pb-3 text-right font-semibold">Requests</th>
+                        <th className="pb-2 text-left font-semibold">#</th>
+                        <th className="pb-2 text-left font-semibold">Program</th>
+                        <th className="hidden pb-2 text-left font-semibold md:table-cell">Program ID</th>
+                        <th className="pb-2 text-right font-semibold">Requests</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-low">
@@ -451,19 +451,19 @@ export default function Analytics() {
                         const pct = maxTotal ? (program.total / maxTotal) * 100 : 0
                         return (
                           <tr key={program.project_id} className="transition-colors duration-150 hover:bg-sand-50">
-                            <td className="py-4 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
-                            <td className="py-4 pr-4">
+                            <td className="py-2.5 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
+                            <td className="py-2.5 pr-4">
                               <div className="min-w-[180px]">
                                 <p className="truncate font-semibold text-sand-1600">{program.name ?? program.project_id}</p>
-                                <div className="mt-2 h-1.5 max-w-xs overflow-hidden bg-sand-200">
+                                <div className="mt-1.5 h-1.5 max-w-xs overflow-hidden bg-sand-200">
                                   <div className="h-full bg-sand-1600" style={{ width: `${pct}%` }} />
                                 </div>
                               </div>
                             </td>
-                            <td className="hidden py-4 pr-4 md:table-cell">
+                            <td className="hidden py-2.5 pr-4 md:table-cell">
                               <span className="font-mono text-xs text-sand-1100">{shortId(program.project_id)}</span>
                             </td>
-                            <td className="py-4 text-right font-mono font-semibold tabular-nums text-sand-1600">
+                            <td className="py-2.5 text-right font-mono font-semibold tabular-nums text-sand-1600">
                               {program.total.toLocaleString()}
                             </td>
                           </tr>
@@ -475,6 +475,87 @@ export default function Analytics() {
               ) : (
                 <EmptyState title="No program traffic yet" desc="Programs with API usage will rank here automatically." />
               )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Ecosystem impact</p>
+              <h2 className="mt-1 text-xl font-bold text-sand-1600">Real usage across tracked programs</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  label="On-chain transactions"
+                  value={analytics.ecosystem.tx_count_7d}
+                  hint="7d · tracked programs"
+                  icon={
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  }
+                />
+                <StatCard
+                  label="Unique users touched"
+                  value={analytics.ecosystem.unique_users_7d}
+                  hint="7d on-chain"
+                  icon={
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  }
+                />
+                <StatCard
+                  label="Fees generated"
+                  value={`${formatCompact(analytics.ecosystem.fees_sol_7d)} SOL`}
+                  hint="7d"
+                  icon={
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  }
+                />
+                <StatCard
+                  label="Verified builds"
+                  value={`${analytics.ecosystem.total_programs ? Math.round((analytics.ecosystem.verified_programs / analytics.ecosystem.total_programs) * 100) : 0}%`}
+                  hint={`${analytics.ecosystem.verified_programs.toLocaleString()} of ${analytics.ecosystem.total_programs.toLocaleString()} programs`}
+                  icon={
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                    </svg>
+                  }
+                />
+              </div>
+
+              <div className="border border-border-low bg-bg1 p-5">
+                <div className="mb-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Program composition</p>
+                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Category breakdown</h2>
+                </div>
+
+                {analytics.category_breakdown.length > 0 ? (
+                  <div className="space-y-2">
+                    {analytics.category_breakdown.map((c) => {
+                      const maxCount = analytics.category_breakdown[0].total
+                      const pct = maxCount ? (c.total / maxCount) * 100 : 0
+                      return (
+                        <div key={c.category} className="border border-border-low bg-sand-50 p-2.5">
+                          <div className="mb-1.5 flex items-center justify-between gap-3">
+                            <code className="truncate font-mono text-xs text-sand-1500">{c.category}</code>
+                            <span className="font-mono text-xs text-sand-1200">{c.total.toLocaleString()}</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden bg-sand-200">
+                            <div className="h-full bg-sand-1600 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState title="No categories yet" desc="Programs are categorized automatically as they're analyzed." />
+                )}
+              </div>
             </div>
           </section>
         </>

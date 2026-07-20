@@ -3,6 +3,8 @@ import { processCandidates, type SyncEnv } from '../services/idl-sync'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { generateId } from '../utils/id'
+import { hibernateEvery } from '../utils/workflow-helpers'
+import { finalizeSyncRunFailed } from '../services/sync-runs'
 
 const TAG = '[candidates-import-workflow]'
 
@@ -105,27 +107,19 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
 
         // Hibernate periodically so the next chunks get a fresh Worker
         // invocation (resets the per-invocation subrequest counter).
-        if ((i + 1) % CHUNKS_PER_BREATHER === 0) {
-          await step.sleep(`cooldown after chunk ${i + 1}`, '1 minute')
-        }
+        await hibernateEvery(step, i + 1, CHUNKS_PER_BREATHER, `chunk ${i + 1}`)
       }
     } catch (err) {
       // Best-effort: never leave the sync_runs row stuck at 'running'.
       await step.do(
         'finalize run (failed)',
         { timeout: '15 seconds', retries: { limit: 3, delay: 3000, backoff: 'exponential' } },
-        async () => {
-          await this.env.DB
-            .prepare(
-              `UPDATE sync_runs
-               SET completed_at = CURRENT_TIMESTAMP, status = 'failed',
-                   total_checked = 0, total_programs = 0,
-                   candidates_checked = ?, candidates_imported = ?
-               WHERE id = ?`,
-            )
-            .bind(checked, imported, runId)
-            .run()
-        },
+        async () => finalizeSyncRunFailed(this.env.DB, runId, {
+          total_checked: 0,
+          total_programs: 0,
+          candidates_checked: checked,
+          candidates_imported: imported,
+        }),
       )
       throw err
     }

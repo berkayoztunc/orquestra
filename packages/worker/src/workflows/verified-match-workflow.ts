@@ -1,6 +1,7 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
 import { recordWorkflowInstance } from '../services/workflow-registry'
+import { checkExistingIds } from '../services/db-batch'
 
 const TAG = '[verified-match]'
 const DB_BATCH = 100 // max IDs per IN() clause
@@ -51,15 +52,7 @@ export class VerifiedMatchWorkflow extends WorkflowEntrypoint<Env, Params> {
       'step 2: match against db',
       { timeout: '60 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
-        const inDb = new Set<string>()
-        for (let i = 0; i < programIds.length; i += DB_BATCH) {
-          const batch = programIds.slice(i, i + DB_BATCH)
-          const ph = batch.map(() => '?').join(', ')
-          const { results } = await this.env.DB
-            .prepare(`SELECT program_id FROM projects WHERE program_id IN (${ph})`)
-            .bind(...batch).all()
-          for (const r of (results ?? [])) inDb.add((r as any).program_id)
-        }
+        const inDb = await checkExistingIds(this.env.DB, 'projects', 'program_id', programIds, DB_BATCH)
 
         const osecSet = new Set(programIds)
         const { results: verifiedRows } = await this.env.DB

@@ -4,6 +4,8 @@ import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, 
 import { setCategoryAndAliases } from './search'
 import { generateId } from '../utils/id'
 import { buildMainnetRpcUrlList, getSignaturesForAddress } from '../utils/solana-rpc'
+import { hashIdl } from '../utils/crypto'
+import { deriveIdlProgramName } from '../utils/idl-naming'
 
 export interface SyncEnv {
   DB: D1Database
@@ -30,8 +32,7 @@ interface VersionRow {
 
 /**
  * Cloudflare Workers cron triggers have a 15-minute wall-clock limit (paid plans).
- * We stop processing at 12 minutes and save a KV checkpoint so the next cron
- * run resumes exactly where we left off rather than restarting from scratch.
+ * processCandidates() stops at 12 minutes rather than risk being killed mid-batch.
  */
 const MAX_RUNTIME_MS = 12 * 60 * 1000 // 12 minutes
 
@@ -51,9 +52,6 @@ const CONCURRENCY = 20
 /** Maximum AI categorization calls per sync run to avoid quota exhaustion */
 const MAX_AI_PER_RUN = 300
 
-/** KV key storing the continuation cursor for partial runs */
-const CHECKPOINT_KEY = 'sync:progress:cursor'
-
 /** How many pending candidates to verify + auto-import per regular cron run */
 const CANDIDATES_PER_RUN = 3000
 
@@ -67,13 +65,6 @@ const MAX_CANDIDATE_ATTEMPTS = 5
 const CANDIDATE_CONCURRENCY = 20
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function hashIdl(idlJson: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(idlJson))
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
 
 /**
  * Race a promise against a timeout. Returns null if the timeout fires first.
@@ -395,12 +386,7 @@ async function processOneCandidate(
 
   if (!existing) {
     // Derive raw name from IDL
-    const rawName = (
-      (typeof onChain.idl?.name === 'string' && onChain.idl.name) ||
-      (typeof onChain.idl?.metadata?.name === 'string' && onChain.idl.metadata.name) ||
-      (typeof onChain.idl?.program?.name === 'string' && onChain.idl.program.name) ||
-      programId
-    ).trim() || programId
+    const rawName = deriveIdlProgramName(onChain.idl, programId)
 
     // Default to title-cased name; AI will override if available
     let projectName = toTitleCase(rawName)
@@ -665,233 +651,6 @@ export async function syncProjectBatch(
   }
 
   return { updated, unchanged, skipped, errors, categorized }
-}
-
-/**
- * Sync all public projects' on-chain IDLs. Called by:
- * - Scheduled cron (0 *\/6 * * *) via wrangler.toml
- * - POST /api/admin/sync/trigger (manual, admin-only)
- *
- * ## Cloudflare Workers time limits
- * Paid plan cron triggers allow up to 15 minutes of wall-clock time.
- * This function stops at 12 minutes and writes a checkpoint to KV so
- * the next invocation continues from the same position rather than
- * restarting. On a full cycle (all programs processed) the checkpoint
- * is cleared.
- *
- * ## Ordering
- * Projects are sorted by updated_at ASC so the least-recently-synced
- * programs are always processed first — ensuring eventual fairness even
- * when large registries can't be fully covered in a single run.
- */
-export async function runDailyIdlSync(
-  env: SyncEnv,
-  trigger: 'cron' | 'manual' = 'cron',
-): Promise<void> {
-  const rpcUrls = buildMainnetRpcUrlList(env)
-  const wallStart = Date.now()
-
-  // ── Checkpoint: resume from last saved position ───────────────────────────
-  let startIndex = 0
-  if (trigger === 'cron') {
-    try {
-      const checkpoint = await env.CACHE.get<{ index: number; ts: number }>(
-        CHECKPOINT_KEY,
-        'json',
-      )
-      // Only honour a checkpoint from within the last 24 hours
-      if (checkpoint && Date.now() - checkpoint.ts < 24 * 60 * 60 * 1000) {
-        startIndex = checkpoint.index
-        console.log(`[idl-sync] Resuming from checkpoint index ${startIndex}`)
-      }
-    } catch {
-      // KV read failure is non-fatal; start from 0
-    }
-  }
-
-  // ── DB: record start of run ───────────────────────────────────────────────
-  const runId = generateId()
-  await env.DB
-    .prepare(
-      'INSERT INTO sync_runs (id, started_at, trigger, status) VALUES (?, CURRENT_TIMESTAMP, ?, ?)',
-    )
-    .bind(runId, trigger, 'running')
-    .run()
-
-  // ── Fetch all public projects (oldest-synced first) ───────────────────────
-  const { results: allProjects } = await env.DB
-    .prepare(
-      'SELECT id, program_id, name FROM projects WHERE is_public = 1 ORDER BY updated_at ASC',
-    )
-    .all<ProjectRow>()
-
-  if (!allProjects || allProjects.length === 0) {
-    console.log('[idl-sync] No projects to sync')
-    await env.DB
-      .prepare(
-        'UPDATE sync_runs SET completed_at = CURRENT_TIMESTAMP, status = ?, total_checked = 0, total_programs = 0 WHERE id = ?',
-      )
-      .bind('complete', runId)
-      .run()
-    return
-  }
-
-  const projects = allProjects.slice(startIndex)
-  console.log(
-    `[idl-sync] Syncing ${projects.length} of ${allProjects.length} projects` +
-    (startIndex > 0 ? ` (resuming from index ${startIndex})` : '') +
-    ` (trigger: ${trigger}, concurrency: ${CONCURRENCY})`,
-  )
-
-  let updated = 0
-  let unchanged = 0
-  let skipped = 0
-  let errors = 0
-  let aiCallCount = 0
-  let processedCount = 0
-  let timedOut = false
-
-  // ── Main processing loop ──────────────────────────────────────────────────
-  for (let i = 0; i < projects.length; i += CONCURRENCY) {
-    // Wall-clock guard: stop before hitting the 15-minute Workers cron limit
-    if (Date.now() - wallStart > MAX_RUNTIME_MS) {
-      timedOut = true
-      const globalIndex = startIndex + i
-      try {
-        await env.CACHE.put(
-          CHECKPOINT_KEY,
-          JSON.stringify({ index: globalIndex, ts: Date.now() }),
-          { expirationTtl: 24 * 60 * 60 },
-        )
-        console.log(
-          `[idl-sync] Wall-clock limit reached after ${Math.round((Date.now() - wallStart) / 1000)}s. ` +
-          `Checkpoint saved at index ${globalIndex}. Next cron will continue from here.`,
-        )
-      } catch {
-        console.error('[idl-sync] Failed to write checkpoint to KV')
-      }
-      break
-    }
-
-    const batch = projects.slice(i, i + CONCURRENCY)
-    const results = await Promise.allSettled(
-      batch.map((p) => syncProject(env.DB, env.CACHE, rpcUrls, p)),
-    )
-
-    for (const r of results) {
-      processedCount++
-      if (r.status === 'fulfilled') {
-        const sr = r.value
-        if (sr.status === 'updated') {
-          updated++
-          // Trigger AI categorization on first-ever IDL discovery, capped per run
-          if (sr.isFirstVersion && env.AI && sr.idl && aiCallCount < MAX_AI_PER_RUN) {
-            aiCallCount++
-            try {
-              const catResult = await categorizeProgramWithAI(env.AI, {
-                name: sr.programName,
-                description: null,
-                programId: sr.programId,
-                instructions: extractInstructionNames(sr.idl),
-                accounts: extractAccountNames(sr.idl),
-              })
-              await setCategoryAndAliases(
-                env.DB,
-                sr.projectId,
-                catResult.category,
-                catResult.tags,
-                catResult.aliases,
-              )
-            } catch (err) {
-              console.error(`[idl-sync] AI categorization failed for ${sr.programId}:`, err)
-            }
-          }
-        } else if (sr.status === 'unchanged') {
-          unchanged++
-        } else {
-          skipped++
-        }
-      } else {
-        errors++
-        console.error('[idl-sync] batch error:', r.reason)
-      }
-    }
-  }
-
-  // ── Clear checkpoint on full completion ───────────────────────────────────
-  if (!timedOut) {
-    try {
-      await env.CACHE.delete(CHECKPOINT_KEY)
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  // ── Phase 2: auto-import new programs from discovery queue ────────────────
-  let candidatesChecked = 0
-  let candidatesImported = 0
-
-  if (!timedOut) {
-    try {
-      const result = await processCandidates(
-        env.DB,
-        rpcUrls,
-        env.AI,
-        wallStart,
-        aiCallCount,
-        CANDIDATES_PER_RUN,
-      )
-      candidatesChecked = result.checked
-      candidatesImported = result.imported
-      aiCallCount += result.aiCallsUsed
-      if (candidatesChecked > 0) {
-        console.log(
-          `[idl-sync] Candidates: checked=${candidatesChecked}, imported=${candidatesImported}`,
-        )
-      }
-    } catch (err) {
-      console.error('[idl-sync] Phase 2 candidates error:', err)
-    }
-  }
-
-  // ── DB: mark run complete ─────────────────────────────────────────────────
-  const finalStatus = timedOut ? 'partial' : 'complete'
-  await env.DB
-    .prepare(
-      `UPDATE sync_runs
-       SET completed_at          = CURRENT_TIMESTAMP,
-           status                = ?,
-           total_checked         = ?,
-           total_programs        = ?,
-           updated_count         = ?,
-           unchanged_count       = ?,
-           skipped_count         = ?,
-           error_count           = ?,
-           candidates_checked    = ?,
-           candidates_imported   = ?
-       WHERE id = ?`,
-    )
-    .bind(
-      finalStatus,
-      processedCount,
-      allProjects.length,
-      updated,
-      unchanged,
-      skipped,
-      errors,
-      candidatesChecked,
-      candidatesImported,
-      runId,
-    )
-    .run()
-
-  const elapsed = Math.round((Date.now() - wallStart) / 1000)
-  console.log(
-    `[idl-sync] ${finalStatus} in ${elapsed}s — ` +
-    `updated: ${updated}, unchanged: ${unchanged}, skipped: ${skipped}, errors: ${errors}` +
-    (candidatesChecked > 0 ? ` | candidates: ${candidatesImported} imported of ${candidatesChecked} checked` : '') +
-    (timedOut ? ` | partial: ${processedCount}/${allProjects.length} this run` : ''),
-  )
 }
 
 

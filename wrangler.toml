@@ -57,7 +57,7 @@ name = "ai-analysis"
 binding = "AI_ANALYSIS_WORKFLOW"
 class_name = "AiAnalysisWorkflow"
 
-# Workflow: durable IDL sync — replaces legacy runDailyIdlSync cron
+# Workflow: durable IDL sync for all public projects
 [[workflows]]
 name = "idl-sync"
 binding = "IDL_SYNC_WORKFLOW"
@@ -75,13 +75,6 @@ class_name = "IdlUpdateCacheWorkflow"
 name = "bulk-recategorize"
 binding = "BULK_RECATEGORIZE_WORKFLOW"
 class_name = "BulkRecategorizeWorkflow"
-
-# Workflow: DEPRECATED monolith (match+import in one) — unscheduled, manual fallback only.
-# Production path is the split chain: osec-discover → candidates-import → verified-match → verified-analysis.
-[[workflows]]
-name = "verified-builds"
-binding = "VERIFIED_BUILDS_WORKFLOW"
-class_name = "VerifiedBuildsWorkflow"
 
 # Workflow: generate AI analysis for verified programs that have IDL but no analysis yet
 [[workflows]]
@@ -114,10 +107,14 @@ class_name = "VerifiedMatchWorkflow"
 schedules = ["0 4 * * 1"]
 
 # Workflow: fetch on-chain IDL (rate-limit-throttled) for OSEC-verified programs missing from DB or missing an IDL
+# Runs after osec-discover so candidates-import has time to drain most of the
+# queue first — this mainly catches programs already tracked but missing an
+# idl_versions row (the one gap nothing else in the split chain covers).
 [[workflows]]
 name = "verified-idl-import"
 binding = "VERIFIED_IDL_IMPORT_WORKFLOW"
 class_name = "VerifiedIdlImportWorkflow"
+schedules = ["30 3 * * *"]
 
 # Workflow: durable candidate import (hourly) + weekly full IDL sweep.
 # Started from the scheduled() handler (crons 15 * * * *, 0 2 * * *, 0 5 * * 6)
@@ -182,11 +179,6 @@ binding = "BULK_RECATEGORIZE_WORKFLOW"
 class_name = "BulkRecategorizeWorkflow"
 
 [[env.production.workflows]]
-name = "verified-builds-prod"
-binding = "VERIFIED_BUILDS_WORKFLOW"
-class_name = "VerifiedBuildsWorkflow"
-
-[[env.production.workflows]]
 name = "verified-analysis-prod"
 binding = "VERIFIED_ANALYSIS_WORKFLOW"
 class_name = "VerifiedAnalysisWorkflow"
@@ -213,6 +205,7 @@ schedules = ["0 4 * * 1"]
 name = "verified-idl-import-prod"
 binding = "VERIFIED_IDL_IMPORT_WORKFLOW"
 class_name = "VerifiedIdlImportWorkflow"
+schedules = ["30 3 * * *"]
 
 [[env.production.workflows]]
 name = "candidates-import-prod"

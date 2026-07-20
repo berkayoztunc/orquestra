@@ -5,6 +5,8 @@ import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, 
 import { setCategoryAndAliases } from '../services/search'
 import { generateId } from '../utils/id'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
+import { hashIdl } from '../utils/crypto'
+import { deriveIdlProgramName } from '../utils/idl-naming'
 
 const TAG = '[verified-idl-import]'
 const DB_BATCH = 100      // max IDs per IN() clause
@@ -29,12 +31,6 @@ type Target = { programId: string; projectId: string | null }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function hashIdl(idlJson: string): Promise<string> {
-  const bytes = new TextEncoder().encode(idlJson)
-  const buf = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 /**
@@ -146,12 +142,7 @@ export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
                 }
               }
 
-              const rawName = (
-                (typeof onChain.idl?.name === 'string' && onChain.idl.name) ||
-                (typeof onChain.idl?.metadata?.name === 'string' && onChain.idl.metadata.name) ||
-                (typeof onChain.idl?.program?.name === 'string' && onChain.idl.program.name) ||
-                programId
-              ).trim() || programId
+              const rawName = deriveIdlProgramName(onChain.idl, programId)
               const projectName = toTitleCase(rawName)
 
               let projectId = target.projectId

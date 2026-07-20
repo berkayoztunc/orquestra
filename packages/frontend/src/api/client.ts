@@ -519,10 +519,27 @@ export interface TopProgram {
   total: number
 }
 
+export interface CategoryBreakdownEntry {
+  category: string
+  total: number
+}
+
+export interface EcosystemImpact {
+  verified_programs: number
+  total_programs: number
+  tx_count_7d: number
+  unique_users_7d: number
+  fees_sol_7d: number
+  tracked_programs: number
+  metrics_fetched_at: string | null
+}
+
 export interface AdminAnalytics {
   daily_api: DailyApiEntry[]
   daily_mcp: DailyMcpEntry[]
   top_programs: TopProgram[]
+  category_breakdown: CategoryBreakdownEntry[]
+  ecosystem: EcosystemImpact
 }
 
 export async function getPublicStats(): Promise<PublicStats> {

@@ -1,6 +1,5 @@
 import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
-import { runDailyIdlSync } from '../services/idl-sync'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { computePipelineHealth, runPipelineHealthCheck, startCandidatesImport, HEALTH_KV_KEY } from '../services/pipeline-health'
 import { importProgramMetrics } from '../services/program-metrics'
@@ -22,7 +21,6 @@ type Env = {
     IDL_SYNC_WORKFLOW: any
     IDL_UPDATE_CACHE_WORKFLOW: any
     BULK_RECATEGORIZE_WORKFLOW: any
-    VERIFIED_BUILDS_WORKFLOW: any
     VERIFIED_ANALYSIS_WORKFLOW: any
     OSEC_DISCOVER_WORKFLOW: any
     VERIFIED_MATCH_WORKFLOW: any
@@ -37,8 +35,10 @@ const app = new Hono<Env>()
 /**
  * GET /api/admin/analytics
  *
- * Returns last-30-day daily breakdowns for API and MCP traffic, plus the
- * top 20 most-accessed programs. Public endpoint.
+ * Returns last-30-day daily breakdowns for API and MCP traffic, the top 20
+ * most-accessed programs, a category-distribution breakdown, and a
+ * platform-wide ecosystem-impact summary (verified-build rate + aggregate
+ * on-chain activity from program_metrics). Public endpoint.
  *
  * tool_id values: -1=api, 0=search_programs, 1=list_instructions,
  *   2=build_instruction, 3=list_pda_accounts, 4=derive_pda,
@@ -50,7 +50,7 @@ app.get('/analytics', async (c) => {
   if (!db) return c.json({ error: 'Database not available' }, 500)
 
   try {
-    const [dailyApi, dailyMcp, topPrograms] = await Promise.all([
+    const [dailyApi, dailyMcp, topPrograms, categoryBreakdown, verifiedStats, programMetricsAgg] = await Promise.all([
       // Daily HTTP API totals (last 30 days)
       db
         .prepare(
@@ -86,12 +86,57 @@ app.get('/analytics', async (c) => {
            LIMIT 20`,
         )
         .all(),
+
+      // Category distribution across public projects
+      db
+        .prepare(
+          `SELECT COALESCE(pc.category, 'uncategorized') AS category, COUNT(*) AS total
+           FROM projects p
+           LEFT JOIN program_categories pc ON pc.project_id = p.id
+           WHERE p.is_public = 1
+           GROUP BY COALESCE(pc.category, 'uncategorized')
+           ORDER BY total DESC
+           LIMIT 12`,
+        )
+        .all(),
+
+      // Verified-build percentage across public projects
+      db
+        .prepare(
+          `SELECT COUNT(*) AS total, SUM(CASE WHEN is_verified = 1 THEN 1 ELSE 0 END) AS verified
+           FROM projects WHERE is_public = 1`,
+        )
+        .first(),
+
+      // Platform-wide on-chain activity aggregate (last weekly-imported snapshot)
+      db
+        .prepare(
+          `SELECT
+             COALESCE(SUM(tx_count_7d), 0) AS tx_count_7d,
+             COALESCE(SUM(unique_users_7d), 0) AS unique_users_7d,
+             COALESCE(SUM(fees_sol_7d), 0) AS fees_sol_7d,
+             COUNT(*) AS tracked_programs,
+             MAX(fetched_at) AS fetched_at
+           FROM program_metrics`,
+        )
+        .first(),
     ])
 
+    // D1 may return BigInt for COUNT/SUM — coerce explicitly
     return c.json({
       daily_api: dailyApi.results ?? [],
       daily_mcp: dailyMcp.results ?? [],
       top_programs: topPrograms.results ?? [],
+      category_breakdown: categoryBreakdown.results ?? [],
+      ecosystem: {
+        verified_programs: Number((verifiedStats as any)?.verified ?? 0),
+        total_programs: Number((verifiedStats as any)?.total ?? 0),
+        tx_count_7d: Number((programMetricsAgg as any)?.tx_count_7d ?? 0),
+        unique_users_7d: Number((programMetricsAgg as any)?.unique_users_7d ?? 0),
+        fees_sol_7d: Number((programMetricsAgg as any)?.fees_sol_7d ?? 0),
+        tracked_programs: Number((programMetricsAgg as any)?.tracked_programs ?? 0),
+        metrics_fetched_at: (programMetricsAgg as any)?.fetched_at ?? null,
+      },
     })
   } catch {
     return c.json({ error: 'Failed to fetch analytics' }, 500)
@@ -295,37 +340,18 @@ app.get('/sync/discovery', async (c) => {
  * POST /api/admin/sync/trigger
  *
  * Triggers IdlSyncWorkflow — durable, retriable IDL sync for all public projects.
- * Falls back to legacy waitUntil if IDL_SYNC_WORKFLOW binding unavailable.
  * Auth: X-Ingest-Key header required.
  */
 app.post('/sync/trigger', ingestKeyMiddleware, async (c) => {
   const env = c.env
+  if (!env?.IDL_SYNC_WORKFLOW) return c.json({ error: 'IDL_SYNC_WORKFLOW binding not available' }, 500)
 
-  if (env?.IDL_SYNC_WORKFLOW) {
-    try {
-      const instance = await env.IDL_SYNC_WORKFLOW.create({ params: { trigger: 'manual' } })
-      return c.json({ triggered: true, instanceId: instance.id, message: 'IdlSyncWorkflow started' })
-    } catch (err: any) {
-      return c.json({ error: String(err?.message ?? err) }, 500)
-    }
+  try {
+    const instance = await env.IDL_SYNC_WORKFLOW.create({ params: { trigger: 'manual' } })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'IdlSyncWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
   }
-
-  // Legacy fallback
-  if (!env?.DB) return c.json({ error: 'Database not available' }, 500)
-  c.executionCtx.waitUntil(
-    runDailyIdlSync(
-      {
-        DB: env.DB,
-        IDLS: env.IDLS,
-        CACHE: env.CACHE,
-        AI: env.AI as any,
-        SOLANA_RPC_URL: env.SOLANA_RPC_URL,
-        SOLANA_MAINNET_RPC_URL: env.SOLANA_MAINNET_RPC_URL,
-      },
-      'manual',
-    ),
-  )
-  return c.json({ triggered: true, message: 'IDL sync started in background (legacy)' })
 })
 
 /**
@@ -657,30 +683,6 @@ app.get('/sync/verified-analysis-queue', async (c) => {
     return c.json({ pending: Number((row as any)?.pending ?? 0) })
   } catch (err) {
     return c.json({ error: String(err) }, 500)
-  }
-})
-
-/**
- * POST /api/admin/sync/trigger-verified-builds
- *
- * DEPRECATED: the monolith VerifiedBuildsWorkflow is replaced by the split
- * chain osec-discover → candidates-import → verified-match → verified-analysis
- * (all scheduled). Kept as a manual fallback only.
- * Auth: X-Ingest-Key header required.
- */
-app.post('/sync/trigger-verified-builds', ingestKeyMiddleware, async (c) => {
-  const workflow = c.env?.VERIFIED_BUILDS_WORKFLOW
-  if (!workflow) return c.json({ error: 'VERIFIED_BUILDS_WORKFLOW binding not available' }, 500)
-
-  try {
-    const instance = await workflow.create({ params: { trigger: 'manual' } })
-    return c.json({
-      triggered: true,
-      instanceId: instance.id,
-      message: 'VerifiedBuildsWorkflow started (DEPRECATED — prefer trigger-osec-discover + trigger-verified-match)',
-    })
-  } catch (err: any) {
-    return c.json({ error: String(err?.message ?? err) }, 500)
   }
 })
 

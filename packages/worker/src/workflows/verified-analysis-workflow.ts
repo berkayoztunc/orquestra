@@ -1,11 +1,7 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
-import { generateDocumentation } from '../services/doc-generator'
-import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
-import { setCategoryAndAliases } from '../services/search'
-import { writeIdlSummaryCache } from '../services/idl-summary'
+import { runProjectAnalysisPipeline } from '../services/project-analysis-pipeline'
 import { recordWorkflowInstance } from '../services/workflow-registry'
-import { generateId } from '../utils/id'
+import { hibernateEvery } from '../utils/workflow-helpers'
 
 const TAG = '[verified-analysis-workflow]'
 
@@ -136,71 +132,32 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
             return false
           }
 
-          const idl = JSON.parse(versionRow.idl_json)
-
-          // 1. Update IDL summary in IDLS KV
-          await writeIdlSummaryCache({
-            kv: this.env.IDLS,
+          // step=undefined: this per-project pipeline runs inline inside this
+          // outer step.do rather than as its own nested steps (Workflow steps
+          // can't nest — this outer step already provides the durability).
+          const result = await runProjectAnalysisPipeline(this.env, undefined, {
             projectId: p.id,
-            programId: p.program_id,
-            version: p.version,
-            idl,
+            force,
+            writeIdlSummary: true,
+            preloadedProject: {
+              id: p.id,
+              name: p.name,
+              program_id: p.program_id,
+              version_id: p.version_id,
+              idl_json: versionRow.idl_json,
+              cpi_md: versionRow.cpi_md,
+              version: p.version,
+            },
+            onNonRetryableAiError: (err) => {
+              if (!isNonRetryableAiError(err)) return false
+              console.error(`${TAG} [${i + 1}/${projects.length}] non-retryable AI error for ${p.name} — skipping:`, String(err))
+              return true
+            },
           })
 
-          // 2. Generate docs
-          const docs = generateDocumentation(idl, p.program_id, this.env.API_BASE_URL, p.id, versionRow.cpi_md)
-          const docsText = docs.full ?? ''
+          if (result.skipped) return false
 
-          // 3. Delete existing analysis when force=true (INSERT not UPSERT)
-          if (force) {
-            await this.env.DB
-              .prepare(`DELETE FROM ai_analyses WHERE project_id = ?`)
-              .bind(p.id)
-              .run()
-          }
-
-          // 4. Run AI analysis + categorization. Non-retryable AI failures
-          // (bad input / oversized prompt) skip the project instead of
-          // burning step retries — rate limits and 5xx still retry.
-          let category = 'skipped'
-          try {
-            await generateAndStoreAIAnalysis({
-              db: this.env.DB,
-              ai: this.env.AI,
-              id: generateId(),
-              projectId: p.id,
-              idlVersionId: p.version_id,
-              idl,
-              docsText,
-              programId: p.program_id,
-              projectName: p.name,
-            })
-
-            const instructions = extractInstructionNames(idl)
-            const accounts = extractAccountNames(idl)
-            const cat = await categorizeProgramWithAI(this.env.AI, {
-              name: p.name,
-              programId: p.program_id,
-              instructions,
-              accounts,
-            })
-            await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases)
-            category = cat.category
-          } catch (err) {
-            if (isNonRetryableAiError(err)) {
-              console.error(`${TAG} [${i + 1}/${projects.length}] non-retryable AI error for ${p.name} — skipping:`, String(err))
-              return false
-            }
-            throw err
-          }
-
-          // 6. Invalidate stale cache entries
-          await Promise.allSettled([
-            this.env.CACHE.delete(`docs:${p.id}`),
-            this.env.CACHE.delete(`project:${p.id}`),
-          ])
-
-          console.log(`${TAG} [${i + 1}/${projects.length}] done: ${p.name} → ${category}`)
+          console.log(`${TAG} [${i + 1}/${projects.length}] done: ${p.name} → ${result.category}`)
           return true
         },
       ).catch((err) => {
@@ -212,9 +169,7 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
 
       // Periodic hibernation — consecutive fast steps can share one Worker
       // invocation's 1000-subrequest budget; sleeping resets it.
-      if ((i + 1) % 20 === 0) {
-        await step.sleep(`cooldown after project ${i + 1}`, '1 minute')
-      }
+      await hibernateEvery(step, i + 1, 20, `project ${i + 1}`)
     }
 
     // Self-continue while a full chunk was returned (more rows likely remain).

@@ -35,10 +35,10 @@ const app = new Hono<Env>()
 /**
  * GET /api/admin/analytics
  *
- * Returns last-30-day daily breakdowns for API and MCP traffic, the top 20
- * most-accessed programs, a category-distribution breakdown, and a
- * platform-wide ecosystem-impact summary (verified-build rate + aggregate
- * on-chain activity from program_metrics). Public endpoint.
+ * Returns last-30-day daily breakdowns for API and MCP traffic, all-time
+ * traffic totals, the top 6 most-accessed programs, and a platform-wide
+ * ecosystem-impact summary (verified-build rate + aggregate on-chain
+ * activity from program_metrics). Public endpoint.
  *
  * tool_id values: -1=api, 0=search_programs, 1=list_instructions,
  *   2=build_instruction, 3=list_pda_accounts, 4=derive_pda,
@@ -50,7 +50,7 @@ app.get('/analytics', async (c) => {
   if (!db) return c.json({ error: 'Database not available' }, 500)
 
   try {
-    const [dailyApi, dailyMcp, topPrograms, categoryBreakdown, verifiedStats, programMetricsAgg] = await Promise.all([
+    const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, programMetricsAgg] = await Promise.all([
       // Daily HTTP API totals (last 30 days)
       db
         .prepare(
@@ -75,7 +75,7 @@ app.get('/analytics', async (c) => {
         )
         .all(),
 
-      // Top 20 programs by combined API + MCP request count (all time)
+      // Top 6 programs by combined API + MCP request count (all time)
       db
         .prepare(
           `SELECT a.project_id, p.name, SUM(a.count) AS total
@@ -83,22 +83,19 @@ app.get('/analytics', async (c) => {
            INNER JOIN projects p ON p.id = a.project_id
            GROUP BY a.project_id
            ORDER BY total DESC
-           LIMIT 20`,
+           LIMIT 6`,
         )
         .all(),
 
-      // Category distribution across public projects
+      // All-time API vs MCP request totals
       db
         .prepare(
-          `SELECT COALESCE(pc.category, 'uncategorized') AS category, COUNT(*) AS total
-           FROM projects p
-           LEFT JOIN program_categories pc ON pc.project_id = p.id
-           WHERE p.is_public = 1
-           GROUP BY COALESCE(pc.category, 'uncategorized')
-           ORDER BY total DESC
-           LIMIT 12`,
+          `SELECT
+             SUM(CASE WHEN event_type = 0 THEN count ELSE 0 END) AS api_total,
+             SUM(CASE WHEN event_type = 1 THEN count ELSE 0 END) AS mcp_total
+           FROM analytics`,
         )
-        .all(),
+        .first(),
 
       // Verified-build percentage across public projects
       db
@@ -127,7 +124,10 @@ app.get('/analytics', async (c) => {
       daily_api: dailyApi.results ?? [],
       daily_mcp: dailyMcp.results ?? [],
       top_programs: topPrograms.results ?? [],
-      category_breakdown: categoryBreakdown.results ?? [],
+      totals_alltime: {
+        api: Number((allTimeTotals as any)?.api_total ?? 0),
+        mcp: Number((allTimeTotals as any)?.mcp_total ?? 0),
+      },
       ecosystem: {
         verified_programs: Number((verifiedStats as any)?.verified ?? 0),
         total_programs: Number((verifiedStats as any)?.total ?? 0),

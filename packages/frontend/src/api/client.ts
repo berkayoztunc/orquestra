@@ -519,11 +519,6 @@ export interface TopProgram {
   total: number
 }
 
-export interface CategoryBreakdownEntry {
-  category: string
-  total: number
-}
-
 export interface EcosystemImpact {
   verified_programs: number
   total_programs: number
@@ -534,11 +529,16 @@ export interface EcosystemImpact {
   metrics_fetched_at: string | null
 }
 
+export interface AllTimeTotals {
+  api: number
+  mcp: number
+}
+
 export interface AdminAnalytics {
   daily_api: DailyApiEntry[]
   daily_mcp: DailyMcpEntry[]
   top_programs: TopProgram[]
-  category_breakdown: CategoryBreakdownEntry[]
+  totals_alltime: AllTimeTotals
   ecosystem: EcosystemImpact
 }
 

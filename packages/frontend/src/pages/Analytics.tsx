@@ -17,6 +17,9 @@ const MCP_TOOL_NAMES: Record<number, string> = {
   10: 'Simulate transaction',
 }
 
+/** Cap on-screen rows so the page fits one viewport without scrolling. */
+const MAX_TOOL_ROWS = 6
+
 const skeletonHeights = [32, 58, 42, 74, 46, 88, 62, 38, 70, 52, 84, 45, 66, 92, 56, 76, 40, 64]
 
 function formatDate(d: number): string {
@@ -46,7 +49,7 @@ interface BarChartProps {
   height?: number
 }
 
-function BarChart({ data, tone = 'primary', height = 148 }: BarChartProps) {
+function BarChart({ data, tone = 'primary', height = 64 }: BarChartProps) {
   const color = CHART_COLORS[tone]
   const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string; value: number } | null>(null)
 
@@ -79,10 +82,10 @@ function BarChart({ data, tone = 'primary', height = 148 }: BarChartProps) {
           <line key={line} x1="0" x2="100" y1={height * line} y2={height * line} style={{ stroke: 'rgb(var(--rgb-border-low))' }} strokeWidth="0.5" />
         ))}
         {data.map((d, i) => {
-          const barH = Math.max(3, (d.value / max) * (height - 24))
+          const barH = Math.max(2, (d.value / max) * (height - 12))
           const x = i * barWidth + barWidth * 0.18
           const w = Math.max(1.2, barWidth * 0.64)
-          const y = height - barH - 10
+          const y = height - barH - 6
           return (
             <rect
               key={`${d.label}-${i}`}
@@ -106,7 +109,7 @@ function BarChart({ data, tone = 'primary', height = 148 }: BarChartProps) {
         })}
       </svg>
 
-      <div className="mt-3 flex">
+      <div className="mt-1.5 flex">
         {data.map((d, i) => (
           <div key={`${d.label}-label`} className="overflow-hidden text-center text-[10px] text-sand-1100" style={{ width: `${barWidth}%` }}>
             {i % labelStep === 0 ? d.label.split(' ')[1] : ''}
@@ -138,28 +141,28 @@ interface StatCardProps {
 function StatCard({ label, value, icon, isLoading, hint }: StatCardProps) {
   if (isLoading) {
     return (
-      <div className="border border-border-low bg-bg1 p-5">
-        <div className="h-10 w-10 bg-sand-200 motion-safe:animate-pulse" />
-        <div className="mt-5 h-3 w-24 bg-sand-200 motion-safe:animate-pulse" />
-        <div className="mt-3 h-8 w-20 bg-sand-200 motion-safe:animate-pulse" />
+      <div className="border border-border-low bg-bg1 p-3">
+        <div className="h-8 w-8 bg-sand-200 motion-safe:animate-pulse" />
+        <div className="mt-3 h-2.5 w-20 bg-sand-200 motion-safe:animate-pulse" />
+        <div className="mt-2 h-6 w-16 bg-sand-200 motion-safe:animate-pulse" />
       </div>
     )
   }
 
   return (
-    <div className="group overflow-hidden border border-border-low bg-bg1 p-5 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-1">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex h-11 w-11 items-center justify-center border border-border-low bg-sand-100 text-sand-1500">
+    <div className="group overflow-hidden border border-border-low bg-bg1 p-3 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-0.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex h-8 w-8 items-center justify-center border border-border-low bg-sand-100 text-sand-1500">
           {icon}
         </div>
         {hint && (
-          <span className="border border-border-low bg-sand-100 px-2.5 py-1 text-[11px] text-sand-1200">
+          <span className="truncate border border-border-low bg-sand-100 px-1.5 py-0.5 text-[10px] text-sand-1200">
             {hint}
           </span>
         )}
       </div>
-      <p className="mt-5 text-xs font-medium uppercase tracking-[0.16em] text-sand-1100">{label}</p>
-      <p className="mt-2 text-3xl font-black tracking-tight text-sand-1600">
+      <p className="mt-3 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">{label}</p>
+      <p className="mt-1 truncate text-xl font-black tracking-tight text-sand-1600">
         {typeof value === 'number' ? value.toLocaleString() : value}
       </p>
     </div>
@@ -168,18 +171,18 @@ function StatCard({ label, value, icon, isLoading, hint }: StatCardProps) {
 
 function EmptyState({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="flex min-h-32 flex-col items-center justify-center border border-dashed border-border-low bg-sand-50 px-4 py-8 text-center">
-      <p className="font-semibold text-sand-1600">{title}</p>
-      <p className="mt-1 max-w-sm text-sm leading-6 text-sand-1200">{desc}</p>
+    <div className="flex min-h-20 flex-col items-center justify-center border border-dashed border-border-low bg-sand-50 px-4 py-4 text-center">
+      <p className="text-sm font-semibold text-sand-1600">{title}</p>
+      <p className="mt-0.5 max-w-sm text-xs leading-5 text-sand-1200">{desc}</p>
     </div>
   )
 }
 
 function ChartSkeleton() {
   return (
-    <div className="border border-border-low bg-bg1 p-5">
-      <div className="h-5 w-52 bg-sand-200 motion-safe:animate-pulse" />
-      <div className="mt-7 flex h-36 items-end gap-1.5">
+    <div className="border border-border-low bg-bg1 p-4">
+      <div className="h-4 w-40 bg-sand-200 motion-safe:animate-pulse" />
+      <div className="mt-4 flex h-16 items-end gap-1">
         {skeletonHeights.map((height, i) => (
           <div key={i} className="flex-1 bg-sand-200 motion-safe:animate-pulse" style={{ height: `${height}%` }} />
         ))}
@@ -248,17 +251,17 @@ export default function Analytics() {
   }, [analytics?.daily_api, analytics?.daily_mcp, dailyApiData, dailyMcpData])
 
   const activeTools = toolBreakdown.filter(([, count]) => count > 0).length
-  const topProgram = analytics?.top_programs[0]
+  const analyticsReady = !!analytics && !isLoadingAnalytics
 
   return (
-    <div className="space-y-8 px-6 py-10 sm:px-8 sm:py-12">
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-3 px-6 py-6 sm:px-8 sm:py-8">
+      <section className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <h1 className="text-balance text-4xl font-semibold tracking-tight text-sand-1600 md:text-5xl">
+          <h1 className="text-balance text-2xl font-semibold tracking-tight text-sand-1600 md:text-3xl">
             Analytics for API and MCP agents
           </h1>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-sand-1200 md:text-base">
-            Clear usage signals for Orquestra adoption: program traffic, API calls, MCP tool demand, and daily momentum.
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-sand-1200 sm:text-sm">
+            Usage signals for Orquestra adoption: program traffic, API calls, MCP tool demand, and ecosystem impact.
           </p>
         </div>
 
@@ -268,7 +271,7 @@ export default function Analytics() {
             loadStats()
             loadAnalytics()
           }}
-          className="inline-flex min-h-11 items-center justify-center gap-2 border border-border-low bg-bg1 px-4 text-sm font-semibold text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400"
+          className="inline-flex min-h-9 items-center justify-center gap-2 border border-border-low bg-bg1 px-3 text-sm font-semibold text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400"
         >
           <RefreshIcon />
           Refresh
@@ -276,7 +279,7 @@ export default function Analytics() {
       </section>
 
       {error && (
-        <div className="border border-[#b75000]/20 bg-[#b75000]/5 p-4 text-sm">
+        <div className="border border-[#b75000]/20 bg-[#b75000]/5 p-3 text-sm">
           <div className="flex items-start gap-3">
             <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -289,14 +292,14 @@ export default function Analytics() {
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           label="Total users"
           value={stats?.total_users ?? 0}
           isLoading={isLoadingStats}
           hint="public"
           icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           }
@@ -307,7 +310,7 @@ export default function Analytics() {
           isLoading={isLoadingStats}
           hint="catalog"
           icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
           }
@@ -316,9 +319,9 @@ export default function Analytics() {
           label="API today"
           value={isLoadingAnalytics ? '-' : totals.todayApi}
           isLoading={isLoadingAnalytics && !analytics}
-          hint={`${formatCompact(totals.api30d)} 30d`}
+          hint="requests"
           icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           }
@@ -329,89 +332,82 @@ export default function Analytics() {
           isLoading={isLoadingAnalytics && !analytics}
           hint={`${activeTools} tools`}
           icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="API all-time"
+          value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.api ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="since launch"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="MCP all-time"
+          value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.mcp ?? 0)}
+          isLoading={isLoadingAnalytics && !analytics}
+          hint="since launch"
+          icon={
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           }
         />
       </section>
 
-      {analytics && !isLoadingAnalytics && (
-        <section className="grid gap-4 md:grid-cols-3">
-          <div className="border border-border-low bg-sand-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">30d API volume</p>
-            <p className="mt-2 text-2xl font-black text-sand-1600">{totals.api30d.toLocaleString()}</p>
-            <p className="mt-1 text-sm text-sand-1200">REST request demand</p>
-          </div>
-          <div className="border border-border-low bg-sand-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">30d MCP volume</p>
-            <p className="mt-2 text-2xl font-black text-sand-1600">{totals.mcp30d.toLocaleString()}</p>
-            <p className="mt-1 text-sm text-sand-1200">Agent tool calls</p>
-          </div>
-          <div className="border border-border-low bg-sand-100 p-5">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1100">Top program</p>
-            <p className="mt-2 truncate text-2xl font-black text-sand-1600">{topProgram?.name ?? topProgram?.project_id ?? 'No traffic'}</p>
-            <p className="mt-1 text-sm text-sand-1200">{topProgram ? `${topProgram.total.toLocaleString()} requests` : 'Waiting for usage'}</p>
-          </div>
-        </section>
-      )}
-
       {isLoadingAnalytics && !analytics && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           <ChartSkeleton />
           <ChartSkeleton />
         </div>
       )}
 
-      {analytics && !isLoadingAnalytics && (
+      {analyticsReady && (
         <>
-          <section className="grid gap-4 xl:grid-cols-2">
-            <div className="border border-border-low bg-bg1 p-5">
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">API</p>
-                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Daily API requests</h2>
-                </div>
-                <span className="w-fit border border-border-low bg-sand-100 px-3 py-1 text-xs font-medium text-sand-1500">
-                  {totals.api30d.toLocaleString()} total
+          <section className="grid gap-3 xl:grid-cols-2">
+            <div className="border border-border-low bg-bg1 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-bold text-sand-1600">Daily API requests</h2>
+                <span className="w-fit border border-border-low bg-sand-100 px-2 py-0.5 text-[11px] font-medium text-sand-1500">
+                  {totals.api30d.toLocaleString()} · 30d
                 </span>
               </div>
               <BarChart data={dailyApiData} tone="primary" />
             </div>
 
-            <div className="border border-border-low bg-bg1 p-5">
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">MCP agents</p>
-                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Daily MCP tool calls</h2>
-                </div>
-                <span className="w-fit border border-border-low bg-sand-100 px-3 py-1 text-xs font-medium text-sand-1500">
-                  {totals.mcp30d.toLocaleString()} total
+            <div className="border border-border-low bg-bg1 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-bold text-sand-1600">Daily MCP tool calls</h2>
+                <span className="w-fit border border-border-low bg-sand-100 px-2 py-0.5 text-[11px] font-medium text-sand-1500">
+                  {totals.mcp30d.toLocaleString()} · 30d
                 </span>
               </div>
               <BarChart data={dailyMcpData} tone="secondary" />
             </div>
           </section>
 
-          <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="border border-border-low bg-bg1 p-5">
-              <div className="mb-5">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Agent behavior</p>
-                <h2 className="mt-1 text-xl font-bold text-sand-1600">MCP tool breakdown</h2>
-              </div>
+          <section className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
+            <div className="border border-border-low bg-bg1 p-4">
+              <h2 className="mb-3 text-sm font-bold text-sand-1600">MCP tool breakdown</h2>
 
               {toolBreakdown.length > 0 ? (
-                <div className="space-y-2">
-                  {toolBreakdown.map(([toolId, count]) => {
+                <div className="space-y-1.5">
+                  {toolBreakdown.slice(0, MAX_TOOL_ROWS).map(([toolId, count]) => {
                     const maxCount = toolBreakdown[0][1]
                     const pct = maxCount ? (count / maxCount) * 100 : 0
                     return (
-                      <div key={toolId} className="border border-border-low bg-sand-50 p-2.5">
-                        <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <div key={toolId} className="border border-border-low bg-sand-50 p-2">
+                        <div className="mb-1 flex items-center justify-between gap-3">
                           <code className="truncate font-mono text-xs text-sand-1500">{MCP_TOOL_NAMES[toolId] ?? `tool_${toolId}`}</code>
                           <span className="font-mono text-xs text-sand-1200">{count.toLocaleString()}</span>
                         </div>
-                        <div className="h-1.5 overflow-hidden bg-sand-200">
+                        <div className="h-1 overflow-hidden bg-sand-200">
                           <div className="h-full bg-sand-1600 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -423,26 +419,18 @@ export default function Analytics() {
               )}
             </div>
 
-            <div className="border border-border-low bg-bg1 p-5">
-              <div className="mb-5 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Program demand</p>
-                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Top programs</h2>
-                </div>
-                <span className="border border-border-low bg-sand-100 px-3 py-1 text-xs text-sand-1200">
-                  30d
-                </span>
-              </div>
+            <div className="border border-border-low bg-bg1 p-4">
+              <h2 className="mb-3 text-sm font-bold text-sand-1600">Top programs</h2>
 
               {analytics.top_programs.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border-low text-xs uppercase tracking-[0.16em] text-sand-1100">
-                        <th className="pb-2 text-left font-semibold">#</th>
-                        <th className="pb-2 text-left font-semibold">Program</th>
-                        <th className="hidden pb-2 text-left font-semibold md:table-cell">Program ID</th>
-                        <th className="pb-2 text-right font-semibold">Requests</th>
+                      <tr className="border-b border-border-low text-[10px] uppercase tracking-[0.14em] text-sand-1100">
+                        <th className="pb-1.5 text-left font-semibold">#</th>
+                        <th className="pb-1.5 text-left font-semibold">Program</th>
+                        <th className="hidden pb-1.5 text-left font-semibold md:table-cell">Program ID</th>
+                        <th className="pb-1.5 text-right font-semibold">Requests</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-low">
@@ -451,19 +439,19 @@ export default function Analytics() {
                         const pct = maxTotal ? (program.total / maxTotal) * 100 : 0
                         return (
                           <tr key={program.project_id} className="transition-colors duration-150 hover:bg-sand-50">
-                            <td className="py-2.5 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
-                            <td className="py-2.5 pr-4">
-                              <div className="min-w-[180px]">
-                                <p className="truncate font-semibold text-sand-1600">{program.name ?? program.project_id}</p>
-                                <div className="mt-1.5 h-1.5 max-w-xs overflow-hidden bg-sand-200">
+                            <td className="py-1.5 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
+                            <td className="py-1.5 pr-4">
+                              <div className="min-w-[140px]">
+                                <p className="truncate text-sm font-semibold text-sand-1600">{program.name ?? program.project_id}</p>
+                                <div className="mt-1 h-1 max-w-[140px] overflow-hidden bg-sand-200">
                                   <div className="h-full bg-sand-1600" style={{ width: `${pct}%` }} />
                                 </div>
                               </div>
                             </td>
-                            <td className="hidden py-2.5 pr-4 md:table-cell">
+                            <td className="hidden py-1.5 pr-4 md:table-cell">
                               <span className="font-mono text-xs text-sand-1100">{shortId(program.project_id)}</span>
                             </td>
-                            <td className="py-2.5 text-right font-mono font-semibold tabular-nums text-sand-1600">
+                            <td className="py-1.5 text-right font-mono font-semibold tabular-nums text-sand-1600">
                               {program.total.toLocaleString()}
                             </td>
                           </tr>
@@ -479,83 +467,49 @@ export default function Analytics() {
           </section>
 
           <section>
-            <div className="mb-5">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Ecosystem impact</p>
-              <h2 className="mt-1 text-xl font-bold text-sand-1600">Real usage across tracked programs</h2>
-            </div>
+            <h2 className="mb-3 text-sm font-bold text-sand-1600">Ecosystem impact <span className="font-normal text-sand-1100">— real usage across tracked programs</span></h2>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  label="On-chain transactions"
-                  value={analytics.ecosystem.tx_count_7d}
-                  hint="7d · tracked programs"
-                  icon={
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                  }
-                />
-                <StatCard
-                  label="Unique users touched"
-                  value={analytics.ecosystem.unique_users_7d}
-                  hint="7d on-chain"
-                  icon={
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  }
-                />
-                <StatCard
-                  label="Fees generated"
-                  value={`${formatCompact(analytics.ecosystem.fees_sol_7d)} SOL`}
-                  hint="7d"
-                  icon={
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  }
-                />
-                <StatCard
-                  label="Verified builds"
-                  value={`${analytics.ecosystem.total_programs ? Math.round((analytics.ecosystem.verified_programs / analytics.ecosystem.total_programs) * 100) : 0}%`}
-                  hint={`${analytics.ecosystem.verified_programs.toLocaleString()} of ${analytics.ecosystem.total_programs.toLocaleString()} programs`}
-                  icon={
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-                    </svg>
-                  }
-                />
-              </div>
-
-              <div className="border border-border-low bg-bg1 p-5">
-                <div className="mb-5">
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-sand-1500">Program composition</p>
-                  <h2 className="mt-1 text-xl font-bold text-sand-1600">Category breakdown</h2>
-                </div>
-
-                {analytics.category_breakdown.length > 0 ? (
-                  <div className="space-y-2">
-                    {analytics.category_breakdown.map((c) => {
-                      const maxCount = analytics.category_breakdown[0].total
-                      const pct = maxCount ? (c.total / maxCount) * 100 : 0
-                      return (
-                        <div key={c.category} className="border border-border-low bg-sand-50 p-2.5">
-                          <div className="mb-1.5 flex items-center justify-between gap-3">
-                            <code className="truncate font-mono text-xs text-sand-1500">{c.category}</code>
-                            <span className="font-mono text-xs text-sand-1200">{c.total.toLocaleString()}</span>
-                          </div>
-                          <div className="h-1.5 overflow-hidden bg-sand-200">
-                            <div className="h-full bg-sand-1600 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${pct}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <EmptyState title="No categories yet" desc="Programs are categorized automatically as they're analyzed." />
-                )}
-              </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                label="On-chain transactions"
+                value={analytics.ecosystem.tx_count_7d}
+                hint="7d"
+                icon={
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                }
+              />
+              <StatCard
+                label="Unique users touched"
+                value={analytics.ecosystem.unique_users_7d}
+                hint="7d"
+                icon={
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                }
+              />
+              <StatCard
+                label="Fees generated"
+                value={`${formatCompact(analytics.ecosystem.fees_sol_7d)} SOL`}
+                hint="7d"
+                icon={
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                }
+              />
+              <StatCard
+                label="Verified builds"
+                value={`${analytics.ecosystem.total_programs ? Math.round((analytics.ecosystem.verified_programs / analytics.ecosystem.total_programs) * 100) : 0}%`}
+                hint={`${analytics.ecosystem.verified_programs}/${analytics.ecosystem.total_programs}`}
+                icon={
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                  </svg>
+                }
+              />
             </div>
           </section>
         </>

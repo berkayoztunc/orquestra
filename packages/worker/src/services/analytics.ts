@@ -16,8 +16,10 @@ export const EVENT_TYPE = {
 } as const
 
 /**
- * MCP tool_id enum — must stay in sync with the tool registration order
- * in routes/mcp.ts.
+ * MCP tool_id enum. IDs 0-10 are registered in routes/mcp.ts (the main
+ * Orquestra MCP server, /mcp); IDs 11-17 are registered in routes/flow-mcp.ts
+ * (the separate Flow Engine MCP server, /flow/mcp). Shared here since both
+ * servers write to the same `analytics` table.
  */
 export const MCP_TOOL = {
   search_programs: 0,
@@ -31,6 +33,13 @@ export const MCP_TOOL = {
   simulate_instruction: 8,
   get_program_data: 9,
   simulate_transaction: 10,
+  get_flow_schema: 11,
+  validate_flow: 12,
+  simulate_flow: 13,
+  publish_flow: 14,
+  list_flows: 15,
+  get_flow_metadata: 16,
+  estimate_flow: 17,
 } as const
 
 /** Convert current UTC date to YYYYMMDD integer (e.g. 20260427) */

@@ -4,6 +4,7 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 
 // MCP
 import { handleMcpRequest } from './routes/mcp'
+import { handleFlowMcpRequest } from './routes/flow-mcp'
 
 // Scheduled
 import { startCandidatesImport, runPipelineHealthCheck } from './services/pipeline-health'
@@ -39,6 +40,7 @@ import aiRoutes from './routes/ai'
 import adminRoutes from './routes/admin'
 import discoveryRoutes from './routes/discovery'
 import listsRoutes from './routes/lists'
+import flowRoutes from './routes/flows'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -124,17 +126,24 @@ app.route('/api/admin', adminRoutes)
 app.route('/api', aiRoutes)
 app.route('/api/lists', listsRoutes)
 app.route('/api', apiRoutes)
+app.use('/flows/*', apiRateLimit)
+app.route('/flows', flowRoutes)
 
 // 404 handler
 app.all('*', (c) => {
   return c.json({ error: 'Not Found' }, 404)
 })
 
-// Export a custom fetch handler so /mcp bypasses Hono's CORS middleware
-// and is handled directly by the Cloudflare Agents SDK transport.
+// Export a custom fetch handler so /mcp and /flow/mcp bypass Hono's CORS
+// middleware and are handled directly by the Cloudflare Agents SDK transport.
+// /flow/mcp is a SEPARATE MCP server (routes/flow-mcp.ts) from the main
+// Orquestra one — see that file's header comment for why.
 export default {
   fetch(request: Request, env: Env['Bindings'], ctx: ExecutionContext): Response | Promise<Response> {
     const url = new URL(request.url)
+    if (url.pathname === '/flow/mcp' || url.pathname.startsWith('/flow/mcp/')) {
+      return handleFlowMcpRequest(request, env as any, ctx)
+    }
     if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
       return handleMcpRequest(request, env as any, ctx)
     }

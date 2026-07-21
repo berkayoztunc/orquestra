@@ -1,9 +1,11 @@
 import { describe, test, expect } from 'bun:test'
+import { PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction, AddressLookupTableAccount } from '@solana/web3.js'
 import {
   buildTransaction,
   validateBuildRequest,
   decodeAnchorErrorFromLogs,
   extractComputeUnits,
+  packInstructionsIntoBatches,
 } from '../src/services/tx-builder'
 
 async function getLegacyAnchorDiscriminatorHex(instructionName: string): Promise<string> {
@@ -338,6 +340,114 @@ describe('Transaction Builder', () => {
     test('extractComputeUnits returns null when absent', () => {
       expect(extractComputeUnits(['Program X invoke [1]', 'Program X success'])).toBeNull()
       expect(extractComputeUnits(null)).toBeNull()
+    })
+  })
+
+  describe('packInstructionsIntoBatches (multi-transaction flow output)', () => {
+    // Dummy 32-byte-decodable values — packInstructionsIntoBatches never talks to the
+    // network, it only needs base58 values that decode to the right byte length.
+    const PAYER = new PublicKey('11111111111111111111111111111111')
+    const BLOCKHASH = '11111111111111111111111111111111'
+
+    function makeBigInstruction(seed: number, dataSize: number): TransactionInstruction {
+      // A unique program id + unique writable key per instruction (derived deterministically
+      // from `seed`) so instructions can't accidentally dedupe into a smaller message than a
+      // real flow's distinct-account instructions would produce.
+      const programId = new PublicKey(new Uint8Array(32).fill(seed))
+      const key = new PublicKey(new Uint8Array(32).fill(seed + 1))
+      return new TransactionInstruction({
+        programId,
+        keys: [{ pubkey: key, isSigner: false, isWritable: true }],
+        data: Buffer.alloc(dataSize, seed),
+      })
+    }
+
+    test('a small instruction set stays in one transaction', () => {
+      const instructions = [makeBigInstruction(10, 50), makeBigInstruction(20, 50)]
+      const batches = packInstructionsIntoBatches(instructions, PAYER, BLOCKHASH)
+      expect(batches).toHaveLength(1)
+      expect(batches[0]).toHaveLength(2)
+    })
+
+    test('an oversized instruction set splits into multiple transactions, each within the packet limit', () => {
+      // ~900 bytes of instruction data each; two together comfortably exceed 1232 bytes
+      // once account keys + header + blockhash overhead are added, one alone does not.
+      const instructions = [
+        makeBigInstruction(10, 900),
+        makeBigInstruction(20, 900),
+        makeBigInstruction(30, 900),
+        makeBigInstruction(40, 900),
+      ]
+      const batches = packInstructionsIntoBatches(instructions, PAYER, BLOCKHASH)
+
+      expect(batches.length).toBeGreaterThan(1)
+      // every batch actually fits — re-verify via the same compile+serialize path the
+      // function itself uses, rather than trusting its internal accounting blindly
+      for (const batch of batches) {
+        const message = new TransactionMessage({ payerKey: PAYER, recentBlockhash: BLOCKHASH, instructions: batch }).compileToV0Message()
+        const serialized = new VersionedTransaction(message).serialize()
+        expect(serialized.length).toBeLessThanOrEqual(1232)
+      }
+    })
+
+    test('order is preserved — flattening the batches reproduces the original instruction order exactly', () => {
+      const instructions = [
+        makeBigInstruction(10, 900),
+        makeBigInstruction(20, 900),
+        makeBigInstruction(30, 900),
+        makeBigInstruction(40, 900),
+        makeBigInstruction(50, 900),
+      ]
+      const batches = packInstructionsIntoBatches(instructions, PAYER, BLOCKHASH)
+      const flattened = batches.flat()
+
+      expect(flattened).toHaveLength(instructions.length)
+      for (let i = 0; i < instructions.length; i++) {
+        expect(flattened[i].programId.equals(instructions[i].programId)).toBe(true)
+      }
+    })
+
+    test('a single instruction that alone exceeds the packet limit throws (unsplittable)', () => {
+      const hugeInstruction = makeBigInstruction(10, 1300)
+      expect(() => packInstructionsIntoBatches([hugeInstruction], PAYER, BLOCKHASH)).toThrow(
+        /cannot be split across transactions/,
+      )
+    })
+
+    test('throws on an empty instruction list', () => {
+      expect(() => packInstructionsIntoBatches([], PAYER, BLOCKHASH)).toThrow(/at least one instruction/)
+    })
+
+    test('a real address lookup table lets an account-key-bound instruction set fit in fewer transactions', () => {
+      // Bottleneck here is UNIQUE ACCOUNT COUNT, not instruction data (ALT only shrinks
+      // account-key references, never instruction data) — one shared program id, one
+      // unique writable account per instruction, zero data payload.
+      const sharedProgramId = new PublicKey(new Uint8Array(32).fill(99))
+      const accountKeys = Array.from({ length: 40 }, (_, i) => new PublicKey(new Uint8Array(32).fill(i + 1)))
+      const instructions = accountKeys.map(
+        (key) => new TransactionInstruction({ programId: sharedProgramId, keys: [{ pubkey: key, isSigner: false, isWritable: true }], data: Buffer.alloc(0) }),
+      )
+
+      const withoutAlt = packInstructionsIntoBatches(instructions, PAYER, BLOCKHASH)
+      expect(withoutAlt.length).toBeGreaterThan(1) // too many unique 32-byte account keys for one packet
+
+      const lookupTable = new AddressLookupTableAccount({
+        key: new PublicKey(new Uint8Array(32).fill(200)),
+        state: {
+          deactivationSlot: BigInt('0xffffffffffffffff'), // never deactivated
+          lastExtendedSlot: 0,
+          lastExtendedSlotStartIndex: 0,
+          addresses: accountKeys,
+        },
+      })
+      const withAlt = packInstructionsIntoBatches(instructions, PAYER, BLOCKHASH, [lookupTable])
+      expect(withAlt.length).toBeLessThan(withoutAlt.length)
+
+      // and every resulting transaction still actually fits, same as the non-ALT case
+      for (const batch of withAlt) {
+        const message = new TransactionMessage({ payerKey: PAYER, recentBlockhash: BLOCKHASH, instructions: batch }).compileToV0Message([lookupTable])
+        expect(new VersionedTransaction(message).serialize().length).toBeLessThanOrEqual(1232)
+      }
     })
   })
 })

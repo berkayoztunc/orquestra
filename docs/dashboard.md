@@ -2,6 +2,9 @@
 
 The frontend dashboard is the user interface for managing Orquestra projects and exploring public programs.
 
+For the developer side (architecture, dev workflow, how to add a page/component) see
+[Frontend (dev guide)](frontend.md).
+
 ## Pages
 
 - Home

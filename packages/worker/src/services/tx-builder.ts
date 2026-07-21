@@ -13,6 +13,11 @@ import { getInstruction, resolveType, getDefinedTypeName, lookupType, normalizeA
 import type { ResolvedCluster } from '../utils/solana-rpc'
 import { rpcFetch, RPC_TIMEOUTS } from '../utils/solana-rpc'
 import { MemoCache } from '../utils/memo-cache'
+import { PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction, Connection, type AddressLookupTableAccount } from '@solana/web3.js'
+// Flow Engine (Orquestra Flow Engine / OFE) instruction shape — authored by the flow-engine
+// module in a parallel workstream. Only the type is consumed here; composeTransaction() below
+// is additive and does not touch the legacy single-instruction buildTransaction() path above.
+import type { FlowInstruction } from '../flow-engine/types'
 
 export type RiskLevel = 'low' | 'medium' | 'high'
 
@@ -858,6 +863,300 @@ export async function simulateRawTransaction(
     logs,
     err,
   }
+}
+
+// ─── Flow Engine: multi-instruction v0 transaction composer ───────────────────
+//
+// composeTransaction() is additive to this file: buildTransaction() above stays the
+// single-Anchor/Codama-instruction, legacy-wire-format path. This is the Orquestra Flow
+// Engine (OFE) path — it takes N already-resolved FlowInstruction entries (no IDL lookup,
+// no arg encoding) and compiles them into one v0 (VersionedTransaction) message, since a
+// flow's compiled DAG output can span more accounts/instructions than a legacy message's
+// single-byte account-count header comfortably supports.
+
+/**
+ * Heuristic risk score for a composed multi-instruction flow transaction. Mirrors the
+ * assessRiskLevelAnchor/assessRiskLevelCodama pattern above (writable-signer → high,
+ * writable-account → medium, otherwise low, via direct `level = ...` assignment) but
+ * aggregates across every instruction in the flow and adds one flow-specific signal: a
+ * signer other than the fee payer, which composeTransaction cannot satisfy on its own
+ * (only feePayer will ultimately sign).
+ */
+function assessRiskLevelFlow(
+  instructions: FlowInstruction[],
+  feePayer: string,
+): { level: RiskLevel; reasons: string[] } {
+  const reasons: string[] = []
+  let level: RiskLevel = 'low'
+
+  let totalWritable = 0
+  const writableSigners = new Set<string>()
+  const foreignSigners = new Set<string>()
+
+  for (const ix of instructions) {
+    for (const key of ix.keys) {
+      if (key.isWritable) totalWritable++
+      if (key.isSigner && key.isWritable) writableSigners.add(key.pubkey)
+      if (key.isSigner && key.pubkey !== feePayer) foreignSigners.add(key.pubkey)
+    }
+  }
+
+  if (writableSigners.size > 0) {
+    level = 'high'
+    reasons.push(`${writableSigners.size} writable signer(s) across instructions: ${[...writableSigners].join(', ')}`)
+  }
+
+  if (foreignSigners.size > 0) {
+    level = 'high'
+    reasons.push(
+      `${foreignSigners.size} signer(s) other than the fee payer are required: ${[...foreignSigners].join(', ')} — composeTransaction only accounts for feePayer's signature`,
+    )
+  }
+
+  if (level !== 'high' && totalWritable > 0) {
+    level = 'medium'
+    reasons.push(`${totalWritable} writable account(s) across ${instructions.length} instruction(s)`)
+  }
+
+  if (level !== 'high' && instructions.length > 8) {
+    level = 'medium'
+    reasons.push(`${instructions.length} instructions composed into a single transaction`)
+  }
+
+  if (reasons.length === 0) reasons.push('no writable accounts and no non-feePayer signers')
+
+  return { level, reasons }
+}
+
+export interface ComposeTransactionRequest {
+  /** base58 pubkey that pays fees and is assumed to be the sole signer. */
+  feePayer: string
+  instructions: FlowInstruction[]
+  rpcUrl: string
+  /** Runs preflight simulateTransaction (sigVerify: false) against rpcUrl, per transaction. Default true. */
+  simulate?: boolean
+  /**
+   * Addresses of EXISTING, already-created-and-extended Address Lookup Tables to
+   * compile the message(s) against. Real ALT usage — reduces per-account bytes in
+   * the compiled message, which can both avoid a multi-transaction split and let
+   * more accounts fit in one transaction. Fetched via RPC and passed to
+   * `compileToV0Message`. Creating/extending a NEW lookup table is out of scope
+   * here (that's its own multi-step on-chain process — a table must land and be
+   * confirmed before anything can reference it — not something a single
+   * composeTransaction call can do): pass addresses of tables that already exist.
+   * An address that doesn't resolve to a real lookup table account is dropped
+   * with a note in `risk.reasons`, not a hard failure.
+   */
+  lookupTableAddresses?: string[]
+  /** @deprecated Use `lookupTableAddresses` — a boolean can't create or reference a table by itself. Kept for backward compatibility: true with no `lookupTableAddresses` still just notes the limitation in `risk.reasons`. */
+  useALT?: boolean
+}
+
+export interface ComposedTransaction {
+  /** base64-encoded, v0 (VersionedTransaction) wire format, unsigned. */
+  unsignedTransaction: string
+  /** How many of the request's instructions landed in this transaction. */
+  instructionCount: number
+  /**
+   * Present only when request.simulate !== false. Simulated independently per
+   * transaction — see the ComposeTransactionResponse doc comment for why this
+   * is a subset of the full SimulationResult shape.
+   */
+  simulation?: Pick<SimulationResult, 'success' | 'computeUnits' | 'logs' | 'err'>
+}
+
+export interface ComposeTransactionResponse {
+  /**
+   * One or more unsigned v0 transactions, in the order they must land on-chain
+   * (later transactions may depend on state written by earlier ones — e.g. an
+   * ATA-create in transaction 1 that transaction 2's transfer instruction reads).
+   * Almost always length 1; only splits into more when the instruction set
+   * doesn't fit a single 1232-byte packet (see packInstructionsIntoBatches).
+   * NOTE: this is a subset of the existing SimulationResult shape (success/computeUnits/logs/err) —
+   * SimulationResult.decodedError requires an IDL errors[] table and SimulationResult.build requires
+   * a single-instruction BuildTransactionResponse, neither of which exists for a multi-instruction,
+   * IDL-less composed flow transaction. See simulateRawTransaction(), which this reuses verbatim.
+   */
+  transactions: ComposedTransaction[]
+  risk: { level: RiskLevel; reasons: string[] }
+}
+
+/**
+ * Fetches existing Address Lookup Table accounts by address. Skips (does not
+ * throw for) any address that doesn't resolve to a real ALT account — those
+ * are reported back separately so the caller can note them in `risk.reasons`
+ * rather than failing the whole compose over one bad address.
+ */
+export async function fetchLookupTables(
+  addresses: string[],
+  rpcUrl: string,
+): Promise<{ tables: AddressLookupTableAccount[]; missing: string[] }> {
+  const connection = new Connection(rpcUrl)
+  const tables: AddressLookupTableAccount[] = []
+  const missing: string[] = []
+
+  await Promise.all(
+    addresses.map(async (address) => {
+      try {
+        const result = await connection.getAddressLookupTable(new PublicKey(address))
+        if (result.value) {
+          tables.push(result.value)
+        } else {
+          missing.push(address)
+        }
+      } catch {
+        missing.push(address)
+      }
+    }),
+  )
+
+  return { tables, missing }
+}
+
+/**
+ * Greedily packs instructions (in order — order is preserved both within and
+ * across batches, since later instructions may depend on earlier ones, e.g.
+ * "create ATA" before "transfer") into the fewest v0 transactions that each
+ * fit the 1232-byte packet limit. Pure — takes an already-fetched blockhash
+ * and already-fetched lookup tables, does no RPC itself, fully unit-testable
+ * without a network. Passing real `lookupTables` lets more instructions (or
+ * more distinct accounts) fit per transaction, since accounts present in a
+ * lookup table compile to a 1-byte index instead of a 32-byte pubkey.
+ *
+ * Throws if a SINGLE instruction alone cannot fit in one transaction even
+ * with every provided lookup table applied.
+ */
+export function packInstructionsIntoBatches(
+  instructions: TransactionInstruction[],
+  payerKey: PublicKey,
+  blockhash: string,
+  lookupTables: AddressLookupTableAccount[] = [],
+): TransactionInstruction[][] {
+  if (instructions.length === 0) {
+    throw new Error('packInstructionsIntoBatches requires at least one instruction')
+  }
+
+  const fitsInOneTransaction = (batch: TransactionInstruction[]): boolean => {
+    try {
+      const message = new TransactionMessage({ payerKey, recentBlockhash: blockhash, instructions: batch }).compileToV0Message(lookupTables)
+      return new VersionedTransaction(message).serialize().length <= 1232
+    } catch {
+      return false
+    }
+  }
+
+  const batches: TransactionInstruction[][] = []
+  let current: TransactionInstruction[] = []
+
+  for (const ix of instructions) {
+    const attempt = [...current, ix]
+    if (fitsInOneTransaction(attempt)) {
+      current = attempt
+      continue
+    }
+
+    if (current.length === 0) {
+      throw new Error('a single instruction exceeds the 1232 byte packet limit and cannot be split across transactions')
+    }
+    batches.push(current)
+    if (!fitsInOneTransaction([ix])) {
+      throw new Error('a single instruction exceeds the 1232 byte packet limit and cannot be split across transactions')
+    }
+    current = [ix]
+  }
+  if (current.length > 0) batches.push(current)
+
+  return batches
+}
+
+/**
+ * Compose N pre-resolved FlowInstruction entries (Orquestra Flow Engine DAG output) into
+ * one or more unsigned v0 transactions (see packInstructionsIntoBatches — splits only when
+ * needed). Unlike buildTransaction(), there is no IDL lookup or Borsh arg encoding here —
+ * instructions arrive fully formed (programId/keys/data already resolved by the flow engine)
+ * and this only handles: instruction conversion, blockhash, batching, message compilation,
+ * risk heuristics, and optional per-transaction preflight simulation.
+ */
+export async function composeTransaction(request: ComposeTransactionRequest): Promise<ComposeTransactionResponse> {
+  if (!request.instructions || request.instructions.length === 0) {
+    throw new Error('composeTransaction requires at least one instruction')
+  }
+  if (!isValidBase58(request.feePayer)) {
+    throw new Error(`Invalid fee payer public key: ${request.feePayer}`)
+  }
+
+  let payerKey: PublicKey
+  try {
+    payerKey = new PublicKey(request.feePayer)
+  } catch (err) {
+    throw new Error(`Invalid fee payer public key "${request.feePayer}": ${(err as Error).message}`)
+  }
+
+  const txInstructions: TransactionInstruction[] = request.instructions.map((ix, i) => {
+    try {
+      return new TransactionInstruction({
+        programId: new PublicKey(ix.programId),
+        keys: ix.keys.map((k) => ({
+          pubkey: new PublicKey(k.pubkey),
+          isSigner: k.isSigner,
+          isWritable: k.isWritable,
+        })),
+        data: Buffer.from(ix.data, 'base64'),
+      })
+    } catch (err) {
+      throw new Error(`Failed to decode instruction[${i}] (programId=${ix.programId}): ${(err as Error).message}`)
+    }
+  })
+
+  const risk = assessRiskLevelFlow(request.instructions, request.feePayer)
+
+  let lookupTables: AddressLookupTableAccount[] = []
+  if (request.lookupTableAddresses && request.lookupTableAddresses.length > 0) {
+    const { tables, missing } = await fetchLookupTables(request.lookupTableAddresses, request.rpcUrl)
+    lookupTables = tables
+    if (tables.length > 0) {
+      risk.reasons.push(`using ${tables.length} address lookup table(s): ${tables.map((t) => t.key.toBase58()).join(', ')}`)
+    }
+    if (missing.length > 0) {
+      risk.reasons.push(`${missing.length} requested lookup table address(es) did not resolve to a real ALT and were skipped: ${missing.join(', ')}`)
+    }
+  } else if (request.useALT) {
+    risk.reasons.push('useALT was set but no lookupTableAddresses were provided — nothing to reference (this option cannot create a new table)')
+  }
+
+  // Reuse the same warm-isolate blockhash cache as buildTransaction/fetchLatestBlockhash —
+  // no separate cache or Connection object needed for a fresh (unsigned) message. One
+  // blockhash is shared across every split transaction (they're meant to land together).
+  const { blockhash } = await fetchLatestBlockhash(request.rpcUrl)
+
+  const batches = packInstructionsIntoBatches(txInstructions, payerKey, blockhash, lookupTables)
+  if (batches.length > 1) {
+    risk.reasons.push(
+      `${request.instructions.length} instructions did not fit one 1232-byte packet — split into ${batches.length} transactions that must be submitted in order`,
+    )
+  }
+
+  // Each transaction is simulated independently against CURRENT on-chain state — not the
+  // hypothetical state after earlier transactions in this batch have landed. A later
+  // transaction that depends on an account created by an earlier one (e.g. transferring
+  // from an ATA the first transaction creates) may report a false simulation failure here;
+  // that is expected when batches.length > 1 and does not mean the sequence is wrong, only
+  // that this preflight can't see forward. The risk reason above already flags a multi-tx
+  // split so callers know to treat simulation results on transaction 2+ with that caveat.
+  const transactions: ComposedTransaction[] = []
+  for (const batch of batches) {
+    const message = new TransactionMessage({ payerKey, recentBlockhash: blockhash, instructions: batch }).compileToV0Message(lookupTables)
+    const versionedTx = new VersionedTransaction(message)
+    const unsignedTransaction = uint8ArrayToBase64(versionedTx.serialize())
+
+    const entry: ComposedTransaction = { unsignedTransaction, instructionCount: batch.length }
+    if (request.simulate !== false) {
+      entry.simulation = await simulateRawTransaction(unsignedTransaction, 'base64', request.rpcUrl)
+    }
+    transactions.push(entry)
+  }
+
+  return { transactions, risk }
 }
 
 /**

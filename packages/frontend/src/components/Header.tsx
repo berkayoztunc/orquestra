@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
-import { Github, Menu, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { ChevronDown, Github, Menu, X } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import { getGitHubLoginUrl } from '../api/client'
 import { buttonClassName } from '@/ui/Button'
@@ -11,10 +11,16 @@ import { cn } from '@/ui/cn'
 const navItems = [
   { to: '/', label: 'Home' },
   { to: '/explorer', label: 'Explorer' },
+  { to: '/flows', label: 'Flows' },
+  { to: '/docs/api', label: 'Docs' },
+]
+
+// Grouped under the "Analytics" dropdown — these were all top-level items
+// before; collecting them keeps the primary nav short.
+const analyticsMenuItems = [
+  { to: '/analytics', label: 'Analytics' },
   { to: '/updates', label: 'Updates' },
   { to: '/sync', label: 'Sync' },
-  { to: '/analytics', label: 'Analytics' },
-  { to: '/docs/api', label: 'Docs' },
 ]
 
 const docsItems = [
@@ -22,6 +28,7 @@ const docsItems = [
   { to: '/docs/sign-and-send', label: 'Sign & Send' },
   { to: '/docs/mcp', label: 'MCP Server' },
   { to: '/docs/cli', label: 'CLI' },
+  { to: '/docs/flow-engine', label: 'Flow Engine' },
 ]
 
 function navClassName({ isActive }: { isActive: boolean }): string {
@@ -30,6 +37,75 @@ function navClassName({ isActive }: { isActive: boolean }): string {
     isActive
       ? 'bg-sand-1600 text-bg1'
       : 'text-sand-1200 hover:bg-sand-100 hover:text-sand-1600',
+  )
+}
+
+function AnalyticsMenu(): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const location = useLocation()
+  const isActive = analyticsMenuItems.some((item) => location.pathname === item.to)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [])
+
+  // Close on navigation
+  useEffect(() => {
+    setOpen(false)
+  }, [location.pathname])
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        className={cn(
+          'flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400',
+          isActive ? 'bg-sand-1600 text-bg1' : 'text-sand-1200 hover:bg-sand-100 hover:text-sand-1600',
+        )}
+      >
+        Analytics
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-150', open && 'rotate-180')} aria-hidden="true" />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-50 mt-1 min-w-40 border border-border-low bg-bg1 py-1 shadow-lg"
+        >
+          {analyticsMenuItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              role="menuitem"
+              className={({ isActive: linkActive }) =>
+                cn(
+                  'block px-3 py-2 text-sm transition-colors duration-150',
+                  linkActive ? 'bg-sand-1600 text-bg1' : 'text-sand-1200 hover:bg-sand-100 hover:text-sand-1600',
+                )
+              }
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -55,7 +131,7 @@ export default function Header(): JSX.Element {
               </NavLink>
             ))}
 
-           
+            <AnalyticsMenu />
 
             {isAuthenticated ? (
               <>
@@ -125,11 +201,30 @@ export default function Header(): JSX.Element {
             id="mobile-nav"
             className="mt-3 border border-border-low bg-bg1 p-2 md:hidden"
           >
-            {[...navItems, ...docsItems].map((item) => (
+            {navItems.map((item) => (
               <NavLink key={item.to} to={item.to} onClick={closeMobileMenu} className={navClassName}>
                 {item.label}
               </NavLink>
             ))}
+
+            <p className="mt-2 px-3 pt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">
+              Analytics
+            </p>
+            {analyticsMenuItems.map((item) => (
+              <NavLink key={item.to} to={item.to} onClick={closeMobileMenu} className={navClassName}>
+                {item.label}
+              </NavLink>
+            ))}
+
+            <p className="mt-2 px-3 pt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">
+              Docs
+            </p>
+            {docsItems.map((item) => (
+              <NavLink key={item.to} to={item.to} onClick={closeMobileMenu} className={navClassName}>
+                {item.label}
+              </NavLink>
+            ))}
+
             {isAuthenticated ? (
               <>
                 <NavLink to="/dashboard" onClick={closeMobileMenu} className={navClassName}>

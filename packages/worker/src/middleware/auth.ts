@@ -71,6 +71,17 @@ export async function optionalAuthMiddleware(c: Context, next: Next) {
 }
 
 /**
+ * Shared ingest-key comparison, used by both the HTTP middleware below and
+ * any non-HTTP caller (e.g. an MCP tool handler) that needs the same check
+ * without a Hono `Context`.
+ */
+export function verifyIngestKey(provided: string | undefined | null, expected: string | undefined | null): boolean {
+  if (!provided || !expected) return false
+  // Constant-time comparison to prevent timing attacks
+  return provided.length === expected.length && provided === expected
+}
+
+/**
  * Ingest key middleware — service-to-service auth for the CLI ingest endpoint.
  * Validates the X-Ingest-Key header against the INGEST_API_KEY Worker secret.
  * Does NOT require a user session or project-scoped API key.
@@ -87,8 +98,7 @@ export async function ingestKeyMiddleware(c: Context, next: Next) {
     return c.json({ error: 'Server configuration error', message: 'INGEST_API_KEY not configured' }, 500)
   }
 
-  // Constant-time comparison to prevent timing attacks
-  if (ingestKey.length !== expectedKey.length || ingestKey !== expectedKey) {
+  if (!verifyIngestKey(ingestKey, expectedKey)) {
     return unauthorizedJson(c, 'Invalid ingest key', 'ApiKey')
   }
 

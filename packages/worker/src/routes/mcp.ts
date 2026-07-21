@@ -16,6 +16,10 @@
  *   8. simulate_instruction   — preflight an instruction against the RPC, no signing required
  *   9. get_program_data       — query program-owned accounts with dataSize/memcmp filters
  *  10. simulate_transaction   — simulate a raw base64/base58 wire transaction (no IDL required)
+ *
+ * Flow Engine authoring tools (get_flow_schema, validate_flow, simulate_flow,
+ * publish_flow) live on a SEPARATE MCP server — see routes/flow-mcp.ts, mounted
+ * at /flow/mcp — not this one.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'

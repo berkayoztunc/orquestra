@@ -5,6 +5,7 @@ import DocsShell from '@/components/DocsShell'
 import Home from '@/pages/Home'
 import Dashboard from '@/pages/Dashboard'
 import Explorer from '@/pages/Explorer'
+import Flows from '@/pages/Flows'
 import ProjectDetail from '@/pages/ProjectDetail'
 import AuthCallback from '@/pages/AuthCallback'
 import AuthError from '@/pages/AuthError'
@@ -14,6 +15,7 @@ import CLI from '@/pages/CLI'
 import MCP from '@/pages/MCP'
 import API from '@/pages/API'
 import Packages from '@/pages/Packages'
+import FlowEngine from '@/pages/FlowEngine'
 import Analytics from '@/pages/Analytics'
 import Lists from '@/pages/Lists'
 import Updates from '@/pages/Updates'
@@ -36,6 +38,7 @@ function App(): JSX.Element {
             <Route path="/" element={<Home />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/explorer" element={<Explorer />} />
+            <Route path="/flows" element={<Flows />} />
             <Route path="/project/:programId" element={<ProjectDetail />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/auth/error" element={<AuthError />} />
@@ -51,6 +54,7 @@ function App(): JSX.Element {
             <Route path="/docs/mcp" element={<MCP />} />
             <Route path="/docs/api" element={<API />} />
             <Route path="/docs/packages" element={<Packages />} />
+            <Route path="/docs/flow-engine" element={<FlowEngine />} />
           </Route>
         </Routes>
       </Router>

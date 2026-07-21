@@ -788,4 +788,35 @@ export async function getProgramMetrics(programId: string): Promise<ProgramMetri
   return res.data.metrics
 }
 
+// ─── Flow Engine ───────────────────────────────────────
+// Flow routes live at the worker root (/flows), not under /api — same
+// pattern as auth above: a plain axios call against VITE_WORKER_URL rather
+// than the `api` instance (whose baseURL already includes /api).
+
+export interface FlowMeta {
+  slug: string
+  name: string
+  description?: string
+  intent: string
+  protocol?: string
+  programs?: string[]
+  networks?: string[]
+}
+
+export interface FlowSummary {
+  slug: string
+  intent: string
+  protocol: string | null
+  tier: string
+  meta: FlowMeta
+  inputs: Record<string, { type: string; description?: string }>
+  outputs: Record<string, { type: string; description?: string }>
+}
+
+export async function listFlows(params?: { q?: string; intent?: string; protocol?: string; limit?: number }): Promise<FlowSummary[]> {
+  const base = import.meta.env.VITE_WORKER_URL || 'https://api.orquestra.dev'
+  const res = await axios.get(`${base}/flows`, { params })
+  return res.data.flows ?? []
+}
+
 export default api

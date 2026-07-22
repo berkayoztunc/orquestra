@@ -273,6 +273,20 @@ async function counterAccountBase64(count: bigint): Promise<string> {
   return toBase64(bytes)
 }
 
+/** Same shape as `counterAccountBase64`, but with extra trailing bytes the
+ *  registered IDL doesn't declare as fields — simulates a real on-chain
+ *  account whose layout grew (reserved/padding space) after the IDL was
+ *  last synced. Used to prove `accountType`-only queries still find it. */
+async function paddedCounterAccountBase64(count: bigint, paddingBytes: number): Promise<string> {
+  const disc = await computeAccountDiscriminator('Counter')
+  const bytes = new Uint8Array(8 + 32 + 8 + paddingBytes)
+  bytes.set(disc, 0)
+  bytes.set(bs58.decode(AUTHORITY), 8)
+  const view = new DataView(bytes.buffer)
+  view.setBigUint64(40, count, true)
+  return toBase64(bytes)
+}
+
 function makeEnv(idl: AnchorIDL | CodamaIDL = anchorIdl) {
   return {
     SOLANA_RPC_URL: 'https://rpc.example.com',
@@ -425,7 +439,11 @@ describe('queryProgramAccounts', () => {
     expect(rpcBody.method).toBe('getProgramAccounts')
     expect(rpcBody.params[1].withContext).toBe(true)
     expect(rpcBody.params[1].encoding).toBe('base64')
-    expect(rpcBody.params[1].filters).toContainEqual({ dataSize: 48 })
+    // No auto-injected dataSize filter from the IDL's inferred field-sum size (BUG-2 follow-up):
+    // a real on-chain account can have trailing reserved/padding bytes the registered IDL
+    // doesn't declare, which would make an exact dataSize filter wrongly exclude it. The
+    // discriminator memcmp below is what actually narrows to the account type.
+    expect(rpcBody.params[1].filters).not.toContainEqual({ dataSize: 48 })
     expect(rpcBody.params[1].filters).toContainEqual({ memcmp: { offset: 8, bytes: AUTHORITY } })
     expect(result.slot).toBe(123)
     expect(result.rpcMethod).toBe('getProgramAccounts')
@@ -434,6 +452,42 @@ describe('queryProgramAccounts', () => {
     expect(result.accounts[0].accountType).toBe('Counter')
     expect(result.accounts[0].data).toEqual({ authority: AUTHORITY, count: 42 })
     expect(result.accounts[0].raw).toBeUndefined()
+  })
+
+  test('accountType-only query still finds a real account with undeclared trailing padding bytes (BUG-2 follow-up regression guard)', async () => {
+    // 20 extra bytes beyond the IDL's inferred 48-byte size — e.g. a reserved
+    // field added in a later program upgrade that this registered IDL never
+    // learned about. Before this fix, the auto-injected `dataSize: 48` filter
+    // would have silently excluded this account from every query result.
+    const raw = await paddedCounterAccountBase64(42n, 20)
+    let rpcBody: any
+
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      rpcBody = JSON.parse(init?.body as string)
+      return new Response(JSON.stringify({
+        result: {
+          context: { slot: 1 },
+          value: [
+            {
+              pubkey: 'Counter1111111111111111111111111111111111',
+              account: { data: [raw, 'base64'], executable: false, lamports: 10, owner: PROGRAM_ID, rentEpoch: 99 },
+            },
+          ],
+        },
+      }))
+    }) as any
+
+    const result = await queryProgramAccounts({
+      idl: anchorIdl,
+      programId: PROGRAM_ID,
+      rpcUrl: 'https://rpc.example.com',
+      cluster: 'mainnet-beta',
+      input: { accountType: 'Counter', limit: 1 },
+    })
+
+    expect(rpcBody.params[1].filters).not.toContainEqual({ dataSize: 48 })
+    expect(result.count).toBe(1)
+    expect(result.accounts[0].data).toEqual({ authority: AUTHORITY, count: 42 })
   })
 
   test('rejects field filters for non-fixed fields', async () => {

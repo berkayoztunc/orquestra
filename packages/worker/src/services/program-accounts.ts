@@ -443,10 +443,19 @@ async function buildProgramAccountFilters(
       const bytes = bs58.encode(Uint8Array.from(await getAnchorDiscriminatorBytes(anchorLayout.account)))
       rpcFilters.push({ memcmp: { offset: 0, bytes } })
       filtersApplied.push({ type: 'memcmp', offset: 0, bytes, source: `accountType:${input.accountType}` })
-      if (anchorLayout.size != null && input.dataSize == null) {
-        rpcFilters.push({ dataSize: anchorLayout.size })
-        filtersApplied.push({ type: 'dataSize', dataSize: anchorLayout.size })
-      }
+      // Deliberately NOT auto-adding a dataSize filter from anchorLayout.size here.
+      // That size is inferred by summing the IDL's *declared* field widths, which
+      // silently under-counts any real on-chain account that has trailing
+      // reserved/padding bytes the registered IDL doesn't declare as fields (a
+      // program can add those in a later upgrade without the IDL being
+      // re-synced). An exact dataSize filter then wrongly excludes every real
+      // account of that type — confirmed in practice (a genuine, on-chain
+      // account was invisible to this filter with the inferred size, but
+      // matched immediately once dataSize was dropped and only the
+      // discriminator memcmp — which does not depend on total account length —
+      // was used). The discriminator memcmp alone already reliably narrows to
+      // the exact account type; dataSize stays available as an explicit,
+      // caller-opted-in filter only (see `input.dataSize` below).
     }
   }
 

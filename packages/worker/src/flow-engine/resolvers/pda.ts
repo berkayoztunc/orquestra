@@ -14,7 +14,12 @@
  */
 
 import { Connection, PublicKey } from '@solana/web3.js'
-import { createAssociatedTokenAccountInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import {
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddress,
+  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
+} from '@solana/spl-token'
 import type { FlowInstruction, NodeContext, NodeImplementation } from '../types'
 import { registerNode } from '../node-registry'
 
@@ -107,9 +112,11 @@ registerNode(resolvePdaNode as unknown as NodeImplementation)
 export interface ResolveAtaInput {
   owner: string
   mint: string
-  /** Token program that owns `mint` — defaults to the legacy SPL Token program.
-   *  Pass the Token-2022 program id for a Token-2022 mint; the associated
-   *  token address is derived differently per owning token program. */
+  /** Token program that owns `mint`. Optional — if omitted, auto-detected from
+   *  the mint account's own on-chain owner (legacy SPL Token vs Token-2022),
+   *  the same "token interface" pattern many programs support per-mint. Pass
+   *  this explicitly only to override auto-detection or to skip the extra
+   *  RPC read when the token program is already known. */
   tokenProgram?: string
 }
 
@@ -126,7 +133,22 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
   async run(input: ResolveAtaInput, ctx: NodeContext): Promise<ResolveAtaOutput> {
     const owner = new PublicKey(input.owner)
     const mint = new PublicKey(input.mint)
-    const tokenProgram = input.tokenProgram ? new PublicKey(input.tokenProgram) : TOKEN_PROGRAM_ID
+    const connection = new Connection(ctx.rpcUrl)
+
+    let tokenProgram: PublicKey
+    if (input.tokenProgram) {
+      tokenProgram = new PublicKey(input.tokenProgram)
+    } else {
+      // Auto-detect which token program owns this mint (legacy SPL Token vs
+      // Token-2022) from the mint account's own on-chain owner, instead of
+      // requiring the caller to know/pass it — this is exactly the
+      // "either program, per-mint" interface many programs already support.
+      // Falls back to legacy Token program if the mint account can't be
+      // fetched (e.g. it doesn't exist yet), matching prior behavior.
+      const mintInfo = await connection.getAccountInfo(mint)
+      tokenProgram = mintInfo?.owner.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID
+    }
+
     // allowOwnerOffCurve: true — `owner` is frequently a PDA (a fee-recipient
     // vault, a program-owned vault authority, etc.), which is always off the
     // ed25519 curve by construction. The spl-token default (false) exists to
@@ -135,7 +157,6 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
     // to support.
     const ata = await getAssociatedTokenAddress(mint, owner, true, tokenProgram)
 
-    const connection = new Connection(ctx.rpcUrl)
     const accountInfo = await connection.getAccountInfo(ata)
 
     if (accountInfo !== null) {

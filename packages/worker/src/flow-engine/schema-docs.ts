@@ -29,9 +29,13 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
     key: 'resolve.pda@1',
     summary: 'Derives a Program Derived Address from raw seeds. Pure (no RPC) — deterministic math only.',
     input:
-      '{ program: pubkey, seeds: (string | { kind: "pubkey"|"string"|"bytes", value: string })[] } — ' +
+      '{ program: pubkey, seeds: (string | { kind: "pubkey"|"string"|"bytes"|"u8"|"u16"|"u32"|"u64"|"u128"' +
+      '|"i8"|"i16"|"i32"|"i64"|"i128", value: string })[] } — ' +
       'a plain string seed is UTF-8 encoded; { kind: "pubkey" } encodes a base58 pubkey\'s 32 raw bytes; ' +
-      '{ kind: "bytes" } decodes `value` as base64 raw bytes.',
+      '{ kind: "bytes" } decodes `value` as base64 raw bytes; the numeric kinds (u8/u16/u32/u64/u128 and ' +
+      'their signed i* counterparts) little-endian-encode a decimal string `value` at that type\'s fixed ' +
+      'byte width — use these for a PDA seed component declared as a numeric type in the program\'s IDL ' +
+      '(e.g. a u64 id), instead of requiring the finished PDA address as a direct flow input.',
     output: '{ address: pubkey, bump: number }',
     example: {
       program: '$inputs.programId',

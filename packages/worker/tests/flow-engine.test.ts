@@ -255,6 +255,37 @@ describe('interpreter', () => {
     }
   })
 
+  test('resolve.pda@1 derives distinct addresses for distinct u64 seed values (numeric PDA seed kinds)', async () => {
+    const doc: FlowDocument = {
+      fdl: '1.0',
+      meta: { slug: 'test-numeric-seed', name: 'Test Numeric Seed', intent: 'test' },
+      inputs: { program: { type: 'pubkey' }, planId: { type: 'u64' } },
+      outputs: { pda: { type: 'json' } },
+      nodes: [
+        {
+          id: 'pda',
+          type: 'resolve.pda@1',
+          in: { program: '$inputs.program', seeds: ['plan', { kind: 'u64', value: '$inputs.planId' }] },
+        },
+      ],
+    }
+    const compiled = await compile(doc)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    const resultA = await run(compiled.plan, { program: '11111111111111111111111111111111', planId: '1' }, dummyCtx)
+    const resultB = await run(compiled.plan, { program: '11111111111111111111111111111111', planId: '2' }, dummyCtx)
+    expect(resultA.ok).toBe(true)
+    expect(resultB.ok).toBe(true)
+    if (resultA.ok && resultB.ok) {
+      const addrA = (resultA.nodeOutputs.pda as { address: string }).address
+      const addrB = (resultB.nodeOutputs.pda as { address: string }).address
+      expect(typeof addrA).toBe('string')
+      // Different planId -> different seed bytes -> different derived address.
+      expect(addrA).not.toBe(addrB)
+    }
+  })
+
   test('leaves a required input with no default undefined when omitted (BUG-1 regression guard)', async () => {
     const compiled = await compile(validDoc)
     expect(compiled.ok).toBe(true)

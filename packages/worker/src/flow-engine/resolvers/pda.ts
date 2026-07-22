@@ -14,7 +14,7 @@
  */
 
 import { Connection, PublicKey } from '@solana/web3.js'
-import { createAssociatedTokenAccountInstruction, getAssociatedTokenAddress } from '@solana/spl-token'
+import { createAssociatedTokenAccountInstruction, getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token'
 import type { FlowInstruction, NodeContext, NodeImplementation } from '../types'
 import { registerNode } from '../node-registry'
 
@@ -107,6 +107,10 @@ registerNode(resolvePdaNode as unknown as NodeImplementation)
 export interface ResolveAtaInput {
   owner: string
   mint: string
+  /** Token program that owns `mint` — defaults to the legacy SPL Token program.
+   *  Pass the Token-2022 program id for a Token-2022 mint; the associated
+   *  token address is derived differently per owning token program. */
+  tokenProgram?: string
 }
 
 export interface ResolveAtaOutput {
@@ -122,13 +126,14 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
   async run(input: ResolveAtaInput, ctx: NodeContext): Promise<ResolveAtaOutput> {
     const owner = new PublicKey(input.owner)
     const mint = new PublicKey(input.mint)
+    const tokenProgram = input.tokenProgram ? new PublicKey(input.tokenProgram) : TOKEN_PROGRAM_ID
     // allowOwnerOffCurve: true — `owner` is frequently a PDA (a fee-recipient
     // vault, a program-owned vault authority, etc.), which is always off the
     // ed25519 curve by construction. The spl-token default (false) exists to
     // catch a genuine wallet typo, but it also blocks every legitimate
     // PDA-owned ATA — a very common real-world pattern this resolver needs
     // to support.
-    const ata = await getAssociatedTokenAddress(mint, owner, true)
+    const ata = await getAssociatedTokenAddress(mint, owner, true, tokenProgram)
 
     const connection = new Connection(ctx.rpcUrl)
     const accountInfo = await connection.getAccountInfo(ata)
@@ -139,7 +144,7 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
 
     // MVP: `owner` also acts as the fee payer. A real flow would take a dedicated
     // fee-payer input — out of scope here.
-    const ix = createAssociatedTokenAccountInstruction(owner, ata, owner, mint)
+    const ix = createAssociatedTokenAccountInstruction(owner, ata, owner, mint, tokenProgram)
     const createIx: FlowInstruction = {
       programId: ix.programId.toBase58(),
       keys: ix.keys.map((k) => ({

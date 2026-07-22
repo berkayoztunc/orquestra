@@ -5,7 +5,7 @@
 
 import type { AnchorIDL, AnchorInstruction, AnchorAccount, AnchorError, AnchorEvent, CodamaIDL, CodamaInstructionAccount, CodamaInstructionArgument } from './idl-parser'
 import { resolveType, extractPDASeeds, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, normalizeField, detectIDLFormat, getCodamaUserArgs, resolveCodamaType } from './idl-parser'
-import { listPdaAccounts } from './pda'
+import { listPdaAccounts, listCodamaPdaAccounts } from './pda'
 
 export interface GeneratedDocs {
   full: string           // Complete markdown documentation
@@ -182,6 +182,8 @@ Use this endpoint to query on-chain accounts owned by this program through Solan
 | \`includeRaw\` | Include raw base64 data. Defaults to false unless decoding fails or the account type is unknown. |
 
 Helius RPC URLs use \`getProgramAccountsV2\` automatically, and Orquestra retries V2 if legacy \`getProgramAccounts\` reports an account index overload. Dynamic fields such as \`string\`, \`vec\`, \`bytes\`, and variable arrays may prevent automatic size or field-offset inference. In those cases, provide explicit \`dataSize\` and raw \`memcmp\` offsets.
+
+A \`fieldFilters\` entry's \`field\` may be a nested struct field via dot-path, e.g. \`"data.planId"\` for a field nested inside another struct-typed field named \`data\`. For a \`pubkey\`-typed field, pass a plain base58 pubkey string as \`bytes\`; for other field types (numeric, enum, etc.) the required byte encoding is not currently documented — it's the caller's responsibility to match Solana's \`memcmp\` wire format.
 
 ### Example
 
@@ -718,29 +720,35 @@ function generateCodamaPdaDocs(
   apiBaseUrl: string,
   projectSlug: string,
 ): string {
-  const prog = idl.program
   const base = `${apiBaseUrl}/${projectSlug}`
 
-  if (!prog.pdas?.length) {
+  // Reuse the same real-seed-value extraction the JSON /pda endpoint already
+  // uses (services/pda.ts's listCodamaPdaAccounts), instead of re-deriving
+  // from raw IDL nodes and hardcoding constant seeds as "(fixed bytes)".
+  const pdaEntries = listCodamaPdaAccounts(idl).filter((entry) => entry.instruction === '')
+
+  if (!pdaEntries.length) {
     return '## PDA-Derivable Accounts\n\nNo PDA-derivable accounts defined.'
   }
 
   let md = '## PDA-Derivable Accounts\n\n'
   md += `**List endpoint:** \`GET ${base}/pda\`  \n`
   md += `**Derive endpoint:** \`POST ${base}/pda/derive\`\n\n`
+  md +=
+    '_Constant seed values below are shown as plain text (pass via `{"kind":"string","value":"..."}`) or base64 ' +
+    '(pass via `{"kind":"bytes","value":"..."}`) when deriving in a flow\'s `resolve.pda@1` node._\n\n'
 
-  for (const pda of prog.pdas) {
-    md += `### \`${pda.name}\`\n\n`
-    if (pda.seeds?.length) {
+  for (const entry of pdaEntries) {
+    md += `### \`${entry.account}\`\n\n`
+    if (entry.seeds.length) {
       md += '| # | Seed Kind | Name/Value |\n'
       md += '|---|-----------|------------|\n'
-      pda.seeds.forEach((seed: { kind: string; name?: string; type?: any; bytes?: string }, i: number) => {
-        if (seed.kind === 'constantPdaSeedNode') {
-          md += `| ${i + 1} | constant | (fixed bytes) |\n`
-        } else if (seed.kind === 'variablePdaSeedNode') {
-          md += `| ${i + 1} | variable | \`${seed.name}\` (\`${resolveCodamaType(seed.type)}\`) |\n`
-        } else if (seed.kind === 'programIdPdaSeedNode') {
-          md += `| ${i + 1} | programId | (program ID) |\n`
+      entry.seeds.forEach((seed, i) => {
+        if (seed.kind === 'const') {
+          const value = seed.description === 'program_id' ? '(program ID)' : (seed.description || '(empty)')
+          md += `| ${i + 1} | constant | \`${value}\` |\n`
+        } else {
+          md += `| ${i + 1} | variable | \`${seed.name}\` (\`${seed.type ?? '-'}\`) |\n`
         }
       })
       md += '\n'

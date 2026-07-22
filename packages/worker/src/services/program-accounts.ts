@@ -5,6 +5,7 @@ import {
   getDefinedTypeName,
   lookupType,
   resolveAccountFields,
+  resolveDefinedType,
 } from './idl-parser'
 import {
   computeAccountDiscriminator,
@@ -164,6 +165,40 @@ export function getFixedAnchorTypeSize(type: any, idl: AnchorIDL, depth = 0): nu
   return null
 }
 
+/**
+ * Recursively populate `fieldOffsets` with both top-level and dot-path nested
+ * field keys (e.g. "data.planId") for any field whose type is a defined
+ * struct. Mutates `fieldOffsets` in place (so a partial result survives an
+ * unresolvable field further along), and returns the offset immediately
+ * after the last field, or `null` if any field's size is unresolvable —
+ * mirroring `getFixedAnchorTypeSize`'s null-propagation contract.
+ */
+function collectAnchorFieldOffsets(
+  fields: Array<{ name: string; type: any }>,
+  idl: AnchorIDL,
+  startOffset: number,
+  prefix: string,
+  fieldOffsets: Record<string, number>,
+  depth = 0,
+): number | null {
+  let offset = startOffset
+  for (const field of fields) {
+    const path = prefix ? `${prefix}.${field.name}` : field.name
+    const size = getFixedAnchorTypeSize(field.type, idl, depth)
+    if (size == null) return null
+    fieldOffsets[path] = offset
+    const definedName = getDefinedTypeName(field.type)
+    if (definedName) {
+      const nested = resolveDefinedType(idl, definedName)
+      if (nested && nested.kind === 'struct' && nested.fields.length) {
+        collectAnchorFieldOffsets(nested.fields, idl, offset, path, fieldOffsets, depth + 1)
+      }
+    }
+    offset += size
+  }
+  return offset
+}
+
 export function getAnchorAccountLayout(
   idl: AnchorIDL,
   accountType: string,
@@ -172,17 +207,10 @@ export function getAnchorAccountLayout(
   if (!account) return null
 
   const resolved = resolveAccountFields(idl, account)
-  let offset = 8
   const fieldOffsets: Record<string, number> = {}
+  const endOffset = collectAnchorFieldOffsets(resolved.fields, idl, 8, '', fieldOffsets)
 
-  for (const field of resolved.fields) {
-    const size = getFixedAnchorTypeSize(field.type, idl)
-    if (size == null) return { account, size: null, fieldOffsets }
-    fieldOffsets[field.name] = offset
-    offset += size
-  }
-
-  return { account, size: offset, fieldOffsets }
+  return { account, size: endOffset, fieldOffsets }
 }
 
 function getFixedCodamaTypeSize(type: CodamaTypeNode, idl: CodamaIDL, depth = 0): number | null {
@@ -276,6 +304,42 @@ function codamaDiscriminatorBytes(discriminator: any): number[] {
   return []
 }
 
+/**
+ * Recursively populate `fieldOffsets` with both top-level and dot-path nested
+ * field keys (e.g. "data.planId") for any field whose type is a struct
+ * (inline `structTypeNode` or a `definedTypeLinkNode` pointing at one).
+ * Mutates `fieldOffsets` in place, returns the offset after the last field,
+ * or `null` if unresolvable — mirrors `getFixedCodamaTypeSize`'s contract.
+ */
+function collectCodamaFieldOffsets(
+  fields: Array<{ name: string; type: CodamaTypeNode }>,
+  idl: CodamaIDL,
+  startOffset: number,
+  prefix: string,
+  fieldOffsets: Record<string, number>,
+  depth = 0,
+): number | null {
+  let offset = startOffset
+  for (const field of fields) {
+    const path = prefix ? `${prefix}.${field.name}` : field.name
+    const size = getFixedCodamaTypeSize(field.type, idl, depth)
+    if (size == null) return null
+    fieldOffsets[path] = offset
+    const fieldType = field.type
+    if (fieldType.kind === 'structTypeNode') {
+      collectCodamaFieldOffsets(fieldType.fields || [], idl, offset, path, fieldOffsets, depth + 1)
+    } else if (fieldType.kind === 'definedTypeLinkNode') {
+      const linkName = fieldType.name
+      const typeDef = (idl.program.definedTypes || []).find((t) => t.name === linkName)
+      if (typeDef?.type?.kind === 'structTypeNode') {
+        collectCodamaFieldOffsets(typeDef.type.fields || [], idl, offset, path, fieldOffsets, depth + 1)
+      }
+    }
+    offset += size
+  }
+  return offset
+}
+
 export function getCodamaAccountLayout(
   idl: CodamaIDL,
   accountType: string,
@@ -288,30 +352,16 @@ export function getCodamaAccountLayout(
   const constantDisc = discriminators.find((d) => d.kind === 'constantDiscriminatorNode' || d.kind === 'accountDiscriminatorNode')
   const discriminatorBytes = codamaDiscriminatorBytes(constantDisc)
   const startOffset = sizeDisc ? 0 : discriminatorBytes.length || 8
-  let offset = startOffset
   const fieldOffsets: Record<string, number> = {}
+  let endOffset: number | null = startOffset
 
   if (account.data?.kind === 'structTypeNode') {
-    for (const field of account.data.fields || []) {
-      const size = getFixedCodamaTypeSize(field.type, idl)
-      if (size == null) {
-        return {
-          account,
-          size: typeof sizeDisc?.size === 'number' ? sizeDisc.size : null,
-          fieldOffsets,
-          startOffset,
-          discriminatorBytes,
-          sizeDiscriminator: typeof sizeDisc?.size === 'number' ? sizeDisc.size : undefined,
-        }
-      }
-      fieldOffsets[field.name] = offset
-      offset += size
-    }
+    endOffset = collectCodamaFieldOffsets(account.data.fields || [], idl, startOffset, '', fieldOffsets)
   }
 
   return {
     account,
-    size: typeof sizeDisc?.size === 'number' ? sizeDisc.size : offset,
+    size: typeof sizeDisc?.size === 'number' ? sizeDisc.size : endOffset,
     fieldOffsets,
     startOffset,
     discriminatorBytes,

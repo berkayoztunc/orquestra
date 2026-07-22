@@ -11,6 +11,9 @@
  */
 
 import { listNodes } from './node-registry'
+import { FLOW_INPUT_TYPES } from './fdl-schema'
+
+const FLOW_INPUT_TYPES_DOC = FLOW_INPUT_TYPES.map((t) => `"${t}"`).join(' | ')
 
 export interface NodeCatalogEntry {
   /** `${type}@${major}`, matches the node-registry key exactly. */
@@ -76,7 +79,9 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
       'RPC scan.',
     input:
       '{ projectId: string, accountType?: string (IDL account type name), dataSize?: number, ' +
-      'memcmp?: { offset: number, bytes: string }[], fieldFilters?: { field: string, bytes: string }[], ' +
+      'memcmp?: { offset: number, bytes: string }[], fieldFilters?: { field: string, bytes: string }[] ' +
+      '(field may be a dot-path into a nested struct field, e.g. "data.planId"; for pubkey fields ' +
+      'pass a base58 pubkey string as bytes — other field types\' required byte encoding is undocumented), ' +
       'limit?: number }',
     output: '{ accounts: { address: pubkey, data: json | null }[], count: number }',
     example: { projectId: '$inputs.projectId', accountType: 'Pool', memcmp: [{ offset: 8, bytes: '$inputs.mintA' }] },
@@ -210,7 +215,7 @@ A flow is one JSON document. Structure:
     "networks": ["mainnet-beta", "devnet"]
   },
   "inputs": {
-    "someInput": { "type": "pubkey" | "u64" | "u32" | "u16" | "u8" | "string" | "bool" | "bps", "description": "...", "default": "..." }
+    "someInput": { "type": ${FLOW_INPUT_TYPES_DOC}, "description": "...", "default": "..." }
   },
   "outputs": {
     "someOutput": { "type": "transaction" | "transaction[]" | "json" | "u64" | "string" | "bool", "description": "..." }

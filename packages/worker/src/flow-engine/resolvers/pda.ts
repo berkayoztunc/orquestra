@@ -122,7 +122,13 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
   async run(input: ResolveAtaInput, ctx: NodeContext): Promise<ResolveAtaOutput> {
     const owner = new PublicKey(input.owner)
     const mint = new PublicKey(input.mint)
-    const ata = await getAssociatedTokenAddress(mint, owner)
+    // allowOwnerOffCurve: true — `owner` is frequently a PDA (a fee-recipient
+    // vault, a program-owned vault authority, etc.), which is always off the
+    // ed25519 curve by construction. The spl-token default (false) exists to
+    // catch a genuine wallet typo, but it also blocks every legitimate
+    // PDA-owned ATA — a very common real-world pattern this resolver needs
+    // to support.
+    const ata = await getAssociatedTokenAddress(mint, owner, true)
 
     const connection = new Connection(ctx.rpcUrl)
     const accountInfo = await connection.getAccountInfo(ata)

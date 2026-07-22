@@ -239,4 +239,59 @@ describe('Doc Generator', () => {
     expect(docs.events).toContain('price')
     expect(docs.events).toContain('timestamp')
   })
+
+  // ── Codama PDA docs (IMP-1) ──
+
+  const codamaIdlWithConstPdas = {
+    kind: 'rootNode',
+    standard: 'codama',
+    version: '1.0.0',
+    program: {
+      name: 'subscriptions',
+      publicKey: 'PROG123',
+      version: '0.1.0',
+      instructions: [],
+      accounts: [],
+      definedTypes: [],
+      errors: [],
+      pdas: [
+        {
+          name: 'vault',
+          seeds: [
+            { kind: 'constantPdaSeedNode', value: { kind: 'stringValueNode', string: 'vault' } },
+            { kind: 'variablePdaSeedNode', name: 'owner', type: { kind: 'publicKeyTypeNode' } },
+          ],
+        },
+        {
+          name: 'authority',
+          seeds: [
+            { kind: 'programIdPdaSeedNode' },
+          ],
+        },
+        {
+          name: 'rawBytesSeed',
+          seeds: [
+            // base64 for the raw bytes [0xde, 0xad, 0xbe, 0xef]
+            { kind: 'constantPdaSeedNode', value: { kind: 'bytesValueNode', data: '3q2+7w==' } },
+          ],
+        },
+      ],
+    },
+  }
+
+  test('renders the real constant seed value for a Codama PDA, not "(fixed bytes)" (IMP-1)', () => {
+    const docs = generateDocumentation(codamaIdlWithConstPdas as any, 'PROG123', 'http://localhost:8787/api', 'subs')
+    expect(docs.pdaAccounts).toContain('`vault`')
+    expect(docs.pdaAccounts).not.toContain('(fixed bytes)')
+  })
+
+  test('renders base64 for a raw bytesValueNode constant Codama PDA seed (IMP-1)', () => {
+    const docs = generateDocumentation(codamaIdlWithConstPdas as any, 'PROG123', 'http://localhost:8787/api', 'subs')
+    expect(docs.pdaAccounts).toContain('3q2+7w==')
+  })
+
+  test('still special-cases programIdPdaSeedNode as "(program ID)" (IMP-1 regression guard)', () => {
+    const docs = generateDocumentation(codamaIdlWithConstPdas as any, 'PROG123', 'http://localhost:8787/api', 'subs')
+    expect(docs.pdaAccounts).toContain('(program ID)')
+  })
 })

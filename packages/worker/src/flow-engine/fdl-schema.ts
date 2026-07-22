@@ -214,7 +214,7 @@ export type FlowMeta = z.infer<typeof FlowMetaSchema>
 // inputs / outputs
 // ---------------------------------------------------------------------------
 
-export const FLOW_INPUT_TYPES = ['pubkey', 'u64', 'u32', 'u16', 'u8', 'string', 'bool', 'bps'] as const
+export const FLOW_INPUT_TYPES = ['pubkey', 'u64', 'u32', 'u16', 'u8', 'i64', 'i32', 'string', 'bool', 'bps'] as const
 export const FlowInputTypeSchema = z.enum(FLOW_INPUT_TYPES)
 export type FlowInputType = z.infer<typeof FlowInputTypeSchema>
 

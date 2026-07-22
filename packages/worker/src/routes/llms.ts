@@ -243,7 +243,7 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       '- Prefer the listed REST endpoints, request/response shapes, and examples.',
       '- Use GET /pda to discover which accounts are PDA-derived and what seeds they require.',
       '- Use POST /pda/derive to compute a PDA address before building a transaction.',
-      '- Use POST /program-accounts/query to query on-chain program accounts. Prefer accountType to auto-apply discriminator filters, dataSize to narrow layouts, raw memcmp for byte offsets, and fieldFilters only for fixed-offset IDL fields.',
+      '- Use POST /program-accounts/query to query on-chain program accounts. Prefer accountType to auto-apply discriminator filters, dataSize to narrow layouts, raw memcmp for byte offsets, and fieldFilters only for fixed-offset IDL fields. Nested struct fields use dot-path (e.g. "data.planId"). For pubkey fields pass a base58 pubkey string as bytes; for other field types the byte encoding is undocumented and the caller\'s responsibility.',
       '- For Helius RPC URLs, program account queries use getProgramAccountsV2 pagination automatically; pass paginationKey from a prior response to fetch the next page.',
       '- Dynamic account fields such as string, vec, bytes, and variable arrays may require explicit dataSize or raw memcmp offsets.',
       '- If details are missing or ambiguous, ask for clarification or fetch the relevant endpoint.',

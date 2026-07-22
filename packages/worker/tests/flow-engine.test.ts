@@ -3,7 +3,7 @@ import { compile } from '../src/flow-engine/compiler'
 import { run } from '../src/flow-engine/interpreter'
 import { registerNode, getNode, listNodes } from '../src/flow-engine/node-registry'
 import { getFlowSchemaDocument, NODE_CATALOG } from '../src/flow-engine/schema-docs'
-import type { FlowDocument } from '../src/flow-engine/fdl-schema'
+import { FLOW_INPUT_TYPES, type FlowDocument } from '../src/flow-engine/fdl-schema'
 import type { NodeContext, NodeImplementation } from '../src/flow-engine/types'
 import { publishFlowVersion } from '../src/services/flow-publisher'
 import { verifyIngestKey } from '../src/middleware/auth'
@@ -91,6 +91,20 @@ describe('compiler', () => {
     if (!result.ok) {
       expect(result.errors.some((e) => e.message.includes('unknown node type'))).toBe(true)
     }
+  })
+
+  test('FLOW_INPUT_TYPES includes signed integer types (IMP-2)', () => {
+    expect(FLOW_INPUT_TYPES).toContain('i64')
+    expect(FLOW_INPUT_TYPES).toContain('i32')
+  })
+
+  test('compiles a flow with an i64 input type (IMP-2)', async () => {
+    const docWithI64: FlowDocument = {
+      ...validDoc,
+      inputs: { ...validDoc.inputs, amount: { type: 'i64' } },
+    }
+    const result = await compile(docWithI64)
+    expect(result.ok).toBe(true)
   })
 })
 
@@ -180,6 +194,77 @@ describe('interpreter', () => {
     expect(result.ok).toBe(true)
     expect(seenInput).toEqual({ items: ['literal'] })
   })
+
+  test('applies inputs.<key>.default when the caller omits the key (BUG-1)', async () => {
+    const docWithDefault: FlowDocument = {
+      ...validDoc,
+      inputs: { program: { type: 'pubkey', default: '11111111111111111111111111111111' } },
+    }
+    const compiled = await compile(docWithDefault)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    const result = await run(compiled.plan, {}, dummyCtx)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const pdaOutput = result.nodeOutputs.pda as { address: string; bump: number }
+      expect(typeof pdaOutput.address).toBe('string')
+    }
+  })
+
+  test('does not override a caller-provided value with the declared default (BUG-1)', async () => {
+    const docWithDefault: FlowDocument = {
+      ...validDoc,
+      inputs: { program: { type: 'pubkey', default: '11111111111111111111111111111111' } },
+    }
+    const compiled = await compile(docWithDefault)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    // Same program used for both the default and the explicit input, so derive
+    // a second, distinct PDA to prove the caller's own value actually won.
+    const explicitProgram = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+    const defaultResult = await run(compiled.plan, {}, dummyCtx)
+    const explicitResult = await run(compiled.plan, { program: explicitProgram }, dummyCtx)
+    expect(defaultResult.ok).toBe(true)
+    expect(explicitResult.ok).toBe(true)
+    if (defaultResult.ok && explicitResult.ok) {
+      const defaultAddr = (defaultResult.nodeOutputs.pda as { address: string }).address
+      const explicitAddr = (explicitResult.nodeOutputs.pda as { address: string }).address
+      expect(explicitAddr).not.toBe(defaultAddr)
+    }
+  })
+
+  test('does not override a falsy caller-provided value (0/false/"") with the declared default (BUG-1)', async () => {
+    const doc: FlowDocument = {
+      fdl: '1.0',
+      meta: { slug: 'test-falsy-default', name: 'Test Falsy Default', intent: 'test' },
+      inputs: { go: { type: 'bool', default: true } },
+      outputs: { out: { type: 'json' } },
+      nodes: [{ id: 'gate', type: 'logic.assert@1', in: { condition: true }, if: '$inputs.go' }],
+    }
+    const compiled = await compile(doc)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    // Explicit `false` must win over the `default: true` — the gated node must be skipped.
+    const result = await run(compiled.plan, { go: false }, dummyCtx)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.nodeOutputs.gate).toBeUndefined()
+    }
+  })
+
+  test('leaves a required input with no default undefined when omitted (BUG-1 regression guard)', async () => {
+    const compiled = await compile(validDoc)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    const result = await run(compiled.plan, {}, dummyCtx)
+    // Unchanged pre-existing behavior: no default to fall back to, so the node
+    // still receives `program: undefined` and fails downstream exactly as before.
+    expect(result.ok).toBe(false)
+  })
 })
 
 describe('orquestra.build_instruction@1 (generic, IDL-driven node)', () => {
@@ -244,6 +329,12 @@ describe('get_flow_schema docs (MCP tool 11)', () => {
     for (const node of realRegisteredNodes()) {
       expect(doc).toContain(`${node.type}@${node.major}`)
     }
+  })
+
+  test('grammar documents i64/i32 input types (IMP-2)', () => {
+    const doc = getFlowSchemaDocument()
+    expect(doc).toContain('"i64"')
+    expect(doc).toContain('"i32"')
   })
 })
 

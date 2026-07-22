@@ -7,7 +7,7 @@
  * Enforces wall-time and read/external call budgets between strata.
  */
 
-import { isRefString, parseRef, type ParsedRef } from './fdl-schema'
+import { isRefString, parseRef, type ParsedRef, type FlowInputSpec } from './fdl-schema'
 import { looksLikeExpression, parseExpression, evaluateExpression } from './expression'
 import { getNode } from './node-registry'
 import type { NodeContext } from './types'
@@ -140,6 +140,28 @@ function resolveIf(ifRef: string, state: RunState): boolean {
   return false
 }
 
+/**
+ * Merge caller-supplied inputs with each input spec's declared `default`.
+ * For every key in `inputSpecs` where the caller's value is `undefined`/`null`
+ * and the spec declares a `default`, the default is substituted. Caller values
+ * that are present (including falsy values like `0`, `false`, `""`) are never
+ * overridden. Keys with no `default` and no caller value are left as-is —
+ * required-input validation stays exactly as it is today.
+ */
+function applyInputDefaults(
+  inputs: Record<string, unknown>,
+  inputSpecs: Record<string, FlowInputSpec>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...inputs }
+  for (const [key, spec] of Object.entries(inputSpecs)) {
+    const provided = merged[key]
+    if ((provided === undefined || provided === null) && spec.default !== undefined) {
+      merged[key] = spec.default
+    }
+  }
+  return merged
+}
+
 export async function run(
   plan: FlowPlan,
   inputs: Record<string, unknown>,
@@ -147,7 +169,7 @@ export async function run(
 ): Promise<RunResult> {
   const nodeOutputs: Record<string, unknown> = {}
   const skipped = new Set<string>()
-  const state: RunState = { inputs, nodeOutputs, skipped }
+  const state: RunState = { inputs: applyInputDefaults(inputs, plan.inputs), nodeOutputs, skipped }
 
   const startedAt = Date.now()
   let rpcCallCount = 0

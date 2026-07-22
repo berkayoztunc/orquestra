@@ -104,6 +104,77 @@ const codamaIdl: CodamaIDL = {
   },
 }
 
+// Nested-struct fixtures for BUG-2: a "data" field whose own type is a
+// defined/inline struct, mirroring a real account shaped `{ owner, data: { planId, amount } }`.
+const nestedAnchorIdl: AnchorIDL = {
+  version: '0.1.0',
+  name: 'plan_program',
+  instructions: [],
+  accounts: [
+    {
+      name: 'Plan',
+      type: {
+        kind: 'struct',
+        fields: [
+          { name: 'owner', type: 'publicKey' },
+          { name: 'data', type: { defined: 'PlanData' } },
+        ],
+      },
+    },
+  ],
+  types: [
+    {
+      name: 'PlanData',
+      type: {
+        kind: 'struct',
+        fields: [
+          { name: 'planId', type: 'u64' },
+          { name: 'amount', type: 'u64' },
+        ],
+      },
+    },
+  ],
+  events: [],
+  errors: [],
+}
+
+const nestedCodamaIdl: CodamaIDL = {
+  kind: 'rootNode',
+  standard: 'codama',
+  version: '1.0.0',
+  program: {
+    name: 'plan_program',
+    publicKey: PROGRAM_ID,
+    version: '1.0.0',
+    instructions: [],
+    accounts: [
+      {
+        name: 'Plan',
+        data: {
+          kind: 'structTypeNode',
+          fields: [
+            { kind: 'structFieldTypeNode', name: 'owner', type: { kind: 'publicKeyTypeNode' } },
+            {
+              kind: 'structFieldTypeNode',
+              name: 'data',
+              type: {
+                kind: 'structTypeNode',
+                fields: [
+                  { kind: 'structFieldTypeNode', name: 'planId', type: { kind: 'numberTypeNode', format: 'u64' } },
+                  { kind: 'structFieldTypeNode', name: 'amount', type: { kind: 'numberTypeNode', format: 'u64' } },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+    definedTypes: [],
+    pdas: [],
+    errors: [],
+  },
+}
+
 const originalFetch = globalThis.fetch
 
 afterEach(() => {
@@ -185,6 +256,25 @@ describe('program account layout inference', () => {
     expect(layout?.fieldOffsets.mint).toBe(0)
     expect(layout?.fieldOffsets.owner).toBe(32)
   })
+
+  test('resolves nested Anchor struct field offsets via dot-path (BUG-2)', () => {
+    const layout = getAnchorAccountLayout(nestedAnchorIdl, 'Plan')
+    // owner (pubkey, 32 bytes) @8, data (PlanData, 16 bytes) @40
+    expect(layout?.fieldOffsets.owner).toBe(8)
+    expect(layout?.fieldOffsets.data).toBe(40)
+    expect(layout?.fieldOffsets['data.planId']).toBe(40)
+    expect(layout?.fieldOffsets['data.amount']).toBe(48)
+    expect(layout?.size).toBe(56)
+  })
+
+  test('resolves nested Codama struct field offsets via dot-path (BUG-2)', () => {
+    const layout = getCodamaAccountLayout(nestedCodamaIdl, 'Plan')
+    expect(layout?.fieldOffsets.owner).toBe(8)
+    expect(layout?.fieldOffsets.data).toBe(40)
+    expect(layout?.fieldOffsets['data.planId']).toBe(40)
+    expect(layout?.fieldOffsets['data.amount']).toBe(48)
+    expect(layout?.size).toBe(56)
+  })
 })
 
 describe('queryProgramAccounts', () => {
@@ -260,6 +350,42 @@ describe('queryProgramAccounts', () => {
         fieldFilters: [{ field: 'label', bytes: 'abc' }],
       },
     })).rejects.toThrow('Field "label"')
+  })
+
+  test('applies a fieldFilters entry against a nested struct field via dot-path (BUG-2)', async () => {
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      const rpcBody = JSON.parse(init?.body as string)
+      // Assert on the outgoing RPC request itself — this is a pure filter-building
+      // test, no accounts need to actually match.
+      expect(rpcBody.params[1].filters).toContainEqual({ memcmp: { offset: 40, bytes: '123' } })
+      return new Response(JSON.stringify({ result: { context: { slot: 1 }, value: [] } }))
+    }) as any
+
+    const result = await queryProgramAccounts({
+      idl: nestedAnchorIdl,
+      programId: PROGRAM_ID,
+      rpcUrl: 'https://rpc.example.com',
+      cluster: 'mainnet-beta',
+      input: {
+        accountType: 'Plan',
+        fieldFilters: [{ field: 'data.planId', bytes: '123' }],
+      },
+    })
+
+    expect(result.count).toBe(0)
+  })
+
+  test('still throws for a genuinely unresolvable/unknown field (BUG-2 regression guard)', async () => {
+    await expect(queryProgramAccounts({
+      idl: nestedAnchorIdl,
+      programId: PROGRAM_ID,
+      rpcUrl: 'https://rpc.example.com',
+      cluster: 'mainnet-beta',
+      input: {
+        accountType: 'Plan',
+        fieldFilters: [{ field: 'data.doesNotExist', bytes: 'abc' }],
+      },
+    })).rejects.toThrow('Field "data.doesNotExist"')
   })
 
   test('uses getProgramAccountsV2 with pagination for Helius RPC URLs', async () => {

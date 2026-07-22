@@ -48,7 +48,7 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
       'Derives an SPL associated-token-account address and checks on-chain existence. If missing, also ' +
       'builds the create-ATA instruction (owner pays). RPC read.',
     input: '{ owner: pubkey, mint: pubkey, tokenProgram?: pubkey (optional — auto-detected from the mint account\'s own on-chain owner, legacy SPL Token vs Token-2022, if omitted; pass explicitly only to override or skip that extra RPC read) }',
-    output: '{ address: pubkey, exists: boolean, createIx: FlowInstruction | null }',
+    output: '{ address: pubkey, exists: boolean, createIx: FlowInstruction | null, tokenProgram: pubkey (the token program actually used — caller-supplied or auto-detected; read this when another account in the same instruction needs this mint\'s token program, e.g. a "*_token_program" account) }',
     example: { owner: '$inputs.wallet', mint: '$inputs.mint' },
   },
   {

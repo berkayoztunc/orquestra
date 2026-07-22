@@ -124,6 +124,12 @@ export interface ResolveAtaOutput {
   address: string
   exists: boolean
   createIx: FlowInstruction | null
+  /** The token program actually used to derive `address` — either the
+   *  caller-supplied `tokenProgram` echoed back, or the auto-detected one.
+   *  Downstream nodes that need this mint's owning token program as its own
+   *  account (e.g. a `*_token_program` instruction account) read it from here
+   *  instead of re-deriving or guessing it. */
+  tokenProgram: string
 }
 
 export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutput> = {
@@ -160,7 +166,7 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
     const accountInfo = await connection.getAccountInfo(ata)
 
     if (accountInfo !== null) {
-      return { address: ata.toBase58(), exists: true, createIx: null }
+      return { address: ata.toBase58(), exists: true, createIx: null, tokenProgram: tokenProgram.toBase58() }
     }
 
     // MVP: `owner` also acts as the fee payer. A real flow would take a dedicated
@@ -176,7 +182,7 @@ export const resolveAtaNode: NodeImplementation<ResolveAtaInput, ResolveAtaOutpu
       data: Buffer.from(ix.data).toString('base64'),
     }
 
-    return { address: ata.toBase58(), exists: false, createIx }
+    return { address: ata.toBase58(), exists: false, createIx, tokenProgram: tokenProgram.toBase58() }
   },
 }
 

@@ -9,6 +9,7 @@
 
 import './resolvers/pda'
 import './resolvers/state'
+import './resolvers/account-data'
 import './resolvers/constant'
 import './resolvers/blockhash'
 import './resolvers/accounts-by-filter'

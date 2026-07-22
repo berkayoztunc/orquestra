@@ -59,6 +59,19 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
     example: { address: '$somePda.address' },
   },
   {
+    key: 'resolve.account_data@1',
+    summary:
+      'Decodes a single already-known account address using the project\'s registered IDL. Fills the gap ' +
+      'between resolve.pda_state@1 (existence + lamports only, never decodes) and resolve.accounts_by_filter@1 ' +
+      '(decodes, but only reachable via a program-wide scan + memcmp filter — impossible for account types ' +
+      'with a dynamic-length field, e.g. a Vec<T>, before the field you need, since a memcmp filter needs one ' +
+      'fixed byte offset shared across every scanned account). Use this whenever the address is already known ' +
+      '(e.g. a deterministic PDA from resolve.pda@1) — no scan or offset inference needed. RPC read.',
+    input: '{ address: pubkey, projectId: string, accountType?: string (IDL account type name — pass it when known, skips auto-detection) }',
+    output: '{ exists: boolean, accountType: string | null, data: json | null }',
+    example: { address: '$receiptsPda.address', projectId: '$inputs.projectId', accountType: 'Receipts' },
+  },
+  {
     key: 'resolve.blockhash@1',
     summary: 'Fetches the latest blockhash. RPC read. No input fields.',
     input: '{}',

@@ -539,6 +539,46 @@ async function decodeProgramAccount(
   return { accountType: accountTypeName, data, parseError }
 }
 
+/**
+ * Decodes a single already-known account address. Fills the gap between
+ * `resolve.pda_state@1` (existence + lamports only, never decodes) and
+ * `queryProgramAccounts`/`resolve.accounts_by_filter@1` (decodes, but only reachable
+ * accounts can be found via a program-wide scan + memcmp filter — impossible for account
+ * types that have a dynamic-length field, e.g. a `Vec<T>`, before the field a caller wants
+ * to filter/read, since Solana's memcmp filter needs one fixed byte offset shared across
+ * every scanned account, and a `Vec`'s length differs per account). When the address is
+ * already known (e.g. a deterministic PDA), no scan or offset inference is needed — this
+ * fetches it directly and reuses the same borsh decoder `queryProgramAccounts` uses.
+ */
+export async function fetchAndDecodeAccount(opts: {
+  idl: AnchorIDL | CodamaIDL
+  address: string
+  rpcUrl: string
+  accountType?: string
+}): Promise<{ exists: boolean; accountType: string | null; data: Record<string, unknown> | null; parseError?: string }> {
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'getAccountInfo',
+    params: [opts.address, { encoding: 'base64', commitment: 'confirmed' }],
+  })
+  const response = await rpcFetch(opts.rpcUrl, body, RPC_TIMEOUTS.accountInfo)
+  if (!response.ok) throw new Error(`RPC request failed: HTTP ${response.status}`)
+
+  const json = (await response.json()) as {
+    result?: { value?: { data?: [string, string] | string } | null }
+    error?: { message?: string }
+  }
+  if (json.error) throw new Error(json.error.message ?? 'RPC error')
+
+  const value = json.result?.value
+  if (!value?.data) return { exists: false, accountType: null, data: null }
+  const rawBase64 = Array.isArray(value.data) ? value.data[0] : value.data
+
+  const decoded = await decodeProgramAccount(rawBase64, opts.idl, { accountType: opts.accountType })
+  return { exists: true, ...decoded }
+}
+
 export async function queryProgramAccounts(opts: {
   idl: AnchorIDL | CodamaIDL
   programId: string

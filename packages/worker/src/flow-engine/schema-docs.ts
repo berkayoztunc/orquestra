@@ -166,6 +166,28 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
     },
   },
   {
+    key: 'solana.system_transfer@1',
+    summary:
+      'Builds a native System Program transfer instruction (move lamports between two accounts). Pure — ' +
+      'fixed, public wire format, no IDL/RPC needed. The common use is wrapping SOL: transfer lamports ' +
+      'into a wallet\'s WSOL associated-token-account, then follow with solana.sync_native@1 so the ' +
+      'token account\'s balance reflects the deposited lamports.',
+    input: '{ from: pubkey, to: pubkey, lamports: u64 }',
+    output: '{ instruction: FlowInstruction }',
+    example: { from: '$inputs.wallet', to: '$userQuoteAta.address', lamports: '$inputs.amountIn' },
+  },
+  {
+    key: 'solana.sync_native@1',
+    summary:
+      'Builds an SPL Token `SyncNative` instruction, which refreshes a wrapped-SOL token account\'s ' +
+      'balance to match its actual lamports (needed after a solana.system_transfer@1 deposits lamports ' +
+      'into it directly — token account balances do not update from a plain lamport transfer on their ' +
+      'own). Pure — fixed, public wire format, no IDL/RPC needed.',
+    input: '{ account: pubkey, tokenProgram?: pubkey (defaults to the legacy SPL Token program) }',
+    output: '{ instruction: FlowInstruction }',
+    example: { account: '$userQuoteAta.address' },
+  },
+  {
     key: 'logic.assert@1',
     summary:
       'Throws (aborting the run with a structured error naming this node) if `condition` is falsy. ' +

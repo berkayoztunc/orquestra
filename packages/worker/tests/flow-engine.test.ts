@@ -340,6 +340,87 @@ describe('orquestra.build_instruction@1 (generic, IDL-driven node)', () => {
   })
 })
 
+describe('solana.system_transfer@1 / solana.sync_native@1 (native-program instruction builders)', () => {
+  const doc: FlowDocument = {
+    fdl: '1.0',
+    meta: { slug: 'test-wrap-sol', name: 'Test Wrap SOL', intent: 'test' },
+    inputs: {
+      wallet: { type: 'pubkey' },
+      wsolAta: { type: 'pubkey' },
+      amount: { type: 'u64' },
+    },
+    outputs: { transactions: { type: 'transaction[]' } },
+    nodes: [
+      {
+        id: 'wrapIx',
+        type: 'solana.system_transfer@1',
+        in: { from: '$inputs.wallet', to: '$inputs.wsolAta', lamports: '$inputs.amount' },
+      },
+      {
+        id: 'syncIx',
+        type: 'solana.sync_native@1',
+        in: { account: '$inputs.wsolAta' },
+      },
+      {
+        id: 'tx',
+        type: 'solana.compose_transaction@1',
+        in: { feePayer: '$inputs.wallet', instructions: ['$wrapIx.instruction', '$syncIx.instruction'], simulate: false },
+      },
+    ],
+  }
+
+  test('compiles into a flow graph', async () => {
+    const result = await compile(doc)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.plan.strata.map((s) => s.map((n) => n.id).sort())).toEqual([['syncIx', 'wrapIx'], ['tx']])
+    }
+  })
+
+  test('system_transfer builds a valid SystemProgram.transfer instruction', async () => {
+    const compiled = await compile(doc)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    const result = await run(compiled.plan, {
+      wallet: '11111111111111111111111111111111',
+      wsolAta: 'So11111111111111111111111111111111111111112',
+      amount: '1000000',
+    }, dummyCtx)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const wrapIx = result.nodeOutputs.wrapIx as { instruction: { programId: string; keys: unknown[]; data: string } }
+      expect(wrapIx.instruction.programId).toBe('11111111111111111111111111111111')
+      expect(wrapIx.instruction.keys).toHaveLength(2)
+      // 4-byte LE instruction index (2 = Transfer) + 8-byte LE lamports
+      const dataBytes = Buffer.from(wrapIx.instruction.data, 'base64')
+      expect(dataBytes.length).toBe(12)
+      expect(dataBytes.readUInt32LE(0)).toBe(2)
+      expect(dataBytes.readBigUInt64LE(4)).toBe(1000000n)
+    }
+  })
+
+  test('sync_native builds a valid SyncNative instruction, defaulting to the legacy Token program', async () => {
+    const compiled = await compile(doc)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    const result = await run(compiled.plan, {
+      wallet: '11111111111111111111111111111111',
+      wsolAta: 'So11111111111111111111111111111111111111112',
+      amount: '1000000',
+    }, dummyCtx)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      const syncIx = result.nodeOutputs.syncIx as { instruction: { programId: string; keys: { pubkey: string; isWritable: boolean }[]; data: string } }
+      expect(syncIx.instruction.programId).toBe('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+      expect(syncIx.instruction.keys).toEqual([{ pubkey: 'So11111111111111111111111111111111111111112', isSigner: false, isWritable: true }])
+      const dataBytes = Buffer.from(syncIx.instruction.data, 'base64')
+      expect(dataBytes).toEqual(Buffer.from([17]))
+    }
+  })
+})
+
 describe('get_flow_schema docs (MCP tool 11)', () => {
   // `test.*` node types (e.g. "test.probe@1" registered by an earlier test in
   // this file) are excluded by schema-docs.ts itself — see the comment on

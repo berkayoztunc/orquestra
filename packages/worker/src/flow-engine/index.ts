@@ -17,5 +17,6 @@ import './nodes/build-instruction'
 import './nodes/assert'
 import './nodes/compose-transaction'
 import './nodes/external-http'
+import './nodes/system-transfer'
 
 export function registerAllNodes(): void {}

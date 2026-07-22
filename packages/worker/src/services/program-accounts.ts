@@ -168,10 +168,22 @@ export function getFixedAnchorTypeSize(type: any, idl: AnchorIDL, depth = 0): nu
 /**
  * Recursively populate `fieldOffsets` with both top-level and dot-path nested
  * field keys (e.g. "data.planId") for any field whose type is a defined
- * struct. Mutates `fieldOffsets` in place (so a partial result survives an
- * unresolvable field further along), and returns the offset immediately
- * after the last field, or `null` if any field's size is unresolvable —
- * mirroring `getFixedAnchorTypeSize`'s null-propagation contract.
+ * struct.
+ *
+ * IMPORTANT: defined-struct-typed fields are descended into directly, NOT
+ * gated on `getFixedAnchorTypeSize(field.type, ...)` succeeding for the field
+ * as a whole. That function has an all-or-nothing contract for defined
+ * structs (any single unresolvable member — e.g. a trailing dynamic-size
+ * field — makes the WHOLE struct's size `null`), which would otherwise
+ * discard every earlier, perfectly-resolvable nested field's offset (e.g. a
+ * struct's first field is resolvable even if its last field is a dynamic
+ * string).
+ *
+ * Mutates `fieldOffsets` in place (so a partial result survives an
+ * unresolvable field further along, at any depth), and returns the offset
+ * immediately after the last field, or `null` once an unresolvable
+ * (non-struct) field is hit — the null does not erase offsets already
+ * recorded before that point.
  */
 function collectAnchorFieldOffsets(
   fields: Array<{ name: string; type: any }>,
@@ -184,16 +196,20 @@ function collectAnchorFieldOffsets(
   let offset = startOffset
   for (const field of fields) {
     const path = prefix ? `${prefix}.${field.name}` : field.name
+    const definedName = getDefinedTypeName(field.type)
+    const nested = definedName ? resolveDefinedType(idl, definedName) : null
+
+    if (nested && nested.kind === 'struct' && nested.fields.length) {
+      fieldOffsets[path] = offset
+      const consumed = collectAnchorFieldOffsets(nested.fields, idl, offset, path, fieldOffsets, depth + 1)
+      if (consumed == null) return null // an unresolvable field inside this struct — everything after it (including sibling top-level fields) is unknown
+      offset = consumed
+      continue
+    }
+
     const size = getFixedAnchorTypeSize(field.type, idl, depth)
     if (size == null) return null
     fieldOffsets[path] = offset
-    const definedName = getDefinedTypeName(field.type)
-    if (definedName) {
-      const nested = resolveDefinedType(idl, definedName)
-      if (nested && nested.kind === 'struct' && nested.fields.length) {
-        collectAnchorFieldOffsets(nested.fields, idl, offset, path, fieldOffsets, depth + 1)
-      }
-    }
     offset += size
   }
   return offset
@@ -308,8 +324,20 @@ function codamaDiscriminatorBytes(discriminator: any): number[] {
  * Recursively populate `fieldOffsets` with both top-level and dot-path nested
  * field keys (e.g. "data.planId") for any field whose type is a struct
  * (inline `structTypeNode` or a `definedTypeLinkNode` pointing at one).
- * Mutates `fieldOffsets` in place, returns the offset after the last field,
- * or `null` if unresolvable — mirrors `getFixedCodamaTypeSize`'s contract.
+ *
+ * IMPORTANT: struct-typed fields are descended into directly, NOT gated on
+ * `getFixedCodamaTypeSize(field.type, ...)` succeeding for the field as a
+ * whole. `getFixedCodamaTypeSize` has an all-or-nothing contract for structs
+ * (any single unresolvable member — e.g. a trailing dynamic-size field —
+ * makes the WHOLE struct's size `null`), which would otherwise discard every
+ * earlier, perfectly-resolvable nested field's offset (e.g. a struct's first
+ * field `planId` is resolvable even if its last field is a dynamic string).
+ *
+ * Mutates `fieldOffsets` in place (so a partial result survives an
+ * unresolvable field further along, at any depth), and returns the offset
+ * immediately after the last field, or `null` once an unresolvable
+ * (non-struct) field is hit — the null does not erase offsets already
+ * recorded before that point.
  */
 function collectCodamaFieldOffsets(
   fields: Array<{ name: string; type: CodamaTypeNode }>,
@@ -322,19 +350,28 @@ function collectCodamaFieldOffsets(
   let offset = startOffset
   for (const field of fields) {
     const path = prefix ? `${prefix}.${field.name}` : field.name
-    const size = getFixedCodamaTypeSize(field.type, idl, depth)
-    if (size == null) return null
-    fieldOffsets[path] = offset
     const fieldType = field.type
+
+    let nestedFields: Array<{ name: string; type: CodamaTypeNode }> | null = null
     if (fieldType.kind === 'structTypeNode') {
-      collectCodamaFieldOffsets(fieldType.fields || [], idl, offset, path, fieldOffsets, depth + 1)
+      nestedFields = fieldType.fields || []
     } else if (fieldType.kind === 'definedTypeLinkNode') {
       const linkName = fieldType.name
       const typeDef = (idl.program.definedTypes || []).find((t) => t.name === linkName)
-      if (typeDef?.type?.kind === 'structTypeNode') {
-        collectCodamaFieldOffsets(typeDef.type.fields || [], idl, offset, path, fieldOffsets, depth + 1)
-      }
+      if (typeDef?.type?.kind === 'structTypeNode') nestedFields = typeDef.type.fields || []
     }
+
+    if (nestedFields) {
+      fieldOffsets[path] = offset
+      const consumed = collectCodamaFieldOffsets(nestedFields, idl, offset, path, fieldOffsets, depth + 1)
+      if (consumed == null) return null // an unresolvable field inside this struct — everything after it (including sibling top-level fields) is unknown
+      offset = consumed
+      continue
+    }
+
+    const size = getFixedCodamaTypeSize(fieldType, idl, depth)
+    if (size == null) return null
+    fieldOffsets[path] = offset
     offset += size
   }
   return offset

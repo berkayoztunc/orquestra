@@ -175,6 +175,82 @@ const nestedCodamaIdl: CodamaIDL = {
   },
 }
 
+// Same nested shape, but the nested struct's LAST field is dynamic-size
+// (a plain `string`) — mirroring a real-world account like
+// `{ owner, data: { planId, ..., metadataUri: string } }`. This is the
+// specific case that broke the first version of the BUG-2 fix: descending
+// into `data`'s fields was gated on `data`'s TOTAL size being resolvable,
+// which is `null` here because of `metadataUri` — even though `planId`
+// (the first nested field) is perfectly resolvable on its own.
+const nestedAnchorIdlWithDynamicTrailingField: AnchorIDL = {
+  version: '0.1.0',
+  name: 'plan_program_dynamic',
+  instructions: [],
+  accounts: [
+    {
+      name: 'Plan',
+      type: {
+        kind: 'struct',
+        fields: [
+          { name: 'owner', type: 'publicKey' },
+          { name: 'data', type: { defined: 'PlanData' } },
+        ],
+      },
+    },
+  ],
+  types: [
+    {
+      name: 'PlanData',
+      type: {
+        kind: 'struct',
+        fields: [
+          { name: 'planId', type: 'u64' },
+          { name: 'metadataUri', type: 'string' },
+        ],
+      },
+    },
+  ],
+  events: [],
+  errors: [],
+}
+
+const nestedCodamaIdlWithDynamicTrailingField: CodamaIDL = {
+  kind: 'rootNode',
+  standard: 'codama',
+  version: '1.0.0',
+  program: {
+    name: 'plan_program_dynamic',
+    publicKey: PROGRAM_ID,
+    version: '1.0.0',
+    instructions: [],
+    accounts: [
+      {
+        name: 'Plan',
+        data: {
+          kind: 'structTypeNode',
+          fields: [
+            { kind: 'structFieldTypeNode', name: 'owner', type: { kind: 'publicKeyTypeNode' } },
+            {
+              kind: 'structFieldTypeNode',
+              name: 'data',
+              type: {
+                kind: 'structTypeNode',
+                fields: [
+                  { kind: 'structFieldTypeNode', name: 'planId', type: { kind: 'numberTypeNode', format: 'u64' } },
+                  { kind: 'structFieldTypeNode', name: 'metadataUri', type: { kind: 'stringTypeNode' } },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+    definedTypes: [],
+    pdas: [],
+    errors: [],
+  },
+}
+
 const originalFetch = globalThis.fetch
 
 afterEach(() => {
@@ -275,6 +351,27 @@ describe('program account layout inference', () => {
     expect(layout?.fieldOffsets['data.amount']).toBe(48)
     expect(layout?.size).toBe(56)
   })
+
+  test('resolves a nested Anchor field offset even when a LATER sibling in the same nested struct is dynamic-size (BUG-2, real-world case)', () => {
+    const layout = getAnchorAccountLayout(nestedAnchorIdlWithDynamicTrailingField, 'Plan')
+    // owner (32 bytes) @8, data.planId (u64, 8 bytes) @40 — both resolvable
+    // even though data.metadataUri (a plain string) makes the account's own
+    // total size unresolvable.
+    expect(layout?.fieldOffsets.owner).toBe(8)
+    expect(layout?.fieldOffsets.data).toBe(40)
+    expect(layout?.fieldOffsets['data.planId']).toBe(40)
+    expect(layout?.fieldOffsets['data.metadataUri']).toBeUndefined()
+    expect(layout?.size).toBeNull()
+  })
+
+  test('resolves a nested Codama field offset even when a LATER sibling in the same nested struct is dynamic-size (BUG-2, real-world case)', () => {
+    const layout = getCodamaAccountLayout(nestedCodamaIdlWithDynamicTrailingField, 'Plan')
+    expect(layout?.fieldOffsets.owner).toBe(8)
+    expect(layout?.fieldOffsets.data).toBe(40)
+    expect(layout?.fieldOffsets['data.planId']).toBe(40)
+    expect(layout?.fieldOffsets['data.metadataUri']).toBeUndefined()
+    expect(layout?.size).toBeNull()
+  })
 })
 
 describe('queryProgramAccounts', () => {
@@ -363,6 +460,27 @@ describe('queryProgramAccounts', () => {
 
     const result = await queryProgramAccounts({
       idl: nestedAnchorIdl,
+      programId: PROGRAM_ID,
+      rpcUrl: 'https://rpc.example.com',
+      cluster: 'mainnet-beta',
+      input: {
+        accountType: 'Plan',
+        fieldFilters: [{ field: 'data.planId', bytes: '123' }],
+      },
+    })
+
+    expect(result.count).toBe(0)
+  })
+
+  test('applies a fieldFilters entry on a nested field even with a dynamic-size trailing sibling (BUG-2, real-world case)', async () => {
+    globalThis.fetch = mock(async (_url: string | URL | Request, init?: RequestInit) => {
+      const rpcBody = JSON.parse(init?.body as string)
+      expect(rpcBody.params[1].filters).toContainEqual({ memcmp: { offset: 40, bytes: '123' } })
+      return new Response(JSON.stringify({ result: { context: { slot: 1 }, value: [] } }))
+    }) as any
+
+    const result = await queryProgramAccounts({
+      idl: nestedAnchorIdlWithDynamicTrailingField,
       programId: PROGRAM_ID,
       rpcUrl: 'https://rpc.example.com',
       cluster: 'mainnet-beta',

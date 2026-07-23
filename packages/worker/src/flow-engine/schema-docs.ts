@@ -210,6 +210,18 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
     output: '{ ok: true }',
     example: { condition: '$quoteGuard.ok', message: 'no route found' },
   },
+  {
+    key: 'logic.find_in_array@1',
+    summary:
+      'Finds the element of `array` whose `field` matches `value` (compared as strings, so numbers/' +
+      'booleans/pubkeys all just work) and optionally extracts one field from it. Pure. Fills the gap ' +
+      'that dot-paths (fixed index only) and expressions (no loops/computed indices) leave open: picking ' +
+      '"the array element whose name matches this input" out of a decoded account\'s Vec<T> field — e.g. ' +
+      'the right entry in a store\'s product list by name, instead of assuming index 0.',
+    input: '{ array: json[] (bare $ref to an array field, e.g. $receiptsData.data.products), field: string (key to match within each element), value: string | number | boolean, select?: string (key to extract from the matched element; omit to return the whole element) }',
+    output: '{ found: boolean, index: number | null, value: json | null }',
+    example: { array: '$receiptsData.data.products', field: 'name', value: '$inputs.productName', select: 'mint' },
+  },
 ]
 
 function assertCatalogMatchesRegistry(): void {

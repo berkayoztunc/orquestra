@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAnalyticsStore } from '@/store/analytics'
 import type { DailyApiEntry, DailyMcpEntry } from '@/api/client'
+import { Card } from '@/ui/Card'
+import { Button } from '@/ui/Button'
 
 const MCP_TOOL_NAMES: Record<number, string> = {
   0: 'Search Programs',
@@ -138,23 +140,28 @@ interface StatCardProps {
   icon: ReactNode
   isLoading?: boolean
   hint?: string
+  size?: 'sm' | 'lg'
 }
 
-function StatCard({ label, value, icon, isLoading, hint }: StatCardProps) {
+function StatCard({ label, value, icon, isLoading, hint, size = 'sm' }: StatCardProps) {
   if (isLoading) {
     return (
-      <div className="border border-border-low bg-bg1 p-3">
-        <div className="h-8 w-8 bg-sand-200 motion-safe:animate-pulse" />
+      <div className={`border border-border-low bg-bg1 ${size === 'lg' ? 'p-4' : 'p-3'}`}>
+        <div className={`bg-sand-200 motion-safe:animate-pulse ${size === 'lg' ? 'h-9 w-9' : 'h-8 w-8'}`} />
         <div className="mt-3 h-2.5 w-20 bg-sand-200 motion-safe:animate-pulse" />
-        <div className="mt-2 h-6 w-16 bg-sand-200 motion-safe:animate-pulse" />
+        <div className={`mt-2 bg-sand-200 motion-safe:animate-pulse ${size === 'lg' ? 'h-8 w-24' : 'h-6 w-16'}`} />
       </div>
     )
   }
 
   return (
-    <div className="group overflow-hidden border border-border-low bg-bg1 p-3 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-0.5">
+    <div
+      className={`group overflow-hidden border border-border-low bg-bg1 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-0.5 ${size === 'lg' ? 'p-4' : 'p-3'}`}
+    >
       <div className="flex items-start justify-between gap-2">
-        <div className="flex h-8 w-8 items-center justify-center border border-border-low bg-sand-100 text-sand-1500">
+        <div
+          className={`flex items-center justify-center border border-border-low bg-sand-100 text-sand-1500 ${size === 'lg' ? 'h-9 w-9' : 'h-8 w-8'}`}
+        >
           {icon}
         </div>
         {hint && (
@@ -164,7 +171,7 @@ function StatCard({ label, value, icon, isLoading, hint }: StatCardProps) {
         )}
       </div>
       <p className="mt-3 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">{label}</p>
-      <p className="mt-1 truncate text-xl font-black tracking-tight text-sand-1600">
+      <p className={`mt-1 truncate font-black tracking-tight text-sand-1600 ${size === 'lg' ? 'text-3xl' : 'text-xl'}`}>
         {typeof value === 'number' ? value.toLocaleString() : value}
       </p>
     </div>
@@ -267,17 +274,18 @@ export default function Analytics() {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={() => {
             loadStats()
             loadAnalytics()
           }}
-          className="inline-flex min-h-9 items-center justify-center gap-2 border border-border-low bg-bg1 px-3 text-sm font-semibold text-sand-1200 transition-colors duration-150 hover:border-border-medium hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-400"
         >
           <RefreshIcon />
           Refresh
-        </button>
+        </Button>
       </section>
 
       {error && (
@@ -294,168 +302,174 @@ export default function Analytics() {
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatCard
-          label="Total users"
-          value={stats?.total_users ?? 0}
-          isLoading={isLoadingStats}
-          hint="public"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Total programs"
-          value={stats?.total_projects ?? 0}
-          isLoading={isLoadingStats}
-          hint="catalog"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Have IDL"
-          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl ?? 0, analytics?.platform.total_programs ?? 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint={analytics ? `${analytics.platform.programs_with_idl}/${analytics.platform.total_programs}` : undefined}
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Verified"
-          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.verified_programs ?? 0, analytics?.platform.total_programs ?? 0, 5)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint={analytics ? `${analytics.platform.verified_programs}/${analytics.platform.total_programs}` : undefined}
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="IDL + Verified"
-          value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl_and_verified ?? 0, analytics?.platform.total_programs ?? 0, 5)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint={analytics ? `${analytics.platform.programs_with_idl_and_verified}/${analytics.platform.total_programs}` : undefined}
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-            </svg>
-          }
-        />
-      </section>
+      <div>
+        <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">Overview</p>
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatCard
+            size="lg"
+            label="Total users"
+            value={stats?.total_users ?? 0}
+            isLoading={isLoadingStats}
+            hint="public"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            }
+          />
+          <StatCard
+            size="lg"
+            label="Total programs"
+            value={stats?.total_projects ?? 0}
+            isLoading={isLoadingStats}
+            hint="catalog"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+            }
+          />
+          <StatCard
+            size="lg"
+            label="Workflow runs"
+            value={isLoadingAnalytics ? '-' : (analytics?.platform.workflow_runs_total ?? 0)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="total"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            }
+          />
+        </section>
+      </div>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard
-          label="Programs scanned"
-          value={isLoadingAnalytics ? '-' : (analytics?.platform.total_programs ?? 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="sync queue, all-time"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="IDL versions"
-          value={isLoadingAnalytics ? '-' : (analytics?.platform.idl_versions_total ?? 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="all versions"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Verified, no IDL"
-          value={isLoadingAnalytics ? '-' : Math.max((analytics?.platform.verified_programs ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="coverage gap"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="IDL, unverified"
-          value={isLoadingAnalytics ? '-' : Math.max((analytics?.platform.programs_with_idl ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="coverage gap"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-          }
-        />
-      </section>
+      <div>
+        <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">Data coverage</p>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            label="Have IDL"
+            value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl ?? 0, analytics?.platform.total_programs ?? 0)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint={analytics ? `${analytics.platform.programs_with_idl}/${analytics.platform.total_programs}` : undefined}
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="Verified"
+            value={isLoadingAnalytics ? '-' : pct(analytics?.platform.verified_programs ?? 0, analytics?.platform.total_programs ?? 0, 5)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint={analytics ? `${analytics.platform.verified_programs}/${analytics.platform.total_programs}` : undefined}
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="IDL + Verified"
+            value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl_and_verified ?? 0, analytics?.platform.total_programs ?? 0, 5)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint={analytics ? `${analytics.platform.programs_with_idl_and_verified}/${analytics.platform.total_programs}` : undefined}
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="Programs scanned"
+            value={isLoadingAnalytics ? '-' : (analytics?.platform.total_programs ?? 0)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="sync queue, all-time"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="IDL versions"
+            value={isLoadingAnalytics ? '-' : (analytics?.platform.idl_versions_total ?? 0)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="all versions"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="Coverage gaps"
+            value={
+              isLoadingAnalytics
+                ? '-'
+                : Math.max((analytics?.platform.verified_programs ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0) +
+                  Math.max((analytics?.platform.programs_with_idl ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0)
+            }
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="verified w/o IDL + IDL unverified"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            }
+          />
+        </section>
+      </div>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatCard
-          label="Workflow runs"
-          value={isLoadingAnalytics ? '-' : (analytics?.platform.workflow_runs_total ?? 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="total"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="API today"
-          value={isLoadingAnalytics ? '-' : totals.todayApi}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="requests"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="MCP today"
-          value={isLoadingAnalytics ? '-' : totals.todayMcp}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint={`${activeTools} tools`}
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="API all-time"
-          value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.api ?? 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="since launch"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="MCP all-time"
-          value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.mcp ?? 0)}
-          isLoading={isLoadingAnalytics && !analytics}
-          hint="since launch"
-          icon={
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          }
-        />
-      </section>
+      <div>
+        <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">Traffic</p>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard
+            label="API today"
+            value={isLoadingAnalytics ? '-' : totals.todayApi}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="requests"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="MCP today"
+            value={isLoadingAnalytics ? '-' : totals.todayMcp}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint={`${activeTools} tools`}
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="API all-time"
+            value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.api ?? 0)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="since launch"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="MCP all-time"
+            value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.mcp ?? 0)}
+            isLoading={isLoadingAnalytics && !analytics}
+            hint="since launch"
+            icon={
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            }
+          />
+        </section>
+      </div>
 
       {isLoadingAnalytics && !analytics && (
         <div className="grid gap-3 lg:grid-cols-2">
@@ -467,30 +481,35 @@ export default function Analytics() {
       {analyticsReady && (
         <>
           <section className="grid gap-3 xl:grid-cols-2">
-            <div className="border border-border-low bg-bg1 p-4">
+            <Card className="p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-bold text-sand-1600">Daily API requests</h2>
                 <span className="w-fit border border-border-low bg-sand-100 px-2 py-0.5 text-[11px] font-medium text-sand-1500">
                   {totals.api30d.toLocaleString()} · 30d
                 </span>
               </div>
-              <BarChart data={dailyApiData} tone="primary" />
-            </div>
+              <BarChart data={dailyApiData} tone="primary" height={88} />
+            </Card>
 
-            <div className="border border-border-low bg-bg1 p-4">
+            <Card className="p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm font-bold text-sand-1600">Daily MCP tool calls</h2>
                 <span className="w-fit border border-border-low bg-sand-100 px-2 py-0.5 text-[11px] font-medium text-sand-1500">
                   {totals.mcp30d.toLocaleString()} · 30d
                 </span>
               </div>
-              <BarChart data={dailyMcpData} tone="secondary" />
-            </div>
+              <BarChart data={dailyMcpData} tone="secondary" height={88} />
+            </Card>
           </section>
 
           <section className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="border border-border-low bg-bg1 p-4">
-              <h2 className="mb-3 text-sm font-bold text-sand-1600">MCP tool breakdown</h2>
+            <Card className="p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-bold text-sand-1600">MCP tool breakdown</h2>
+                {toolBreakdown.length > MAX_TOOL_ROWS && (
+                  <span className="font-mono text-[11px] text-sand-1000">+{toolBreakdown.length - MAX_TOOL_ROWS} more</span>
+                )}
+              </div>
 
               {toolBreakdown.length > 0 ? (
                 <div className="space-y-1.5">
@@ -513,9 +532,9 @@ export default function Analytics() {
               ) : (
                 <EmptyState title="No MCP calls yet" desc="Connect an AI agent through MCP to populate tool demand." />
               )}
-            </div>
+            </Card>
 
-            <div className="border border-border-low bg-bg1 p-4">
+            <Card className="p-4">
               <h2 className="mb-3 text-sm font-bold text-sand-1600">Top programs</h2>
 
               {analytics.top_programs.length > 0 ? (
@@ -559,7 +578,7 @@ export default function Analytics() {
               ) : (
                 <EmptyState title="No program traffic yet" desc="Programs with API usage will rank here automatically." />
               )}
-            </div>
+            </Card>
           </section>
         </>
       )}

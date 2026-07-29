@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search, X, Workflow } from 'lucide-react'
 import { listFlows, type FlowSummary } from '../api/client'
 import { Badge } from '@/ui/Badge'
@@ -18,7 +19,8 @@ export default function Flows(): JSX.Element {
   const [flows, setFlows] = useState<FlowSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
   const [intentFilter, setIntentFilter] = useState<string>('')
   const [protocolFilter, setProtocolFilter] = useState<string>('')
 
@@ -52,7 +54,7 @@ export default function Flows(): JSX.Element {
       if (intentFilter && flow.intent !== intentFilter) return false
       if (protocolFilter && flow.protocol !== protocolFilter) return false
       if (!q) return true
-      const haystack = [flow.slug, flow.meta.name, flow.meta.description, flow.intent, flow.protocol]
+      const haystack = [flow.slug, flow.meta.name, flow.meta.description, flow.intent, flow.protocol, ...(flow.meta.programs ?? [])]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()

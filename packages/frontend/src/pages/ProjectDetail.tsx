@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, Activity, Calendar, CheckCircle2, Clipboard, Clock3, Coins, FileJson, GitBranch, Globe2, Loader2, LockKeyhole, Share2, Sparkles, UploadCloud, Users } from 'lucide-react'
+import { ArrowLeftRight, ArrowUpRight, Activity, Calendar, CheckCircle2, Clipboard, Clock3, Coins, FileJson, GitBranch, Globe2, Loader2, LockKeyhole, Plug, Share2, Sparkles, UploadCloud, Users, Workflow } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore } from '../store/projects'
@@ -28,13 +28,17 @@ import {
   deleteProject,
   listPdaAccounts,
   getProgramMetrics,
+  listFlows,
   type ProgramMetrics,
+  type FlowSummary,
 } from '../api/client'
 import InstructionExplorer from '../components/InstructionExplorer'
 import PDAExplorer from '../components/PDAExplorer'
 import AccountDataViewer from '../components/AccountDataViewer'
 import ProgramDataQuery from '../components/ProgramDataQuery'
 import ExternalApisPanel from '../components/ExternalApisPanel'
+
+const MCP_SERVER_URL = 'https://api.orquestra.dev/mcp'
 
 type Tab = 'instructions' | 'accounts' | 'errors' | 'events' | 'pda' | 'live' | 'programData' | 'docs' | 'addresses' | 'externalApis' | 'settings'
 
@@ -45,6 +49,8 @@ export default function ProjectDetail(): JSX.Element {
   const { showToast } = useToast()
 
   const [activeTab, setActiveTab] = useState<Tab>('instructions')
+  const [flows, setFlows] = useState<FlowSummary[]>([])
+  const [flowsLoading, setFlowsLoading] = useState(true)
   const [instructions, setInstructions] = useState<any>(null)
   const [accounts, setAccounts] = useState<any>(null)
   const [errors, setErrors] = useState<any>(null)
@@ -234,6 +240,28 @@ export default function ProjectDetail(): JSX.Element {
 
     loadTabData()
   }, [activeTab, projectId, selectedProject])
+
+  // Published Flow Engine recipes targeting this program. The catalog query is a
+  // substring match, so re-filter strictly on meta.programs to avoid loose hits.
+  useEffect(() => {
+    if (!programId) return
+    let cancelled = false
+    setFlowsLoading(true)
+    listFlows({ q: programId })
+      .then((result) => {
+        if (cancelled) return
+        setFlows(result.filter((f) => (f.meta.programs ?? []).includes(programId)))
+      })
+      .catch(() => {
+        if (!cancelled) setFlows([])
+      })
+      .finally(() => {
+        if (!cancelled) setFlowsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [programId])
 
   if (isLoading) {
     return (
@@ -1657,6 +1685,127 @@ export default function ProjectDetail(): JSX.Element {
           </>
         )}
       </div>
+
+      {/* Flows — published Flow Engine recipes for this program */}
+      {!flowsLoading && flows.length > 0 && (
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-sand-1600 flex items-center gap-2">
+                <Workflow className="h-4 w-4 text-sand-1400" />
+                Flows
+              </h2>
+              <p className="text-sand-1200 text-sm mt-1">
+                Published Flow Engine recipes for this program — minimal-input transaction builders you
+                can run over MCP.
+              </p>
+            </div>
+            <Link
+              to={`/flows?q=${encodeURIComponent(programId ?? '')}`}
+              className="text-sm text-sand-1200 hover:text-sand-1600 inline-flex items-center gap-1.5 transition"
+            >
+              View in catalog
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {flows.map((flow) => (
+              <div key={flow.slug} className="card-static flex flex-col gap-3 p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center border border-border-low bg-sand-100 text-sand-1400">
+                    <Workflow className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold text-sand-1600">{flow.meta.name}</h3>
+                    <p className="truncate font-mono text-xs text-sand-1000">{flow.slug}</p>
+                  </div>
+                </div>
+
+                <p className="line-clamp-2 text-sm leading-relaxed text-sand-1200">
+                  {flow.meta.description || 'No description provided for this flow.'}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="border border-sand-1600/20 bg-sand-1600 px-2 py-0.5 font-mono uppercase tracking-[0.1em] text-bg1">
+                    {flow.intent}
+                  </span>
+                  {flow.protocol && (
+                    <span className="border border-border-low bg-sand-100 px-2 py-0.5 font-mono uppercase tracking-[0.1em] text-sand-1200">
+                      {flow.protocol}
+                    </span>
+                  )}
+                  <span className="border border-border-low bg-sand-50 px-2 py-0.5 font-mono uppercase tracking-[0.1em] text-sand-1100">
+                    {flow.tier}
+                  </span>
+                </div>
+
+                <div className="mt-auto flex items-center justify-between gap-3 border-t border-border-low pt-3 text-xs text-sand-1100">
+                  <span className="flex-shrink-0">
+                    {Object.keys(flow.inputs).length} input{Object.keys(flow.inputs).length !== 1 ? 's' : ''}
+                  </span>
+                  <span className="truncate font-mono">{Object.keys(flow.inputs).join(', ') || '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* How to add MCP */}
+      <section className="mt-12 border border-sand-1600/20 bg-sand-100">
+        <div className="border-b border-sand-1600/15 bg-sand-1600 px-6 py-4 flex items-center gap-3">
+          <Plug className="h-4 w-4 text-bg1" />
+          <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-bg1">How to add MCP</h2>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <p className="text-sand-1200 text-sm max-w-2xl">
+            Any MCP-compatible AI tool (Claude Code, Claude Desktop, Cursor, VS Code) can talk to
+            Orquestra. Add one server with the URL and transport type below — no install, no keys.
+          </p>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="bg-bg1 border border-border-low p-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100 mb-2">Server URL</p>
+              <div className="flex items-center gap-3">
+                <code className="text-sm font-mono text-sand-1600 break-all">{MCP_SERVER_URL}</code>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(MCP_SERVER_URL)
+                    showToast('MCP URL copied', 'success')
+                  }}
+                  className="ml-auto inline-flex items-center gap-1.5 border border-border-low px-2.5 py-1.5 text-xs text-sand-1200 hover:border-border-medium hover:text-sand-1600 transition flex-shrink-0"
+                  title="Copy MCP server URL"
+                >
+                  <Clipboard className="h-3.5 w-3.5" />
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-bg1 border border-border-low p-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100 mb-2">Transport type</p>
+              <p className="text-sm font-mono text-sand-1600 mb-1">http</p>
+              <p className="text-sand-1200 text-xs">
+                Streamable HTTP — remote server, nothing runs locally. If your client asks for a
+                transport, pick <span className="font-mono text-sand-1600">http</span> (some clients
+                label it "streamable HTTP" or "remote").
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <Link to="/docs/mcp" className="btn-primary text-sm px-5 py-2 inline-flex items-center gap-2">
+              MCP setup docs
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+            <span className="text-sand-1100 text-xs">
+              Per-client config for Claude Code, Claude Desktop, Cursor and VS Code.
+            </span>
+          </div>
+        </div>
+      </section>
 
       {/* Generic Confirm Modal */}
       {confirmModal?.show && (

@@ -25,6 +25,7 @@ type Env = {
     OSEC_DISCOVER_WORKFLOW: any
     VERIFIED_MATCH_WORKFLOW: any
     VERIFIED_IDL_IMPORT_WORKFLOW: any
+    FLOW_BUILDER_AGENT_WORKFLOW: any
   }
 }
 
@@ -671,6 +672,30 @@ app.post('/sync/trigger-verified-analysis', ingestKeyMiddleware, async (c) => {
       instanceId: instance.id,
       force,
       message: `VerifiedAnalysisWorkflow started (force=${force})`,
+    })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-flow-builder
+ *
+ * Triggers FlowBuilderAgentWorkflow on demand (normally runs daily at 06:00
+ * UTC) — drafts/optimizes flows for verified programs and proposes them over
+ * Telegram. Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-flow-builder', ingestKeyMiddleware, async (c) => {
+  const workflow = c.env?.FLOW_BUILDER_AGENT_WORKFLOW
+  if (!workflow) return c.json({ error: 'FLOW_BUILDER_AGENT_WORKFLOW binding not available' }, 500)
+
+  try {
+    const instance = await workflow.create({ params: { trigger: 'admin' } })
+    await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
+    return c.json({
+      triggered: true,
+      instanceId: instance.id,
+      message: 'FlowBuilderAgentWorkflow started',
     })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)

@@ -15,8 +15,9 @@ import type { NodeContext } from '../flow-engine/types'
 import { resolveSolanaRpcUrl } from '../utils/solana-rpc'
 import { publishFlowVersion } from '../services/flow-publisher'
 import { cachePlan } from '../services/flow-estimator'
-import { getAttempt, getDraft, transitionOutcome } from '../services/flow-builder-log'
-import { editProposalMessage, answerCallbackQuery } from '../services/telegram'
+import { getAttempt, getDraft, transitionOutcome, getRecentAttemptsSummary, getPendingAttempts } from '../services/flow-builder-log'
+import { editProposalMessage, answerCallbackQuery, sendText, escapeMd } from '../services/telegram'
+import { recordWorkflowInstance } from '../services/workflow-registry'
 import { verifyIngestKey } from '../middleware/auth'
 
 registerAllNodes()
@@ -28,6 +29,7 @@ type Bindings = {
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
   TELEGRAM_WEBHOOK_SECRET?: string
+  FLOW_BUILDER_AGENT_WORKFLOW?: { create(opts: { params: Record<string, unknown> }): Promise<{ id: string }> }
   SOLANA_RPC_URL?: string
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_FALLBACK_RPC_URLS?: string
@@ -125,6 +127,70 @@ async function handleApprove(c: Context<{ Bindings: Bindings }>, attemptId: stri
   }
 }
 
+const HELP_TEXT = [
+  '🤖 *Flow Builder Agent*',
+  '',
+  '/status \\- activity in the last 24h',
+  '/pending \\- proposals awaiting approve/reject',
+  '/trigger \\- run the agent now',
+  '/help \\- this message',
+].join('\n')
+
+async function handleStatus(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const summary = await getRecentAttemptsSummary(c.env.DB, 24)
+  const lines = [
+    escapeMd(`📊 Last ${summary.windowHours}h`),
+    '',
+    ...Object.entries(summary.counts).map(([outcome, n]) => escapeMd(`${outcome}: ${n}`)),
+    Object.keys(summary.counts).length === 0 ? escapeMd('no attempts yet') : '',
+    '',
+    escapeMd(`Est. cost: $${summary.totalCostUsd.toFixed(4)}`),
+  ].filter(Boolean)
+  await sendText(c.env, chatId, lines.join('\n'))
+}
+
+async function handlePending(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const pending = await getPendingAttempts(c.env.DB, 10)
+  if (pending.length === 0) {
+    await sendText(c.env, chatId, escapeMd('No proposals awaiting approval.'))
+    return
+  }
+  const lines = [escapeMd(`⏳ ${pending.length} pending:`), '']
+  for (const p of pending) {
+    lines.push(escapeMd(`${p.project_name ?? p.program_id} — attempt ${p.id} (${p.created_at})`))
+  }
+  await sendText(c.env, chatId, lines.join('\n'))
+}
+
+async function handleTrigger(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const workflow = c.env.FLOW_BUILDER_AGENT_WORKFLOW
+  if (!workflow) {
+    await sendText(c.env, chatId, escapeMd('FLOW_BUILDER_AGENT_WORKFLOW binding not available.'))
+    return
+  }
+  const instance = await workflow.create({ params: { trigger: 'admin' } })
+  await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
+  await sendText(c.env, chatId, escapeMd(`🚀 Started — instance ${instance.id}`))
+}
+
+async function handleCommand(c: Context<{ Bindings: Bindings }>, chatId: string, text: string): Promise<void> {
+  const command = text.trim().split(/\s+/)[0].split('@')[0]
+  switch (command) {
+    case '/status':
+      return handleStatus(c, chatId)
+    case '/pending':
+      return handlePending(c, chatId)
+    case '/trigger':
+      return handleTrigger(c, chatId)
+    case '/start':
+    case '/help':
+      await sendText(c.env, chatId, HELP_TEXT)
+      return
+    default:
+      return
+  }
+}
+
 app.post('/webhook', async (c) => {
   const secretHeader = c.req.header('X-Telegram-Bot-Api-Secret-Token')
   if (!verifyIngestKey(secretHeader, c.env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -133,29 +199,38 @@ app.post('/webhook', async (c) => {
 
   const body = await c.req.json().catch(() => null)
   const callbackQuery = body?.callback_query as TelegramCallbackQuery | undefined
+  const message = body?.message as { text?: string; chat?: { id: number } } | undefined
 
-  // Only callback_query updates matter here; everything else (plain messages,
-  // edited_message, etc.) gets a bare 200 so Telegram doesn't retry.
-  if (!callbackQuery?.data) {
-    return c.json({ ok: true })
-  }
+  // Admin-only surface — every command and every callback is restricted to
+  // the configured TELEGRAM_CHAT_ID, regardless of who messages the bot.
+  const senderChatId = String(callbackQuery?.message?.chat.id ?? message?.chat?.id ?? '')
+  const isAdmin = Boolean(c.env.TELEGRAM_CHAT_ID) && senderChatId === c.env.TELEGRAM_CHAT_ID
 
-  const [action, attemptId] = callbackQuery.data.split(':')
-  if (!attemptId || (action !== 'flow_approve' && action !== 'flow_reject')) {
-    return c.json({ ok: true })
-  }
-
-  try {
-    if (action === 'flow_approve') {
-      await handleApprove(c, attemptId)
-    } else {
-      await handleReject(c, attemptId)
+  if (callbackQuery?.data) {
+    const [action, attemptId] = callbackQuery.data.split(':')
+    if (attemptId && (action === 'flow_approve' || action === 'flow_reject') && isAdmin) {
+      try {
+        if (action === 'flow_approve') {
+          await handleApprove(c, attemptId)
+        } else {
+          await handleReject(c, attemptId)
+        }
+      } catch (err) {
+        console.error('[telegram-webhook] callback handling failed:', err)
+      }
     }
-  } catch (err) {
-    console.error('[telegram-webhook] callback handling failed:', err)
+    await answerCallbackQuery(c.env, { callbackQueryId: callbackQuery.id })
+    return c.json({ ok: true })
   }
 
-  await answerCallbackQuery(c.env, { callbackQueryId: callbackQuery.id })
+  if (message?.text?.startsWith('/') && isAdmin) {
+    try {
+      await handleCommand(c, senderChatId, message.text)
+    } catch (err) {
+      console.error('[telegram-webhook] command handling failed:', err)
+    }
+  }
+
   return c.json({ ok: true })
 })
 

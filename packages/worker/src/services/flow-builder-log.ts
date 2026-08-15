@@ -190,6 +190,52 @@ export async function getDraft(db: D1Database, attemptId: string): Promise<Draft
   return db.prepare(`SELECT * FROM flow_builder_drafts WHERE attempt_id = ?`).bind(attemptId).first<DraftRow>()
 }
 
+export interface AttemptsSummary {
+  windowHours: number
+  counts: Record<string, number>
+  totalCostUsd: number
+}
+
+/** Powers the Telegram /status command and the (future) daily digest. */
+export async function getRecentAttemptsSummary(db: D1Database, windowHours = 24): Promise<AttemptsSummary> {
+  const { results } = await db
+    .prepare(
+      `SELECT outcome, COUNT(*) AS n, COALESCE(SUM(usd_estimated), 0) AS cost
+       FROM flow_builder_attempts
+       WHERE created_at > datetime('now', ?)
+       GROUP BY outcome`,
+    )
+    .bind(`-${windowHours} hours`)
+    .all<{ outcome: string; n: number; cost: number }>()
+
+  const counts: Record<string, number> = {}
+  let totalCostUsd = 0
+  for (const row of results ?? []) {
+    counts[row.outcome] = row.n
+    totalCostUsd += row.cost ?? 0
+  }
+  return { windowHours, counts, totalCostUsd }
+}
+
+export interface PendingAttemptRow {
+  id: string
+  program_id: string
+  project_name: string | null
+  created_at: string
+}
+
+/** Attempts still awaiting a Telegram approve/reject tap. */
+export async function getPendingAttempts(db: D1Database, limit = 10): Promise<PendingAttemptRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, program_id, project_name, created_at FROM flow_builder_attempts
+       WHERE outcome = 'proposed' ORDER BY created_at DESC LIMIT ?`,
+    )
+    .bind(limit)
+    .all<PendingAttemptRow>()
+  return results ?? []
+}
+
 /**
  * Guard-transitions an attempt's outcome, only if it's still in `fromOutcome`
  * — makes the Telegram callback handler idempotent against duplicate webhook

@@ -148,4 +148,21 @@ export async function answerCallbackQuery(
   })
 }
 
+/** Plain text send — for admin command replies (/status, /pending, /help, /trigger). */
+export async function sendText(env: TelegramEnv, chatId: string, text: string): Promise<void> {
+  await callTelegram(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'MarkdownV2' })
+}
+
+/** Registers the bot's command menu (Telegram's "/" autocomplete list). Call once, not per-request. */
+export async function setBotCommands(env: TelegramEnv): Promise<void> {
+  await callTelegram(env, 'setMyCommands', {
+    commands: [
+      { command: 'status', description: 'Flow builder activity in the last 24h' },
+      { command: 'pending', description: 'Proposals awaiting approve/reject' },
+      { command: 'trigger', description: 'Run the flow builder agent now' },
+      { command: 'help', description: 'List available commands' },
+    ],
+  })
+}
+
 export { escapeMd }

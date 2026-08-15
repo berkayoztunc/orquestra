@@ -1,8 +1,14 @@
 import { describe, test, expect } from 'bun:test'
 import { classifyParams } from '../src/services/flow-builder-log'
-import { estimateCost } from '../src/services/flow-builder-generator'
+import { estimateCost } from '../src/services/flow-builder-cost'
 import { buildProposalMessage } from '../src/services/telegram'
+import { buildSyntheticInputs, SIMULATION_WALLET } from '../src/services/flow-simulation-inputs'
 import type { FlowDocument } from '../src/flow-engine/fdl-schema'
+
+// Literal rather than imported from flow-author-agent.ts: that module pulls in
+// the Agents SDK, which requires `cloudflare:email` and cannot load under the
+// bun test runtime.
+const MODEL = '@cf/moonshotai/kimi-k2.7-code'
 
 function baseDoc(nodes: FlowDocument['nodes'], inputs: FlowDocument['inputs'] = {}): FlowDocument {
   return {
@@ -50,16 +56,61 @@ describe('classifyParams', () => {
 
 describe('estimateCost', () => {
   test('scales with prompt and completion tokens independently', () => {
-    const promptOnly = estimateCost(1000, 0)
-    const completionOnly = estimateCost(0, 1000)
+    const promptOnly = estimateCost(MODEL, 1000, 0)
+    const completionOnly = estimateCost(MODEL, 0, 1000)
     expect(promptOnly.neurons).toBeGreaterThan(0)
     expect(completionOnly.neurons).toBeGreaterThan(promptOnly.neurons) // output tokens cost more per-token
-    expect(estimateCost(0, 0).neurons).toBe(0)
+    expect(estimateCost(MODEL, 0, 0).neurons).toBe(0)
   })
 
   test('usd is proportional to neurons at $0.011/1000', () => {
-    const { neurons, usd } = estimateCost(10_000, 10_000)
+    const { neurons, usd } = estimateCost(MODEL, 10_000, 10_000)
     expect(usd).toBeCloseTo((neurons * 0.011) / 1000, 10)
+  })
+
+  test('kimi is priced well above the llama fallback for the same tokens', () => {
+    // Guards the reason this module exists: reusing llama rates for kimi
+    // silently misreported every logged cost.
+    const kimi = estimateCost('@cf/moonshotai/kimi-k2.7-code', 100_000, 10_000)
+    const llama = estimateCost('@cf/meta/llama-3.3-70b-instruct-fp8-fast', 100_000, 10_000)
+    expect(kimi.usd).toBeGreaterThan(llama.usd)
+  })
+
+  test('unknown model falls back rather than returning zero', () => {
+    const unknown = estimateCost('@cf/some/model-that-does-not-exist', 10_000, 1_000)
+    expect(unknown.usd).toBeGreaterThan(0)
+  })
+})
+
+describe('buildSyntheticInputs', () => {
+  test('uses the real funded simulation wallet for pubkey inputs', () => {
+    const inputs = buildSyntheticInputs({ wallet: { type: 'pubkey' } })
+    expect(inputs.wallet).toBe(SIMULATION_WALLET)
+    // The old System Program placeholder owns no ATAs and no SOL, which made
+    // every simulation fail on the wallet rather than on the flow.
+    expect(inputs.wallet).not.toBe('11111111111111111111111111111111')
+  })
+
+  test('a declared default always wins over the generated value', () => {
+    const inputs = buildSyntheticInputs({
+      slippageBps: { type: 'bps', default: 300 },
+      wallet: { type: 'pubkey', default: 'SoMeOtherWallet1111111111111111111111111111' },
+    })
+    expect(inputs.slippageBps).toBe(300)
+    expect(inputs.wallet).toBe('SoMeOtherWallet1111111111111111111111111111')
+  })
+
+  test('fills each declared type with a usable value', () => {
+    const inputs = buildSyntheticInputs({
+      amount: { type: 'u64' },
+      flag: { type: 'bool' },
+      memo: { type: 'string' },
+      bps: { type: 'bps' },
+    })
+    expect(inputs.amount).toBe(1)
+    expect(inputs.flag).toBe(true)
+    expect(inputs.memo).toBe('test')
+    expect(inputs.bps).toBe(50)
   })
 })
 

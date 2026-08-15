@@ -13,6 +13,7 @@ import { run } from '../flow-engine/interpreter'
 import type { FlowDocument } from '../flow-engine/fdl-schema'
 import type { NodeContext } from '../flow-engine/types'
 import { resolveSolanaRpcUrl } from '../utils/solana-rpc'
+import { buildSyntheticInputs } from '../services/flow-simulation-inputs'
 import { publishFlowVersion } from '../services/flow-publisher'
 import { cachePlan } from '../services/flow-estimator'
 import { getAttempt, getDraft, transitionOutcome, getRecentAttemptsSummary, getPendingAttempts } from '../services/flow-builder-log'
@@ -93,18 +94,10 @@ async function handleApprove(c: Context<{ Bindings: Bindings }>, attemptId: stri
 
   const { rpcUrl } = resolveSolanaRpcUrl({ network: 'mainnet-beta', env: c.env })
   const nodeCtx: NodeContext = { db: c.env.DB, cache: c.env.CACHE, idls: c.env.IDLS, rpcUrl }
-  // Synthetic inputs only re-exercise the resolvable/structural path here —
-  // same caveat as the workflow's original simulation (see
-  // flow-builder-agent-workflow.ts header comment).
-  const syntheticInputs: Record<string, unknown> = {}
-  for (const [key, spec] of Object.entries(compiled.plan.inputs)) {
-    if (spec.default !== undefined) syntheticInputs[key] = spec.default
-    else if (spec.type === 'pubkey') syntheticInputs[key] = '11111111111111111111111111111111'
-    else if (spec.type === 'bool') syntheticInputs[key] = true
-    else if (spec.type === 'string') syntheticInputs[key] = 'test'
-    else syntheticInputs[key] = 1
-  }
-  const simResult = await run(compiled.plan, syntheticInputs, nodeCtx)
+  // Same synthetic inputs the agent and workflow simulate with, so a draft that
+  // passed there cannot fail here purely because the three call sites disagreed
+  // on what to fill in (they used to).
+  const simResult = await run(compiled.plan, buildSyntheticInputs(compiled.plan.inputs), nodeCtx)
   if (!simResult.ok) {
     const errorDetail = `${simResult.error.nodeId ?? '(top-level)'}: ${simResult.error.message}`
     await transitionOutcome(c.env.DB, attemptId, 'approved', 'publish_failed', { errorDetail })

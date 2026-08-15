@@ -23,9 +23,9 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { registerAllNodes } from '../flow-engine'
 import { run } from '../flow-engine/interpreter'
 import type { NodeContext } from '../flow-engine/types'
-import type { FlowInputSpec } from '../flow-engine/fdl-schema'
+import { buildSyntheticInputs } from '../services/flow-simulation-inputs'
 import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
-import { estimateCost } from '../services/flow-builder-generator'
+import { estimateCost } from '../services/flow-builder-cost'
 import { FLOW_AUTHOR_MODEL, type FlowAuthorAgent, type DraftFlowOutcome } from '../agents/flow-author-agent'
 import { classifyParams, recordAttempt, setTelegramMessage } from '../services/flow-builder-log'
 import { sendFlowProposal } from '../services/telegram'
@@ -61,43 +61,6 @@ type CandidateRow = {
   program_id: string
   version_id: string
   existing_flow_id: string | null
-}
-
-/** Known-valid placeholder pubkey (System Program) — never a real user wallet. */
-const PLACEHOLDER_PUBKEY = '11111111111111111111111111111111'
-
-function buildSyntheticInputs(inputSpecs: Record<string, FlowInputSpec>): Record<string, unknown> {
-  const inputs: Record<string, unknown> = {}
-  for (const [key, spec] of Object.entries(inputSpecs)) {
-    if (spec.default !== undefined) {
-      inputs[key] = spec.default
-      continue
-    }
-    switch (spec.type) {
-      case 'pubkey':
-        inputs[key] = PLACEHOLDER_PUBKEY
-        break
-      case 'u64':
-      case 'u32':
-      case 'u16':
-      case 'u8':
-      case 'i64':
-      case 'i32':
-        inputs[key] = 1
-        break
-      case 'bps':
-        inputs[key] = 50
-        break
-      case 'bool':
-        inputs[key] = true
-        break
-      case 'string':
-      default:
-        inputs[key] = 'test'
-        break
-    }
-  }
-  return inputs
 }
 
 /** Best-effort extraction of the target instruction name for the Telegram message. */
@@ -235,14 +198,17 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
             // immediately below.
             const authorAgent = (await getAgentByName(this.env.FLOW_AUTHOR_AGENT, c.program_id)) as any
             const outcome: DraftFlowOutcome = await authorAgent.draftFlow({
+              // projectId is REQUIRED — `orquestra.build_instruction@1` takes a
+              // project UUID, not a program address. Without it the agent has
+              // to guess and can never emit a valid build node.
+              projectId: c.id,
               programId: c.program_id,
               projectName: c.name,
-              idlJson: versionRow.idl_json,
               cpiMd: versionRow.cpi_md,
               existingFlow: existingFlowCtx,
             })
 
-            const { neurons, usd } = estimateCost(outcome.usage.promptTokens, outcome.usage.completionTokens)
+            const { neurons, usd } = estimateCost(FLOW_AUTHOR_MODEL, outcome.usage.promptTokens, outcome.usage.completionTokens)
             const baseAttempt = {
               programId: c.program_id,
               projectId: c.id,
@@ -271,7 +237,12 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
               await recordAttempt(
                 this.env.DB,
                 baseAttempt,
-                { outcome: 'compile_failed', errorDetail: `agent did not finalize within ${outcome.steps} steps` },
+                {
+                  outcome: 'compile_failed',
+                  errorDetail: outcome.errors?.length
+                    ? `finalized FDL did not compile: ${outcome.errors.join('; ')}`
+                    : `agent did not finalize within ${outcome.steps} steps`,
+                },
                 { rawAiResponse: outcome.transcript },
               )
               failed++

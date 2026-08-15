@@ -17,6 +17,7 @@
  */
 
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
+import { getAgentByName } from 'agents'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 
 import { registerAllNodes } from '../flow-engine'
@@ -24,7 +25,8 @@ import { run } from '../flow-engine/interpreter'
 import type { NodeContext } from '../flow-engine/types'
 import type { FlowInputSpec } from '../flow-engine/fdl-schema'
 import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
-import { generateFlow, estimateCost, DEFAULT_FLOW_BUILDER_MODEL } from '../services/flow-builder-generator'
+import { estimateCost } from '../services/flow-builder-generator'
+import { FLOW_AUTHOR_MODEL, type FlowAuthorAgent, type DraftFlowOutcome } from '../agents/flow-author-agent'
 import { classifyParams, recordAttempt, setTelegramMessage } from '../services/flow-builder-log'
 import { sendFlowProposal } from '../services/telegram'
 import { recordWorkflowInstance } from '../services/workflow-registry'
@@ -44,6 +46,7 @@ type Env = SolanaRpcEnv & {
   IDLS: KVNamespace
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
+  FLOW_AUTHOR_AGENT: DurableObjectNamespace<FlowAuthorAgent>
 }
 
 type Params = {
@@ -221,15 +224,22 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
 
             const reason: 'no_flow' | 'optimization_candidate' = existingFlowCtx ? 'optimization_candidate' : 'no_flow'
 
-            const outcome = await generateFlow({
-              ai: this.env.AI,
-              ctx: {
-                programId: c.program_id,
-                projectName: c.name,
-                idlJson: versionRow.idl_json,
-                cpiMd: versionRow.cpi_md,
-                existingFlow: existingFlowCtx,
-              },
+            // The agentic loop (search catalog, validate, simulate, iterate) —
+            // one Durable Object instance per program, real Cloudflare Agents
+            // SDK tool-calling via ai-sdk's stopWhen/hasToolCall, not a
+            // fixed generate→repair sequence.
+            // Cast through `any` on the RPC call itself — the DO stub's
+            // structural RPC typing over a discriminated-union return blows
+            // past TS's instantiation-depth limit (TS2589); the real
+            // `DraftFlowOutcome` type from flow-author-agent.ts is restored
+            // immediately below.
+            const authorAgent = (await getAgentByName(this.env.FLOW_AUTHOR_AGENT, c.program_id)) as any
+            const outcome: DraftFlowOutcome = await authorAgent.draftFlow({
+              programId: c.program_id,
+              projectName: c.name,
+              idlJson: versionRow.idl_json,
+              cpiMd: versionRow.cpi_md,
+              existingFlow: existingFlowCtx,
             })
 
             const { neurons, usd } = estimateCost(outcome.usage.promptTokens, outcome.usage.completionTokens)
@@ -242,27 +252,27 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
               priorFlowId,
               priorInputCount: existingFlowCtx?.inputCount ?? null,
               priorRpcCalls: existingFlowCtx?.rpcCalls ?? null,
-              model: DEFAULT_FLOW_BUILDER_MODEL,
+              model: FLOW_AUTHOR_MODEL,
               promptTokens: outcome.usage.promptTokens,
               completionTokens: outcome.usage.completionTokens,
               neuronsEstimated: neurons,
               usdEstimated: usd,
-              attemptRounds: outcome.rounds,
+              attemptRounds: outcome.steps,
               workflowInstanceId: event.instanceId,
             }
 
             if (outcome.kind === 'skip') {
-              await recordAttempt(this.env.DB, baseAttempt, { outcome: 'skipped_no_improvement' })
+              await recordAttempt(this.env.DB, baseAttempt, { outcome: 'skipped_no_improvement' }, { rawAiResponse: outcome.transcript })
               skipped++
               return
             }
 
-            if (outcome.kind === 'compile_failed') {
+            if (outcome.kind === 'no_finalize') {
               await recordAttempt(
                 this.env.DB,
                 baseAttempt,
-                { outcome: 'compile_failed', errorDetail: outcome.errors.join('; ') },
-                { rawAiResponse: outcome.lastDraftRaw },
+                { outcome: 'compile_failed', errorDetail: `agent did not finalize within ${outcome.steps} steps` },
+                { rawAiResponse: outcome.transcript },
               )
               failed++
               return
@@ -289,7 +299,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
                   rationale: outcome.rationale,
                   errorDetail: `${simResult.error.nodeId ?? '(top-level)'}: ${simResult.error.message}`,
                 },
-                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.rawResponse },
+                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript },
               )
               failed++
               return
@@ -311,7 +321,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
                   newRpcCalls,
                   rationale: outcome.rationale,
                 },
-                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.rawResponse },
+                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript },
               )
               skipped++
               return
@@ -327,7 +337,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
                 newRpcCalls,
                 rationale: outcome.rationale,
               },
-              { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.rawResponse },
+              { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript },
             )
 
             const paramCounts = classifyParams(outcome.doc)
@@ -347,7 +357,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
               priorInputCount: existingFlowCtx?.inputCount ?? null,
               priorRpcCalls: existingFlowCtx?.rpcCalls ?? null,
               simulationSummary: `OK, ${newRpcCalls} RPC calls`,
-              model: DEFAULT_FLOW_BUILDER_MODEL,
+              model: FLOW_AUTHOR_MODEL,
               neuronsEstimated: neurons,
               usdEstimated: usd,
             })

@@ -38,6 +38,17 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 [ai]
 binding = "AI"
 
+# FlowAuthorAgent — Cloudflare Agents SDK Durable Object, the agentic
+# tool-calling loop behind FlowBuilderAgentWorkflow (packages/worker/src/agents/flow-author-agent.ts)
+[durable_objects]
+bindings = [
+  { name = "FLOW_AUTHOR_AGENT", class_name = "FlowAuthorAgent" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FlowAuthorAgent"]
+
 # 15 * * * * / 0 2 * * *  → candidates import workflow
 # 0 5 * * 6               → weekly full IDL sweep (recheck entire candidate pool)
 # 45 * * * *              → pipeline health check + auto-remediation
@@ -156,6 +167,11 @@ id = "00550acbdd544169b8af0e5eb7a34bdd"
 
 [env.production.ai]
 binding = "AI"
+
+[env.production.durable_objects]
+bindings = [
+  { name = "FLOW_AUTHOR_AGENT", class_name = "FlowAuthorAgent" }
+]
 
 [env.production.triggers]
 crons = ["15 * * * *", "0 2 * * *", "0 5 * * 6", "45 * * * *"]

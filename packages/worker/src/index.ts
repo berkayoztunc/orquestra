@@ -22,6 +22,7 @@ export { OsecDiscoverWorkflow } from './workflows/osec-discover-workflow'
 export { VerifiedMatchWorkflow } from './workflows/verified-match-workflow'
 export { VerifiedIdlImportWorkflow } from './workflows/verified-idl-import-workflow'
 export { FlowBuilderAgentWorkflow } from './workflows/flow-builder-agent-workflow'
+export { FlowAuthorAgent } from './agents/flow-author-agent'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -78,6 +79,7 @@ type Env = {
     CANDIDATES_IMPORT_WORKFLOW: any
     CHAIN_DISCOVERY_WORKFLOW: any
     FLOW_BUILDER_AGENT_WORKFLOW: any
+    FLOW_AUTHOR_AGENT: any
     TELEGRAM_BOT_TOKEN?: string
     TELEGRAM_CHAT_ID?: string
     TELEGRAM_WEBHOOK_SECRET?: string

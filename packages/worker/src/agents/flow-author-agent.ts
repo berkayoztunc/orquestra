@@ -36,7 +36,7 @@ import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
 registerAllNodes()
 
 export const FLOW_AUTHOR_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast'
-const MAX_STEPS = 8
+const MAX_STEPS = 10
 const MAX_SIMULATIONS_PER_DRAFT = 2
 
 type Env = SolanaRpcEnv & {
@@ -117,21 +117,32 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
       skipped: null,
     }
 
+    let searchFlowsUsed = 0
+    let searchProgramsUsed = 0
+
     const tools = {
       search_similar_flows: tool({
-        description: 'Search the published flow catalog for prior art — flows for similar protocols/intents you can borrow node patterns from.',
+        description: 'Search the published flow catalog for prior art. Call AT MOST ONCE — after that, move on to drafting regardless of what you find.',
         inputSchema: z.object({ query: z.string().optional(), intent: z.string().optional(), protocol: z.string().optional() }),
         execute: async ({ query, intent, protocol }) => {
+          if (searchFlowsUsed >= 1) {
+            return { message: 'already searched — stop searching and start drafting FDL now' }
+          }
+          searchFlowsUsed++
           const flows = await listFlows(this.env.DB, { query, intent, protocol, limit: 5 })
-          return flows.length > 0 ? flows : { message: 'no matching published flows' }
+          return flows.length > 0 ? flows : { message: 'no matching published flows — proceed to drafting' }
         },
       }),
       search_programs: tool({
-        description: 'Search the Orquestra program registry (by name or program address) — useful to confirm protocol identity or find related programs.',
+        description: 'Search the Orquestra program registry to confirm protocol identity. Call AT MOST ONCE — after that, move on to drafting regardless of what you find.',
         inputSchema: z.object({ query: z.string() }),
         execute: async ({ query }) => {
+          if (searchProgramsUsed >= 1) {
+            return { message: 'already searched — stop searching and start drafting FDL now' }
+          }
+          searchProgramsUsed++
           const { results } = await searchProjects(this.env.DB, query, 5)
-          return results.length > 0 ? results : { message: 'no matching programs' }
+          return results.length > 0 ? results : { message: 'no matching programs — proceed to drafting' }
         },
       }),
       validate_flow: tool({
@@ -193,7 +204,17 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
       }),
     }
 
-    const system = `You are an autonomous FDL author for the Orquestra Flow Engine, working inside a bounded agentic loop (max ${MAX_STEPS} steps). Use tools to investigate before writing FDL: check search_similar_flows for prior art, search_programs to confirm protocol identity if unsure. Draft FDL, call validate_flow, fix errors, call simulate_flow to prove it resolves (budgeted — use validate_flow first). Call finalize_flow exactly once when done, or skip if optimizing and no improvement exists. Never call finalize_flow and skip in the same turn.
+    const system = `You are an autonomous FDL author for the Orquestra Flow Engine, working inside a STRICTLY bounded agentic loop: ${MAX_STEPS} steps total, no more. Every step you spend investigating is a step you don't have for drafting/fixing. Follow this process, in order, and do not repeat a step:
+
+1. (optional, at most 1 call) search_similar_flows for prior art.
+2. (optional, at most 1 call) search_programs if protocol identity is unclear.
+3. Draft the FDL yourself, right now, using the IDL/docs already given below — do not search again.
+4. call validate_flow on your draft.
+5. If it fails, fix the FDL yourself and validate_flow again (you have ${MAX_STEPS} steps total, budget them).
+6. Once validate_flow passes, call simulate_flow (budgeted — at most ${MAX_SIMULATIONS_PER_DRAFT} calls).
+7. Call finalize_flow with your best FDL — even if simulate_flow didn't fully pass, finalize_flow your best attempt rather than running out of steps with nothing. Or call skip if optimizing and no improvement is possible.
+
+Never call finalize_flow and skip in the same turn. Do not call the same tool twice in a row with the same arguments.
 
 FDL grammar and node-type catalog:
 ${getFlowSchemaDocument()}`

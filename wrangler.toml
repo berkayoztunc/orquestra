@@ -138,11 +138,12 @@ class_name = "CandidatesImportWorkflow"
 # Workflow: Flow Builder Agent — daily, drafts FDL flows for verified programs
 # via Workers AI, compiles + simulates in-process, proposes improvements over
 # Telegram (see routes/telegram-webhook.ts). See migrations/026_flow_builder_agent.sql.
+# No `schedules`: the flow builder runs only on an explicit Telegram /trigger,
+# so authoring spend is always operator-initiated.
 [[workflows]]
 name = "flow-builder-agent"
 binding = "FLOW_BUILDER_AGENT_WORKFLOW"
 class_name = "FlowBuilderAgentWorkflow"
-schedules = ["0 6 * * *"]
 
 # Environment: Production
 [env.production]
@@ -241,7 +242,6 @@ class_name = "CandidatesImportWorkflow"
 name = "flow-builder-agent-prod"
 binding = "FLOW_BUILDER_AGENT_WORKFLOW"
 class_name = "FlowBuilderAgentWorkflow"
-schedules = ["0 6 * * *"]
 
 # Environment: Development
 [env.development]

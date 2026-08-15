@@ -100,6 +100,9 @@ export interface DraftFlowInput {
   projectId: string
   programId: string
   projectName: string
+  /** Build a flow for THIS instruction, skipping instruction selection. Set when
+   *  the operator picked it from a triage shortlist. */
+  targetInstruction?: string
   cpiMd?: string | null
   existingFlow?: { fdlJson: string; inputCount: number; rpcCalls: number | null }
 }
@@ -604,7 +607,9 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
     } else {
       userSections.push(
         '',
-        'No published flow exists for this program yet. Author one for the single most useful caller-facing instruction, with the smallest possible number of declared inputs.',
+        input.targetInstruction
+          ? `Author a flow for the "${input.targetInstruction}" instruction specifically — the operator already chose it, so do NOT survey other instructions. Call get_instruction_detail on it and build, with the smallest possible number of declared inputs.`
+          : 'No published flow exists for this program yet. Author one for the single most useful caller-facing instruction, with the smallest possible number of declared inputs.',
       )
     }
 

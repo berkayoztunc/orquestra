@@ -129,7 +129,7 @@ const HELP_TEXT = [
   '',
   '/status - activity in the last 24h',
   '/pending - proposals awaiting approve/reject',
-  '/trigger [programId] - run the agent now (top candidates, or one program if given)',
+  '/trigger <programId> - list that program\'s instructions worth a flow, then pick one',
   '/help - this message',
 ].join('\n')
 
@@ -162,6 +162,43 @@ async function handlePending(c: Context<{ Bindings: Bindings }>, chatId: string)
 /** Loose Solana base58 address shape check — 32-44 chars, base58 alphabet. */
 const BASE58_PROGRAM_ID_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 
+/**
+ * Operator picked an instruction from a triage shortlist — start authoring for
+ * exactly that one. This is the only path that spends authoring money, and it
+ * always follows an explicit tap.
+ */
+async function handleBuildChoice(c: Context<{ Bindings: Bindings }>, chatId: string, triageId: string, index: string): Promise<void> {
+  const raw = await c.env.CACHE.get(`triage:${triageId}`)
+  if (!raw) {
+    await sendText(c.env, chatId, 'That shortlist has expired — run /trigger <programId> again.')
+    return
+  }
+  const triage = JSON.parse(raw) as {
+    programId: string
+    projectName: string
+    choices: Array<{ name: string; reason: string }>
+  }
+  if (index === 'x') {
+    await sendText(c.env, chatId, `Cancelled — nothing built for ${triage.projectName}.`)
+    return
+  }
+  const choice = triage.choices[Number(index)]
+  if (!choice) {
+    await sendText(c.env, chatId, 'Unknown selection.')
+    return
+  }
+  const workflow = c.env.FLOW_BUILDER_AGENT_WORKFLOW
+  if (!workflow) {
+    await sendText(c.env, chatId, 'FLOW_BUILDER_AGENT_WORKFLOW binding not available.')
+    return
+  }
+  const instance = await workflow.create({
+    params: { trigger: 'admin', mode: 'build', programId: triage.programId, instruction: choice.name },
+  })
+  await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
+  await sendText(c.env, chatId, `🚀 Building "${choice.name}" for ${triage.projectName} — instance ${instance.id}`)
+}
+
 async function handleTrigger(c: Context<{ Bindings: Bindings }>, chatId: string, programId?: string): Promise<void> {
   if (programId && !BASE58_PROGRAM_ID_RE.test(programId)) {
     await sendText(c.env, chatId, (`"${programId}" doesn't look like a valid program ID.`))
@@ -172,10 +209,17 @@ async function handleTrigger(c: Context<{ Bindings: Bindings }>, chatId: string,
     await sendText(c.env, chatId, ('FLOW_BUILDER_AGENT_WORKFLOW binding not available.'))
     return
   }
-  const instance = await workflow.create({ params: { trigger: 'admin', programId } })
+  // With a program id: shortlist its instructions and ask first, so authoring
+  // spend always follows an explicit choice. Without one: fall back to the
+  // priority pick and build directly.
+  const mode = programId ? 'triage' : 'build'
+  const instance = await workflow.create({ params: { trigger: 'admin', mode, programId } })
   await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
-  const scope = programId ? `for ${programId}` : '(top candidates)'
-  await sendText(c.env, chatId, `🚀 Started ${scope} — instance ${instance.id}`)
+  await sendText(
+    c.env,
+    chatId,
+    programId ? `🔎 Finding instructions worth a flow for ${programId}…` : `🚀 Started (next candidate) — instance ${instance.id}`,
+  )
 }
 
 async function handleCommand(c: Context<{ Bindings: Bindings }>, chatId: string, text: string): Promise<void> {
@@ -213,13 +257,16 @@ app.post('/webhook', async (c) => {
   const isAdmin = Boolean(c.env.TELEGRAM_CHAT_ID) && senderChatId === c.env.TELEGRAM_CHAT_ID
 
   if (callbackQuery?.data) {
-    const [action, attemptId] = callbackQuery.data.split(':')
-    if (attemptId && (action === 'flow_approve' || action === 'flow_reject') && isAdmin) {
+    const parts = callbackQuery.data.split(':')
+    const [action] = parts
+    if (isAdmin) {
       try {
-        if (action === 'flow_approve') {
-          await handleApprove(c, attemptId)
-        } else {
-          await handleReject(c, attemptId)
+        if (action === 'flow_approve' && parts[1]) {
+          await handleApprove(c, parts[1])
+        } else if (action === 'flow_reject' && parts[1]) {
+          await handleReject(c, parts[1])
+        } else if (action === 'fb' && parts[1] && parts[2] !== undefined) {
+          await handleBuildChoice(c, senderChatId, parts[1], parts[2])
         }
       } catch (err) {
         console.error('[telegram-webhook] callback handling failed:', err)

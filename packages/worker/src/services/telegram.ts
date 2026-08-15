@@ -152,6 +152,53 @@ export async function answerCallbackQuery(
   })
 }
 
+export interface InstructionChoice {
+  name: string
+  reason: string
+}
+
+/**
+ * Ask the operator which instructions to author flows for, before spending
+ * anything on authoring.
+ *
+ * `callback_data` is capped at 64 bytes by Telegram, and a program address
+ * alone is 44 — so the shortlist lives in KV under a short id and the buttons
+ * only carry `fb:<id>:<index>`.
+ */
+export async function sendInstructionChoices(
+  env: TelegramEnv,
+  params: { triageId: string; projectName: string; programId: string; choices: InstructionChoice[] },
+): Promise<{ messageId: string; chatId: string } | null> {
+  if (!env.TELEGRAM_CHAT_ID) {
+    console.error('[telegram] TELEGRAM_CHAT_ID not configured — skipping instruction choices')
+    return null
+  }
+  const lines = [
+    `🧭 ${params.projectName}`,
+    params.programId,
+    '',
+    `${params.choices.length} instruction(s) worth a flow. Pick one to build:`,
+    '',
+    ...params.choices.map((c, i) => `${i + 1}. ${c.name} — ${c.reason}`),
+  ]
+  // One button per instruction, two per row so long names stay readable.
+  const buttons = params.choices.map((c, i) => ({
+    text: `${i + 1}. ${c.name}`,
+    callback_data: `fb:${params.triageId}:${i}`,
+  }))
+  const rows: Array<Array<{ text: string; callback_data: string }>> = []
+  for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2))
+  rows.push([{ text: '✖️ Cancel', callback_data: `fb:${params.triageId}:x` }])
+
+  const result = await callTelegram(env, 'sendMessage', {
+    chat_id: env.TELEGRAM_CHAT_ID,
+    text: lines.join('\n'),
+    reply_markup: { inline_keyboard: rows },
+  })
+  if (!result) return null
+  return { messageId: String(result.message_id), chatId: String(env.TELEGRAM_CHAT_ID) }
+}
+
 /** Plain text send — for admin command replies (/status, /pending, /help, /trigger). */
 export async function sendText(env: TelegramEnv, chatId: string, text: string): Promise<void> {
   await callTelegram(env, 'sendMessage', { chat_id: chatId, text })

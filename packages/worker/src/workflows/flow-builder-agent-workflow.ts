@@ -28,7 +28,10 @@ import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
 import { estimateCost } from '../services/flow-builder-cost'
 import { FLOW_AUTHOR_MODEL, type FlowAuthorAgent, type DraftFlowOutcome } from '../agents/flow-author-agent'
 import { classifyParams, recordAttempt, setTelegramMessage } from '../services/flow-builder-log'
-import { sendFlowProposal } from '../services/telegram'
+import { sendFlowProposal, sendInstructionChoices, sendText } from '../services/telegram'
+import { triageInstructions } from '../services/flow-triage'
+import { fetchIDL } from '../services/idl-fetch'
+import { generateId } from '../utils/id'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { hibernateEvery } from '../utils/workflow-helpers'
 
@@ -59,6 +62,14 @@ type Params = {
   trigger?: 'cron' | 'manual' | 'admin'
   /** Target one specific program by address instead of the normal priority pick — bypasses the 7-day cooldown too, since an explicit request should always run. */
   programId?: string
+  /**
+   * 'triage' shortlists the instructions worth a flow and asks the operator to
+   * pick (cheap, no authoring). 'build' authors one flow. Authoring only ever
+   * happens after an explicit pick, so spend is always operator-approved.
+   */
+  mode?: 'triage' | 'build'
+  /** The instruction the operator chose, for mode='build'. */
+  instruction?: string
 }
 
 type CandidateRow = {
@@ -93,6 +104,54 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
         trigger: trigger === 'cron' ? 'cron' : trigger,
       })
     })
+
+    // ── Triage mode: shortlist instructions and ask, spend nothing on authoring ──
+    if (event.payload?.mode === 'triage' && targetProgramId) {
+      return await step.do(
+        'triage instructions',
+        { timeout: '2 minutes', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
+        async () => {
+          const row = await this.env.DB.prepare(
+            `SELECT p.id, p.name FROM projects p WHERE p.program_id = ? LIMIT 1`,
+          )
+            .bind(targetProgramId)
+            .first<{ id: string; name: string }>()
+          if (!row) {
+            await sendText(this.env, this.env.TELEGRAM_CHAT_ID ?? '', `No indexed project for ${targetProgramId}`)
+            return { triaged: 0 }
+          }
+          const data = await fetchIDL(row.id, this.env)
+          if (!data) {
+            await sendText(this.env, this.env.TELEGRAM_CHAT_ID ?? '', `No IDL available for ${row.name}`)
+            return { triaged: 0 }
+          }
+
+          const choices = await triageInstructions(this.env.AI, data.idl, row.name)
+          if (choices.length === 0) {
+            await sendText(this.env, this.env.TELEGRAM_CHAT_ID ?? '', `No caller-facing instructions found for ${row.name}`)
+            return { triaged: 0 }
+          }
+
+          // Short id because Telegram caps callback_data at 64 bytes and a
+          // program address alone is 44. KV, not D1: this is a scratch
+          // shortlist that expires, not a record worth keeping.
+          const triageId = generateId().replace(/-/g, '').slice(0, 8)
+          await this.env.CACHE.put(
+            `triage:${triageId}`,
+            JSON.stringify({ programId: targetProgramId, projectId: row.id, projectName: row.name, choices }),
+            { expirationTtl: 86_400 },
+          )
+          await sendInstructionChoices(this.env, {
+            triageId,
+            projectName: row.name,
+            programId: targetProgramId,
+            choices,
+          })
+          console.log(`${TAG} triaged ${choices.length} instruction(s) for ${row.name}`)
+          return { triaged: choices.length }
+        },
+      )
+    }
 
     const candidates = await step.do(
       'select candidates',
@@ -214,6 +273,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
               projectId: c.id,
               programId: c.program_id,
               projectName: c.name,
+              targetInstruction: event.payload?.instruction,
               cpiMd: versionRow.cpi_md,
               existingFlow: existingFlowCtx,
             })

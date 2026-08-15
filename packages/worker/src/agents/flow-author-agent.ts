@@ -106,6 +106,10 @@ export type DraftFlowOutcome =
       steps: number
       usage: Usage
       transcript: string
+      /** The inputs the agent simulated with — real addresses it discovered, not
+       *  placeholders. Downstream re-simulation MUST reuse these or it will be
+       *  testing a different (and meaningless) scenario. */
+      simulationInputs: Record<string, unknown>
     }
 
 function hexToBase64(hex: string): string {
@@ -213,6 +217,8 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
     let lastErrors: string[] = []
     /** Content hash of the last draft that simulated cleanly — finalize is gated on this. */
     let lastSimulatedHash: string | null = null
+    /** Inputs used for the passing simulation, carried out with the draft. */
+    let lastSimInputs: Record<string, unknown> = {}
     /** Best draft seen so far, used as a fallback if the model never finalizes.
      *  Held in a container for the same TS control-flow reason as `terminal`. */
     const draftState: { lastGood: { doc: FlowDocument; plan: FlowPlan; simulated: boolean } | null } = { lastGood: null }
@@ -502,6 +508,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           }
           lastErrors = []
           lastSimulatedHash = compiled.plan.hash
+          lastSimInputs = simInputs
           if (lintDeliverable(parsed.data).length === 0) draftState.lastGood = { doc: parsed.data, plan: compiled.plan, simulated: true }
           return {
             ok: true,
@@ -633,6 +640,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           steps: result.steps.length,
           usage,
           transcript,
+          simulationInputs: draftState.lastGood.simulated ? lastSimInputs : {},
         }
       }
       return { kind: 'no_finalize', steps: result.steps.length, usage, transcript, errors: lastErrors }
@@ -667,6 +675,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
       steps: result.steps.length,
       usage,
       transcript,
+      simulationInputs: compiled.plan.hash === lastSimulatedHash ? lastSimInputs : {},
     }
   }
 }

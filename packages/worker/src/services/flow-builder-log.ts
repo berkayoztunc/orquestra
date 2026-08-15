@@ -87,6 +87,8 @@ export interface AttemptDraftInput {
   doc?: FlowDocument
   plan?: FlowPlan
   rawAiResponse?: string
+  /** Inputs the draft was simulated with — reused by every later re-simulation. */
+  simulationInputs?: Record<string, unknown>
 }
 
 /** Writes the attempts row for one candidate; call once per attempt, whatever the outcome. */
@@ -140,14 +142,15 @@ export async function recordAttempt(
   if (draft && (draft.doc || draft.rawAiResponse)) {
     await db
       .prepare(
-        `INSERT INTO flow_builder_drafts (attempt_id, fdl_json, plan_json, raw_ai_response, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO flow_builder_drafts (attempt_id, fdl_json, plan_json, raw_ai_response, simulation_inputs_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
         draft.doc ? JSON.stringify(draft.doc) : '{}',
         draft.plan ? JSON.stringify(draft.plan) : null,
         draft.rawAiResponse ?? null,
+        draft.simulationInputs ? JSON.stringify(draft.simulationInputs) : null,
         now,
       )
       .run()
@@ -184,6 +187,7 @@ export async function getAttempt(db: D1Database, attemptId: string): Promise<Att
 export interface DraftRow {
   attempt_id: string
   fdl_json: string
+  simulation_inputs_json: string | null
 }
 
 export async function getDraft(db: D1Database, attemptId: string): Promise<DraftRow | null> {

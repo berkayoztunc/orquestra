@@ -7,13 +7,13 @@
  * reject (handled by `routes/telegram-webhook.ts`).
  *
  * Simulation caveat (documented, not hidden — same honesty posture the flow
- * engine design doc takes about simulation elsewhere): the agent has no real
- * wallet to test with, so it simulates against synthetic placeholder inputs
- * (see `buildSyntheticInputs`) purely to exercise the graph structurally —
- * PDA/ATA derivation, instruction assembly, RPC reads, `simulateTransaction`.
- * A structural pass is what gates a Telegram proposal; it is not a guarantee
- * the flow behaves correctly for an arbitrary real wallet — same caveat any
- * `simulate_flow` caller already lives with.
+ * engine design doc takes about simulation elsewhere): simulation uses a real
+ * funded mainnet wallet plus any real account addresses the agent discovered
+ * (`find_real_account`), and re-uses those exact inputs here and again at
+ * Telegram approval so all three checks test the same scenario. A pass proves
+ * the graph resolves, builds and simulates for THOSE inputs; it is not a
+ * guarantee for an arbitrary caller — the same caveat any `simulate_flow`
+ * caller already lives with.
  */
 
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
@@ -262,8 +262,11 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
             // outcome.kind === 'compiled' — simulate against real RPC.
             const { rpcUrl } = resolveSolanaRpcUrl({ network: 'mainnet-beta', env: this.env })
             const nodeCtx: NodeContext = { db: this.env.DB, cache: this.env.CACHE, idls: this.env.IDLS, rpcUrl }
-            const syntheticInputs = buildSyntheticInputs(outcome.plan.inputs)
-            const simResult = await run(outcome.plan, syntheticInputs, nodeCtx)
+            // Reuse the exact inputs the agent proved the flow with — it may
+            // have discovered a real pool/market address that a placeholder
+            // wallet could never stand in for.
+            const simInputs = { ...buildSyntheticInputs(outcome.plan.inputs), ...outcome.simulationInputs }
+            const simResult = await run(outcome.plan, simInputs, nodeCtx)
 
             const newInputCount = Object.keys(outcome.plan.inputs).length
             const newRpcCalls = simResult.rpcCalls
@@ -280,7 +283,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
                   rationale: outcome.rationale,
                   errorDetail: `${simResult.error.nodeId ?? '(top-level)'}: ${simResult.error.message}`,
                 },
-                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript },
+                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript, simulationInputs: simInputs },
               )
               failed++
               return
@@ -302,7 +305,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
                   newRpcCalls,
                   rationale: outcome.rationale,
                 },
-                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript },
+                { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript, simulationInputs: simInputs },
               )
               skipped++
               return
@@ -318,7 +321,7 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
                 newRpcCalls,
                 rationale: outcome.rationale,
               },
-              { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript },
+              { doc: outcome.doc, plan: outcome.plan, rawAiResponse: outcome.transcript, simulationInputs: simInputs },
             )
 
             const paramCounts = classifyParams(outcome.doc)

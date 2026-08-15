@@ -94,10 +94,14 @@ async function handleApprove(c: Context<{ Bindings: Bindings }>, attemptId: stri
 
   const { rpcUrl } = resolveSolanaRpcUrl({ network: 'mainnet-beta', env: c.env })
   const nodeCtx: NodeContext = { db: c.env.DB, cache: c.env.CACHE, idls: c.env.IDLS, rpcUrl }
-  // Same synthetic inputs the agent and workflow simulate with, so a draft that
-  // passed there cannot fail here purely because the three call sites disagreed
-  // on what to fill in (they used to).
-  const simResult = await run(compiled.plan, buildSyntheticInputs(compiled.plan.inputs), nodeCtx)
+  // Re-simulate with the SAME inputs the draft was proven with. The agent may
+  // have discovered a real pool/market address; re-testing with a placeholder
+  // wallet in its place would fail on the placeholder, not on the flow.
+  const storedInputs = draft.simulation_inputs_json
+    ? (JSON.parse(draft.simulation_inputs_json) as Record<string, unknown>)
+    : {}
+  const simInputs = { ...buildSyntheticInputs(compiled.plan.inputs), ...storedInputs }
+  const simResult = await run(compiled.plan, simInputs, nodeCtx)
   if (!simResult.ok) {
     const errorDetail = `${simResult.error.nodeId ?? '(top-level)'}: ${simResult.error.message}`
     await transitionOutcome(c.env.DB, attemptId, 'approved', 'publish_failed', { errorDetail })

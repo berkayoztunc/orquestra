@@ -131,6 +131,10 @@ need another lookup mid-build):
 5. Once it validates, call \`simulate_flow\`. It runs against real mainnet RPC with a real funded
    wallet. A flow that does not simulate cleanly will NOT be proposed to the operator, so keep
    fixing and re-simulating while you have budget.
+   IMPORTANT: unspecified pubkey inputs are auto-filled with a WALLET address. If an input is a
+   specific on-chain account (a pool, market, vault, config), that default will not decode as that
+   account type and the run will fail with an undefined value. Call \`find_real_account\` to get a
+   real address of that type and pass it via simulate_flow's \`inputs\` argument.
 6. Call \`finalize_flow\` with your best FDL. Do this before you run out of steps — a run that
    ends without finalize_flow is a total loss. Use \`skip\` only when optimizing an existing flow
    and no improvement is genuinely possible.

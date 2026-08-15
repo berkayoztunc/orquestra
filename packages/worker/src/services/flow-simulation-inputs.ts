@@ -21,6 +21,9 @@ import type { FlowInputSpec } from '../flow-engine/fdl-schema'
 /** Real mainnet wallet used for draft-flow simulation: funded, owns SPL token accounts. */
 export const SIMULATION_WALLET = 'EgJVwJN5enK7h74cdAKFogEYNCH1va9eWPzLZSZRNutH'
 
+/** Wrapped SOL — a mint that always exists, for inputs that are clearly mints. */
+export const WSOL_MINT = 'So11111111111111111111111111111111111111112'
+
 /**
  * Fill every declared input with a plausible value so a draft flow can be run.
  * A spec's own `default` always wins — the interpreter applies defaults too,
@@ -36,7 +39,11 @@ export function buildSyntheticInputs(inputSpecs: Record<string, FlowInputSpec>):
     }
     switch (spec.type) {
       case 'pubkey':
-        inputs[key] = SIMULATION_WALLET
+        // A mint input filled with a wallet address decodes as nothing, so use
+        // a real, universally-present mint. Everything else defaults to the
+        // wallet; inputs naming a specific on-chain account (pool/market/vault)
+        // cannot be guessed here and should be passed explicitly by the caller.
+        inputs[key] = /mint/i.test(key) ? WSOL_MINT : SIMULATION_WALLET
         break
       case 'bps':
         inputs[key] = 50

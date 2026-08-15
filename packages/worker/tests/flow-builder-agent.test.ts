@@ -2,7 +2,7 @@ import { describe, test, expect } from 'bun:test'
 import { classifyParams } from '../src/services/flow-builder-log'
 import { estimateCost } from '../src/services/flow-builder-cost'
 import { buildProposalMessage } from '../src/services/telegram'
-import { buildSyntheticInputs, SIMULATION_WALLET } from '../src/services/flow-simulation-inputs'
+import { buildSyntheticInputs, SIMULATION_WALLET, WSOL_MINT } from '../src/services/flow-simulation-inputs'
 import { lintReferences, parseOutputFields } from '../src/agents/flow-lint'
 import type { FlowDocument } from '../src/flow-engine/fdl-schema'
 
@@ -155,6 +155,14 @@ describe('buildSyntheticInputs', () => {
     // The old System Program placeholder owns no ATAs and no SOL, which made
     // every simulation fail on the wallet rather than on the flow.
     expect(inputs.wallet).not.toBe('11111111111111111111111111111111')
+  })
+
+  test('mint-shaped inputs get a real mint, not a wallet', () => {
+    // A wallet address does not decode as a mint, which made simulations fail
+    // on the placeholder rather than on the flow.
+    const inputs = buildSyntheticInputs({ inputMint: { type: 'pubkey' }, wallet: { type: 'pubkey' } })
+    expect(inputs.inputMint).toBe(WSOL_MINT)
+    expect(inputs.wallet).toBe(SIMULATION_WALLET)
   })
 
   test('a declared default always wins over the generated value', () => {

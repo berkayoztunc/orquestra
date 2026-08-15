@@ -44,6 +44,7 @@ import { listFlows } from '../services/flow-catalog'
 import { fetchIDL } from '../services/idl-fetch'
 import { generateDocumentation } from '../services/doc-generator'
 import { listPdaAccounts, type PdaAccountInfo } from '../services/pda'
+import { queryProgramAccounts } from '../services/program-accounts'
 import { normalizeAccountMeta, expandInstructionArgs, getInstruction } from '../services/idl-parser'
 import { buildSyntheticInputs, SIMULATION_WALLET } from '../services/flow-simulation-inputs'
 import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
@@ -68,7 +69,7 @@ const MAX_SIMULATIONS_PER_DRAFT = 5
 const MAX_DOC_CHARS = 6_000
 const MAX_DOC_READS = 2
 
-const RESEARCH_TOOLS = ['list_instructions', 'get_instruction_detail', 'read_program_docs', 'search_similar_flows'] as const
+const RESEARCH_TOOLS = ['list_instructions', 'get_instruction_detail', 'read_program_docs', 'find_real_account', 'search_similar_flows'] as const
 const BUILD_TOOLS = ['validate_flow', 'simulate_flow', 'finalize_flow', 'skip'] as const
 
 type Env = SolanaRpcEnv & {
@@ -353,6 +354,31 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
         },
       }),
 
+      find_real_account: tool({
+        description:
+          'Find REAL live on-chain accounts of a given IDL account type for this program, and return their addresses. Use this when a flow input is a specific on-chain account (a pool, market, vault, config) rather than a wallet: pass one of these addresses to simulate_flow so the simulation reads a genuine account instead of a placeholder.',
+        inputSchema: z.object({ accountType: z.string().describe('IDL account type name, e.g. "Pool".') }),
+        execute: async ({ accountType }) => {
+          const data = await loadIdl()
+          if (!data) return { error: `project ${input.projectId} not found or not public` }
+          try {
+            const result = await queryProgramAccounts({
+              idl: data.idl,
+              programId: data.programId,
+              rpcUrl,
+              cluster: 'mainnet-beta',
+              input: { accountType, limit: 3 },
+            })
+            if (result.count === 0) {
+              return { accountType, addresses: [], message: 'no live accounts of this type — do not make it a flow input you cannot simulate' }
+            }
+            return { accountType, addresses: result.accounts.map((a) => a.address) }
+          } catch (err) {
+            return { error: `lookup failed: ${err instanceof Error ? err.message : String(err)}` }
+          }
+        },
+      }),
+
       search_similar_flows: tool({
         description: 'Search the published flow catalog for prior art — flows for similar protocols/intents whose node patterns you can borrow.',
         inputSchema: z.object({ query: z.string().optional(), intent: z.string().optional(), protocol: z.string().optional() }),
@@ -401,8 +427,16 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
 
       simulate_flow: tool({
         description: `Compile AND RUN a draft FDL against real mainnet RPC using a real funded wallet (${SIMULATION_WALLET}) for every pubkey input. This is the gate: a flow that does not simulate cleanly will not be proposed. Budget: ${MAX_SIMULATIONS_PER_DRAFT} calls.`,
-        inputSchema: z.object({ fdl: z.record(z.string(), z.any()) }),
-        execute: async ({ fdl }) => {
+        inputSchema: z.object({
+          fdl: z.record(z.string(), z.any()),
+          inputs: z
+            .record(z.string(), z.any())
+            .optional()
+            .describe(
+              'Optional real values for specific flow inputs, e.g. { "pool": "<address from find_real_account>" }. Anything omitted is filled automatically, but a pubkey input that is a specific on-chain account (pool/market/vault) MUST be supplied here — the automatic value is a wallet, which will not decode as that account type.',
+            ),
+        }),
+        execute: async ({ fdl, inputs: providedInputs }) => {
           if (simulationsUsed >= MAX_SIMULATIONS_PER_DRAFT) {
             return { ok: false, errors: [`simulation budget exhausted (${MAX_SIMULATIONS_PER_DRAFT}) — finalize your best draft now`] }
           }
@@ -417,13 +451,22 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
             return { ok: false, errors: lastErrors }
           }
           simulationsUsed++
-          const result = await run(compiled.plan, buildSyntheticInputs(compiled.plan.inputs), nodeCtx)
+          // Model-supplied values win; the rest are filled in automatically.
+          const simInputs = { ...buildSyntheticInputs(compiled.plan.inputs), ...(providedInputs ?? {}) }
+          const result = await run(compiled.plan, simInputs, nodeCtx)
           if (!result.ok) {
             lastErrors = [`${result.error.nodeId ?? '(top-level)'}: ${result.error.message}`]
+            // "_bn" undefined is an opaque PublicKey failure that always means a
+            // $ref resolved to undefined. Say so, with the usual cause, instead
+            // of leaving the model to guess (it burned several runs guessing).
+            const undefinedRef = /reading '_bn'|undefined/.test(result.error.message)
             return {
               ok: false,
               node: result.error.nodeId,
               error: result.error.message,
+              hint: undefinedRef
+                ? `A value passed to "${result.error.nodeId}" was undefined. Usually one of: (a) a $ref to a nested field whose parent was null — e.g. resolve.account_data@1 returns data:null when the address is not an account of that type, so $x.data.foo is undefined; or (b) simulating an on-chain-account input with the default placeholder wallet. Use find_real_account and pass a real address via this tool's "inputs" argument.`
+                : undefined,
               simulationsRemaining: MAX_SIMULATIONS_PER_DRAFT - simulationsUsed,
             }
           }

@@ -17,8 +17,14 @@ const TAG = '[candidates-import-workflow]'
  */
 const CHUNK = 100
 
-/** Chunks between forced hibernations (~300 candidates ≈ <900 subrequests). */
-const CHUNKS_PER_BREATHER = 3
+/**
+ * Chunks between forced hibernations. Worst-case cost is 4 subrequests/candidate
+ * (see comment above) — 3 chunks × 100 = 300 candidates × 4 = 1200, already over
+ * the 1000-subrequest budget, which is what actually tripped "Too many API
+ * requests by single Worker invocation" on real runs. 2 chunks × 100 × 4 = 800
+ * keeps a safety margin even at worst case.
+ */
+const CHUNKS_PER_BREATHER = 2
 
 /** Chunks per instance (~6k candidates) — keeps step count far below limits. */
 const MAX_CHUNKS = 60

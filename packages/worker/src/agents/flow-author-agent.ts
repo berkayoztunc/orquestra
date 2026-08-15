@@ -246,6 +246,17 @@ ${getFlowSchemaDocument()}`
       prompt: userSections.join('\n'),
       tools,
       stopWhen: [hasToolCall('finalize_flow'), hasToolCall('skip'), isStepCount(MAX_STEPS)],
+      // Hard structural cutoff, not just a prompt instruction — the weaker
+      // Workers AI model observed in production ignored the "already
+      // searched" tool-result text and kept calling search_similar_flows
+      // 8/8 remaining steps regardless. After step 2, the search tools are
+      // literally not in the schema anymore, so it can't repeat them.
+      prepareStep: async ({ stepNumber }) => {
+        if (stepNumber >= 2) {
+          return { activeTools: ['validate_flow', 'simulate_flow', 'finalize_flow', 'skip'] }
+        }
+        return {}
+      },
     })
 
     const usage = {

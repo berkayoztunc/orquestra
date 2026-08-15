@@ -54,9 +54,10 @@ registerAllNodes()
 
 export const FLOW_AUTHOR_MODEL = '@cf/moonshotai/kimi-k2.7-code'
 
-/** Total tool-loop steps. Research phase is the first RESEARCH_STEPS of these. */
+/** Total tool-loop steps, including the forced finalize on the last one. */
 const MAX_STEPS = 14
-const RESEARCH_STEPS = 5
+/** Steps where ONLY research tools are offered, to front-load investigation. */
+const RESEARCH_ONLY_STEPS = 2
 // Raised from 3 after a real run spent 4 simulate calls genuinely iterating on
 // its own errors and hit the cap with steps still left. Simulations cost RPC,
 // not AI tokens, and they are the gate on whether a flow gets proposed at all.
@@ -510,13 +511,22 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
       stopWhen: [hasToolCall('finalize_flow'), hasToolCall('skip'), isStepCount(MAX_STEPS)],
       prepareStep: async ({ stepNumber }) => {
         // Last step: force a finalize so the loop can never end empty-handed.
-        // Earlier runs burned every step on one tool and returned nothing.
         if (stepNumber >= MAX_STEPS - 1) {
           forcedFinalStep = true
           return { activeTools: ['finalize_flow'], toolChoice: { type: 'tool' as const, toolName: 'finalize_flow' as const } }
         }
-        if (stepNumber < RESEARCH_STEPS) return { activeTools: [...RESEARCH_TOOLS] }
-        return { activeTools: [...BUILD_TOOLS] }
+        // `toolChoice: 'required'` on every step: ai-sdk ends the loop as soon
+        // as a step produces no tool call, and a run died exactly that way —
+        // the model finished researching, had nothing it was allowed to call,
+        // emitted prose, and the loop stopped at step 4. There is never a
+        // legitimate reason to emit bare text here; even finishing is a tool.
+        if (stepNumber < RESEARCH_ONLY_STEPS) {
+          return { activeTools: [...RESEARCH_TOOLS], toolChoice: 'required' as const }
+        }
+        // Overlapping phases, not a hard partition: research stays available so
+        // a mid-build lookup is possible, and building is unlocked as soon as
+        // the model is ready rather than at a fixed step.
+        return { activeTools: [...RESEARCH_TOOLS, ...BUILD_TOOLS], toolChoice: 'required' as const }
       },
     })
 

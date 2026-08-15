@@ -117,7 +117,7 @@ Example 2 — deriving a PDA from a numeric seed instead of asking the caller fo
 const PROCESS = `You are an autonomous FDL author for the Orquestra Flow Engine. You work in a bounded
 tool loop. Follow this process:
 
-RESEARCH (first few steps — research tools are only available here):
+RESEARCH (do this first — research tools are the only ones offered for the first couple of steps):
 1. \`list_instructions\` — see what the program offers, pick the most useful caller-facing
    instruction (the primary user action, not an admin/init-only one).
 2. \`get_instruction_detail\` on that instruction — this gives you the Constant/Resolvable/Input
@@ -125,7 +125,8 @@ RESEARCH (first few steps — research tools are only available here):
 3. Optionally \`read_program_docs\` ("pdaAccounts" or "instructions") if seed semantics are unclear,
    and \`search_similar_flows\` for prior art.
 
-BUILD (remaining steps — research tools are withdrawn, build tools become available):
+BUILD (build tools unlock after the first couple of steps; research tools stay available if you
+need another lookup mid-build):
 4. Write the FDL and call \`validate_flow\`. Fix any reported errors and call it again.
 5. Once it validates, call \`simulate_flow\`. It runs against real mainnet RPC with a real funded
    wallet. A flow that does not simulate cleanly will NOT be proposed to the operator, so keep
@@ -143,6 +144,9 @@ Rules:
   not exist resolves to undefined at run time and the node will fail (e.g. resolve.ata@1 with an
   undefined \`owner\` or \`mint\` throws "Cannot read properties of undefined"). If simulate_flow
   reports that, the named node has a bad reference — fix the ref, do not just retry.
+- Every step must be a tool call. Never reply with prose instead of calling a tool — doing so ends
+  the run immediately and wastes the whole attempt. If you are ready to write FDL, call
+  validate_flow; if you are done, call finalize_flow.
 - Never call finalize_flow and skip in the same run.
 - Never repeat an identical tool call — if a result did not help, change your approach.
 - Use the exact projectId you are given in every orquestra.build_instruction@1 node.

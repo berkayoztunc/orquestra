@@ -139,6 +139,19 @@ describe('lintReferences', () => {
     expect(lintReferences(doc)).toEqual([])
   })
 
+  test('catches a bad field inside an expression, not just a bare ref', () => {
+    // Production hit this as `$step.direction resolved to undefined`, where
+    // `step` was a resolve.constant@1 node (which only outputs `value`).
+    const doc = baseDoc([
+      { id: 'step', type: 'resolve.constant@1', in: {} },
+      { id: 'pda', type: 'resolve.pda@1', in: { program: 'P', seeds: ['$step.direction == true'] } },
+    ])
+    const errors = lintReferences(doc)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].message).toContain('direction')
+    expect(errors[0].message).toContain('value')
+  })
+
   test('ignores refs to unknown node types rather than guessing', () => {
     const doc = baseDoc([
       { id: 'x', type: 'not.a.real.node@9', in: {} },

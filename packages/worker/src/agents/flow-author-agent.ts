@@ -196,6 +196,31 @@ function looksLikeAta(accountName: string, pdaInfo?: PdaAccountInfo): boolean {
   return /ata|associated.?token|token.?account/i.test(accountName)
 }
 
+/**
+ * Single compile+lint path shared by validate_flow, simulate_flow and
+ * finalize_flow. They used to compile independently and only validate_flow
+ * linted, so a draft could pass validation, get tweaked, and reach simulation
+ * with an unchecked bad reference — which is exactly how
+ * `$step.direction resolved to undefined` slipped through.
+ */
+async function compileAndLint(
+  fdl: unknown,
+): Promise<{ ok: true; doc: FlowDocument; plan: FlowPlan } | { ok: false; errors: string[] }> {
+  const parsed = FlowDocumentSchema.safeParse(fdl)
+  if (!parsed.success) {
+    return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`) }
+  }
+  const compiled = await compile(parsed.data)
+  if (!compiled.ok) {
+    return { ok: false, errors: compiled.errors.map((e) => `${e.nodeId ?? e.path ?? ''}: ${e.message}`) }
+  }
+  const refErrors = lintReferences(parsed.data)
+  if (refErrors.length > 0) {
+    return { ok: false, errors: refErrors.map((e) => `${e.nodeId}: ${e.message}`) }
+  }
+  return { ok: true, doc: parsed.data, plan: compiled.plan }
+}
+
 export class FlowAuthorAgent extends Agent<Env, AgentState> {
   initialState: AgentState = {}
 
@@ -442,31 +467,21 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
         description: 'Statically compile a draft FDL document — structure, unknown node types, cycles, dangling refs. No RPC. Always call this before simulate_flow.',
         inputSchema: z.object({ fdl: z.record(z.string(), z.any()) }),
         execute: async ({ fdl }) => {
-          const parsed = FlowDocumentSchema.safeParse(fdl)
-          if (!parsed.success) {
-            lastErrors = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
-            return { ok: false, errors: lastErrors }
-          }
-          const compiled = await compile(parsed.data)
-          if (!compiled.ok) {
-            lastErrors = compiled.errors.map((e) => `${e.nodeId ?? e.path ?? ''}: ${e.message}`)
-            return { ok: false, errors: lastErrors }
-          }
-          // Catches refs to fields a node does not emit — the compiler only
-          // checks the ref's root, so these otherwise crash mid-simulation.
-          const refErrors = lintReferences(parsed.data)
-          if (refErrors.length > 0) {
-            lastErrors = refErrors.map((e) => `${e.nodeId}: ${e.message}`)
+          const checked = await compileAndLint(fdl)
+          if (!checked.ok) {
+            lastErrors = checked.errors
             return { ok: false, errors: lastErrors }
           }
           lastErrors = []
-          if (lintDeliverable(parsed.data).length === 0 && !draftState.lastGood?.simulated) draftState.lastGood = { doc: parsed.data, plan: compiled.plan, simulated: false }
+          if (lintDeliverable(checked.doc).length === 0 && !draftState.lastGood?.simulated) {
+            draftState.lastGood = { doc: checked.doc, plan: checked.plan, simulated: false }
+          }
           return {
             ok: true,
-            contentHash: compiled.plan.hash,
-            inputCount: Object.keys(compiled.plan.inputs).length,
-            declaredInputs: Object.keys(compiled.plan.inputs),
-            strata: compiled.plan.strata.map((s) => s.map((n) => n.id)),
+            contentHash: checked.plan.hash,
+            inputCount: Object.keys(checked.plan.inputs).length,
+            declaredInputs: Object.keys(checked.plan.inputs),
+            strata: checked.plan.strata.map((s) => s.map((n) => n.id)),
             next: 'Now call simulate_flow on this exact document — finalize_flow will be rejected until a simulation passes.',
           }
         },
@@ -487,16 +502,13 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           if (simulationsUsed >= MAX_SIMULATIONS_PER_DRAFT) {
             return { ok: false, errors: [`simulation budget exhausted (${MAX_SIMULATIONS_PER_DRAFT}) — finalize your best draft now`] }
           }
-          const parsed = FlowDocumentSchema.safeParse(fdl)
-          if (!parsed.success) {
-            lastErrors = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
+          const checked = await compileAndLint(fdl)
+          if (!checked.ok) {
+            lastErrors = checked.errors
             return { ok: false, errors: lastErrors }
           }
-          const compiled = await compile(parsed.data)
-          if (!compiled.ok) {
-            lastErrors = compiled.errors.map((e) => `${e.nodeId ?? e.path ?? ''}: ${e.message}`)
-            return { ok: false, errors: lastErrors }
-          }
+          const parsed = { data: checked.doc }
+          const compiled = { plan: checked.plan }
           simulationsUsed++
           // Model-supplied values win; the rest are filled in automatically.
           const simInputs = { ...buildSyntheticInputs(compiled.plan.inputs), ...(providedInputs ?? {}) }
@@ -543,14 +555,12 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           // so refuse to finalize one — unless this is the forced final step,
           // where taking the best available draft beats returning nothing.
           if (!forcedFinalStep) {
-            const parsed = FlowDocumentSchema.safeParse(fdl)
-            if (!parsed.success) {
-              return { ok: false, error: 'that document is not valid FDL — call validate_flow and fix it first' }
+            const checked = await compileAndLint(fdl)
+            if (!checked.ok) {
+              return { ok: false, error: `that document is not publishable: ${checked.errors.join('; ')}` }
             }
-            const compiled = await compile(parsed.data)
-            if (!compiled.ok) {
-              return { ok: false, error: 'that document does not compile — call validate_flow and fix it first' }
-            }
+            const parsed = { data: checked.doc }
+            const compiled = { plan: checked.plan }
             if (compiled.plan.hash !== lastSimulatedHash) {
               return {
                 ok: false,

@@ -230,7 +230,12 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
 
             let existingFlowCtx: { fdlJson: string; inputCount: number; rpcCalls: number | null } | undefined
             let priorFlowId: string | null = null
-            if (c.existing_flow_id) {
+            // When the operator picked a specific instruction, an existing flow
+            // for some OTHER instruction is not a baseline to improve on — it is
+            // misleading context. Feeding a swap flow into a collect_fees request
+            // is what made the agent rebuild swap.
+            const chosenInstruction = event.payload?.instruction
+            if (c.existing_flow_id && !chosenInstruction) {
               const flowRow = await this.env.DB.prepare(
                 `SELECT v.content_hash, v.fdl_json, v.metadata_json
                  FROM flows f JOIN flow_versions v ON v.content_hash = f.stable_version_hash

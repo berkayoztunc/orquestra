@@ -595,7 +595,19 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
       `Program address: ${input.programId}`,
       `projectId (use this EXACT value for every orquestra.build_instruction@1 "projectId" field): ${input.projectId}`,
     ]
-    if (input.existingFlow) {
+    // A chosen instruction outranks everything else. This directive used to live
+    // only in the "no existing flow" branch, so when the program already had a
+    // published flow the model was handed that flow and told to optimize it —
+    // and rebuilt swap when the operator had asked for collect_fees.
+    if (input.targetInstruction) {
+      userSections.push(
+        '',
+        `Author a flow for the "${input.targetInstruction}" instruction — the operator chose it explicitly.`,
+        'Do NOT survey other instructions and do NOT build a different one. Call get_instruction_detail on',
+        `"${input.targetInstruction}" and build that flow, with the smallest possible number of declared inputs.`,
+        'meta.slug must clearly identify this instruction so it cannot collide with a flow for a different one.',
+      )
+    } else if (input.existingFlow) {
       userSections.push(
         '',
         `An existing published flow covers this program: ${input.existingFlow.inputCount} inputs, ${input.existingFlow.rpcCalls ?? '?'} RPC calls.`,
@@ -607,9 +619,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
     } else {
       userSections.push(
         '',
-        input.targetInstruction
-          ? `Author a flow for the "${input.targetInstruction}" instruction specifically — the operator already chose it, so do NOT survey other instructions. Call get_instruction_detail on it and build, with the smallest possible number of declared inputs.`
-          : 'No published flow exists for this program yet. Author one for the single most useful caller-facing instruction, with the smallest possible number of declared inputs.',
+        'No published flow exists for this program yet. Author one for the single most useful caller-facing instruction, with the smallest possible number of declared inputs.',
       )
     }
 

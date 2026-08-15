@@ -148,7 +148,11 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
       await step
         .do(
           `build attempt: ${c.name} (${i + 1}/${candidates.length})`,
-          { timeout: '3 minutes', retries: { limit: 1, delay: 10000, backoff: 'exponential' } },
+          // 10 minutes, not 3: a full agentic loop is up to MAX_STEPS frontier-model
+          // calls plus real RPC simulations between them, and a real run measured
+          // ~3.5 minutes. The old 3-minute budget was sized for the single-shot
+          // generator this replaced and would cut off otherwise-healthy runs.
+          { timeout: '10 minutes', retries: { limit: 1, delay: 10000, backoff: 'exponential' } },
           async () => {
             const versionRow = await this.env.DB.prepare(`SELECT idl_json, cpi_md FROM idl_versions WHERE id = ?`)
               .bind(c.version_id)

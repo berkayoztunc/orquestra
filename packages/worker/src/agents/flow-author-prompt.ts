@@ -135,6 +135,14 @@ BUILD (remaining steps — research tools are withdrawn, build tools become avai
    and no improvement is genuinely possible.
 
 Rules:
+- Node types (\`resolve.pda@1\`, \`resolve.ata@1\`, \`resolve.constant@1\`, \`resolve.accounts_by_filter@1\`,
+  \`orquestra.build_instruction@1\`, …) are NOT tools. Never try to call one. They are values you
+  write into the \`nodes\` array of the FDL document you pass to validate_flow.
+- Every \`in\` field of every node must resolve to something real: a literal, or a \`$ref\` to a
+  declared input or an earlier node's output field. A \`$ref\` pointing at a node or field that does
+  not exist resolves to undefined at run time and the node will fail (e.g. resolve.ata@1 with an
+  undefined \`owner\` or \`mint\` throws "Cannot read properties of undefined"). If simulate_flow
+  reports that, the named node has a bad reference — fix the ref, do not just retry.
 - Never call finalize_flow and skip in the same run.
 - Never repeat an identical tool call — if a result did not help, change your approach.
 - Use the exact projectId you are given in every orquestra.build_instruction@1 node.

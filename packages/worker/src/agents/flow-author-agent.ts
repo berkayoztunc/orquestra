@@ -56,7 +56,10 @@ export const FLOW_AUTHOR_MODEL = '@cf/moonshotai/kimi-k2.7-code'
 /** Total tool-loop steps. Research phase is the first RESEARCH_STEPS of these. */
 const MAX_STEPS = 14
 const RESEARCH_STEPS = 5
-const MAX_SIMULATIONS_PER_DRAFT = 3
+// Raised from 3 after a real run spent 4 simulate calls genuinely iterating on
+// its own errors and hit the cap with steps still left. Simulations cost RPC,
+// not AI tokens, and they are the gate on whether a flow gets proposed at all.
+const MAX_SIMULATIONS_PER_DRAFT = 5
 
 const RESEARCH_TOOLS = ['list_instructions', 'get_instruction_detail', 'read_program_docs', 'search_similar_flows'] as const
 const BUILD_TOOLS = ['validate_flow', 'simulate_flow', 'finalize_flow', 'skip'] as const

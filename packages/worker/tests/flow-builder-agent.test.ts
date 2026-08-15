@@ -3,7 +3,7 @@ import { classifyParams } from '../src/services/flow-builder-log'
 import { estimateCost } from '../src/services/flow-builder-cost'
 import { buildProposalMessage } from '../src/services/telegram'
 import { buildSyntheticInputs, SIMULATION_WALLET, WSOL_MINT } from '../src/services/flow-simulation-inputs'
-import { lintReferences, parseOutputFields } from '../src/agents/flow-lint'
+import { lintReferences, lintDeliverable, parseOutputFields } from '../src/agents/flow-lint'
 import type { FlowDocument } from '../src/flow-engine/fdl-schema'
 
 // Literal rather than imported from flow-author-agent.ts: that module pulls in
@@ -148,6 +148,29 @@ describe('lintReferences', () => {
   })
 })
 
+describe('lintDeliverable', () => {
+  const build = { id: 'ix', type: 'orquestra.build_instruction@1', in: {} }
+  const compose = { id: 'tx', type: 'solana.compose_transaction@1', in: {} }
+
+  test('accepts a flow that builds an instruction and composes one transaction', () => {
+    expect(lintDeliverable(baseDoc([build, compose]))).toEqual([])
+  })
+
+  test('rejects an inspection-only flow that produces no transaction', () => {
+    // A real run finalized exactly this: a scratch flow that only read an
+    // account, which is valid FDL but useless as a published flow.
+    const errors = lintDeliverable(baseDoc([{ id: 'probe', type: 'resolve.account_data@1', in: {} }]))
+    expect(errors).toHaveLength(2)
+    expect(errors.join(' ')).toContain('builds no instruction')
+    expect(errors.join(' ')).toContain('produces no transaction')
+  })
+
+  test('rejects more than one terminal compose node', () => {
+    const errors = lintDeliverable(baseDoc([build, compose, { ...compose, id: 'tx2' }]))
+    expect(errors.join(' ')).toContain('exactly one terminal compose node')
+  })
+})
+
 describe('buildSyntheticInputs', () => {
   test('uses the real funded simulation wallet for pubkey inputs', () => {
     const inputs = buildSyntheticInputs({ wallet: { type: 'pubkey' } })
@@ -201,7 +224,7 @@ describe('buildProposalMessage', () => {
       simulationSummary: 'OK, 4 RPC calls',
       model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     })
-    expect(text).toContain('attempt\\-123')
+    expect(text).toContain('attempt-123')
     expect(text).toContain('Prog11111111111111111111111111111111111')
   })
 
@@ -220,5 +243,23 @@ describe('buildProposalMessage', () => {
       model: 'm',
     })
     expect(text).toContain('was 3 inputs')
+  })
+
+  test('is plain text — no MarkdownV2 escaping that Telegram would reject', () => {
+    // An unescaped "(" around the program id used to fail every send with
+    // 400 "can't parse entities", so no proposal was ever delivered.
+    const text = buildProposalMessage({
+      attemptId: 'a1',
+      programId: 'Prog1',
+      projectName: 'A2a Swap',
+      reason: 'no_flow',
+      paramCounts: { input: 1, resolvable: 1, constant: 0 },
+      newInputCount: 1,
+      newRpcCalls: 1,
+      simulationSummary: 'OK, 1 RPC calls',
+      model: '@cf/moonshotai/kimi-k2.7-code',
+    })
+    expect(text).not.toContain('\\')
+    expect(text).toContain('(Prog1)')
   })
 })

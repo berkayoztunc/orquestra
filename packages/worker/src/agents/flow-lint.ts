@@ -58,6 +58,28 @@ const OUTPUT_FIELDS: Map<string, Set<string>> = new Map(
   NODE_CATALOG.map((entry) => [entry.key, parseOutputFields(entry.output)] as const),
 )
 
+/**
+ * A deliverable flow must actually produce a transaction. A real run finalized
+ * a scratch "temporary inspection flow to read Pool account field names" —
+ * valid FDL, simulated fine, completely useless as a published flow — because
+ * nothing required the output shape.
+ */
+export function lintDeliverable(doc: FlowDocument): string[] {
+  const types = doc.nodes.map((n) => n.type)
+  const builds = types.filter((t) => t.startsWith('orquestra.build_instruction')).length
+  const composes = types.filter((t) => t.startsWith('solana.compose_transaction')).length
+  const errors: string[] = []
+  if (builds === 0) {
+    errors.push('this flow builds no instruction — a publishable flow needs at least one orquestra.build_instruction@1 node')
+  }
+  if (composes === 0) {
+    errors.push('this flow produces no transaction — it must end with exactly one solana.compose_transaction@1 node')
+  } else if (composes > 1) {
+    errors.push(`found ${composes} solana.compose_transaction@1 nodes — a flow must have exactly one terminal compose node`)
+  }
+  return errors
+}
+
 export interface RefLintError {
   nodeId: string
   message: string

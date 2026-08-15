@@ -32,10 +32,16 @@ async function callTelegram(env: TelegramEnv, method: string, body: Record<strin
   return (json as any).result
 }
 
-/** Escapes MarkdownV2 special characters Telegram requires be escaped in plain text. */
-function escapeMd(text: string): string {
-  return text.replace(/[_*[\]()~`>#+\-=|{}.!]/g, (ch) => `\\${ch}`)
-}
+/**
+ * Messages are sent as PLAIN TEXT, not MarkdownV2.
+ *
+ * These bodies interpolate machine-generated content — base58 addresses, model
+ * ids, slugs, content hashes, and raw simulation error strings — and MarkdownV2
+ * requires escaping ~18 characters anywhere they appear. A single missed one
+ * fails the whole send with 400 "can't parse entities", which is exactly what
+ * happened in production: an unescaped "(" around the program id meant no
+ * proposal was ever delivered. Plain text removes the entire failure class.
+ */
 
 export interface FlowProposalInput {
   attemptId: string
@@ -71,23 +77,23 @@ export function buildProposalMessage(input: FlowProposalInput): string {
       : `Model: ${input.model}`
 
   const lines = [
-    escapeMd('🤖 Flow Builder Proposal'),
+    '🤖 Flow Builder Proposal',
     '',
-    `${escapeMd('Program:')} ${escapeMd(input.projectName)} (\`${escapeMd(input.programId)}\`)`,
-    `${escapeMd('Reason:')} ${escapeMd(reasonLine)}`,
-    input.instructionName ? `${escapeMd('Instruction:')} ${escapeMd(input.instructionName)}` : undefined,
+    `Program: ${input.projectName} (${input.programId})`,
+    `Reason: ${reasonLine}`,
+    input.instructionName ? `Instruction: ${input.instructionName}` : undefined,
     '',
-    escapeMd('Params:'),
-    escapeMd(`  Input:      ${input.paramCounts.input}`),
-    escapeMd(`  Resolvable: ${input.paramCounts.resolvable}`),
-    escapeMd(`  Constant:   ${input.paramCounts.constant}`),
+    'Params:',
+    `  Input:      ${input.paramCounts.input}`,
+    `  Resolvable: ${input.paramCounts.resolvable}`,
+    `  Constant:   ${input.paramCounts.constant}`,
     '',
-    escapeMd(`Estimated inputs required: ${input.newInputCount}${priorLine}`),
-    escapeMd(`Estimated RPC calls: ${input.newRpcCalls}`),
-    `${escapeMd('Simulation:')} ${escapeMd(input.simulationSummary)}`,
+    `Estimated inputs required: ${input.newInputCount}${priorLine}`,
+    `Estimated RPC calls: ${input.newRpcCalls}`,
+    `Simulation: ${input.simulationSummary}`,
     '',
-    escapeMd(costLine),
-    escapeMd(`Attempt: ${input.attemptId}`),
+    costLine,
+    `Attempt: ${input.attemptId}`,
   ].filter((line): line is string => line !== undefined)
 
   return lines.join('\n')
@@ -105,7 +111,6 @@ export async function sendFlowProposal(
   const result = await callTelegram(env, 'sendMessage', {
     chat_id: env.TELEGRAM_CHAT_ID,
     text,
-    parse_mode: 'MarkdownV2',
     reply_markup: {
       inline_keyboard: [
         [
@@ -127,7 +132,6 @@ export async function editProposalMessage(
     chat_id: params.chatId,
     message_id: Number(params.messageId),
     text: params.text,
-    parse_mode: 'MarkdownV2',
   })
   // Strip the inline keyboard separately — editMessageText with no
   // reply_markup leaves the previous keyboard in place.
@@ -150,7 +154,7 @@ export async function answerCallbackQuery(
 
 /** Plain text send — for admin command replies (/status, /pending, /help, /trigger). */
 export async function sendText(env: TelegramEnv, chatId: string, text: string): Promise<void> {
-  await callTelegram(env, 'sendMessage', { chat_id: chatId, text, parse_mode: 'MarkdownV2' })
+  await callTelegram(env, 'sendMessage', { chat_id: chatId, text })
 }
 
 /** Registers the bot's command menu (Telegram's "/" autocomplete list). Call once, not per-request. */
@@ -165,4 +169,3 @@ export async function setBotCommands(env: TelegramEnv): Promise<void> {
   })
 }
 
-export { escapeMd }

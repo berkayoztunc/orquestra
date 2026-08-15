@@ -45,11 +45,13 @@ import { fetchIDL } from '../services/idl-fetch'
 import { generateDocumentation } from '../services/doc-generator'
 import { listPdaAccounts, type PdaAccountInfo } from '../services/pda'
 import { queryProgramAccounts } from '../services/program-accounts'
+import { detectAccountType, deserializeAccountData } from '../services/account-parser'
+import { fetchAccountInfo } from '../utils/solana-rpc'
 import { normalizeAccountMeta, expandInstructionArgs, getInstruction } from '../services/idl-parser'
 import { buildSyntheticInputs, SIMULATION_WALLET } from '../services/flow-simulation-inputs'
 import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
 import { flowAuthorSystemPrompt } from './flow-author-prompt'
-import { lintReferences } from './flow-lint'
+import { lintReferences, lintDeliverable } from './flow-lint'
 
 registerAllNodes()
 
@@ -69,7 +71,7 @@ const MAX_SIMULATIONS_PER_DRAFT = 5
 const MAX_DOC_CHARS = 6_000
 const MAX_DOC_READS = 2
 
-const RESEARCH_TOOLS = ['list_instructions', 'get_instruction_detail', 'read_program_docs', 'find_real_account', 'search_similar_flows'] as const
+const RESEARCH_TOOLS = ['list_instructions', 'get_instruction_detail', 'read_program_docs', 'find_real_account', 'read_account_data', 'search_similar_flows'] as const
 const BUILD_TOOLS = ['validate_flow', 'simulate_flow', 'finalize_flow', 'skip'] as const
 
 type Env = SolanaRpcEnv & {
@@ -379,6 +381,34 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
         },
       }),
 
+      read_account_data: tool({
+        description:
+          'Fetch and decode a REAL on-chain account, returning its exact decoded field names and values. Use this before referencing $someNode.data.<field> anywhere — field names must match the decoded account exactly (they are usually snake_case from the IDL). Never build a throwaway flow just to inspect an account; use this instead.',
+        inputSchema: z.object({ address: z.string().describe('Account address, e.g. from find_real_account.') }),
+        execute: async ({ address }) => {
+          const data = await loadIdl()
+          if (!data) return { error: `project ${input.projectId} not found or not public` }
+          try {
+            const info = await fetchAccountInfo(address, rpcUrl)
+            if (!info) return { error: `no account at ${address}` }
+            const raw = Uint8Array.from(atob(info.data), (ch) => ch.charCodeAt(0))
+            const accountDef = await detectAccountType(raw, data.idl)
+            if (!accountDef) {
+              return { address, owner: info.owner, error: 'not decodable as any account type in this IDL — wrong address for this program?' }
+            }
+            const decoded = deserializeAccountData(raw, accountDef, data.idl)
+            return {
+              address,
+              accountType: accountDef.name,
+              fields: Object.keys(decoded),
+              decoded: JSON.parse(JSON.stringify(decoded, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))),
+            }
+          } catch (err) {
+            return { error: `decode failed: ${err instanceof Error ? err.message : String(err)}` }
+          }
+        },
+      }),
+
       search_similar_flows: tool({
         description: 'Search the published flow catalog for prior art — flows for similar protocols/intents whose node patterns you can borrow.',
         inputSchema: z.object({ query: z.string().optional(), intent: z.string().optional(), protocol: z.string().optional() }),
@@ -413,7 +443,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
             return { ok: false, errors: lastErrors }
           }
           lastErrors = []
-          if (!draftState.lastGood?.simulated) draftState.lastGood = { doc: parsed.data, plan: compiled.plan, simulated: false }
+          if (lintDeliverable(parsed.data).length === 0 && !draftState.lastGood?.simulated) draftState.lastGood = { doc: parsed.data, plan: compiled.plan, simulated: false }
           return {
             ok: true,
             contentHash: compiled.plan.hash,
@@ -472,7 +502,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           }
           lastErrors = []
           lastSimulatedHash = compiled.plan.hash
-          draftState.lastGood = { doc: parsed.data, plan: compiled.plan, simulated: true }
+          if (lintDeliverable(parsed.data).length === 0) draftState.lastGood = { doc: parsed.data, plan: compiled.plan, simulated: true }
           return {
             ok: true,
             rpcCalls: result.rpcCalls,
@@ -508,6 +538,10 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
                 ok: false,
                 error: 'finalize_flow requires a passing simulate_flow of this EXACT document. Call simulate_flow on it first.',
               }
+            }
+            const shape = lintDeliverable(parsed.data)
+            if (shape.length > 0) {
+              return { ok: false, error: `not a publishable flow: ${shape.join('; ')}` }
             }
           }
           terminal.finalized = { fdl, rationale }

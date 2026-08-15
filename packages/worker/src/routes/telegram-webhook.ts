@@ -17,7 +17,7 @@ import { buildSyntheticInputs } from '../services/flow-simulation-inputs'
 import { publishFlowVersion } from '../services/flow-publisher'
 import { cachePlan } from '../services/flow-estimator'
 import { getAttempt, getDraft, transitionOutcome, getRecentAttemptsSummary, getPendingAttempts } from '../services/flow-builder-log'
-import { editProposalMessage, answerCallbackQuery, sendText, escapeMd } from '../services/telegram'
+import { editProposalMessage, answerCallbackQuery, sendText } from '../services/telegram'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { verifyIngestKey } from '../middleware/auth'
 
@@ -115,29 +115,29 @@ async function handleApprove(c: Context<{ Bindings: Bindings }>, attemptId: stri
   if (editTarget) {
     await editProposalMessage(c.env, {
       ...editTarget,
-      text: `✅ Published — slug \`${publishResult.slug}\`, hash \`${publishResult.contentHash}\``,
+      text: `✅ Published — slug ${publishResult.slug}, hash ${publishResult.contentHash}`,
     })
   }
 }
 
 const HELP_TEXT = [
-  '🤖 *Flow Builder Agent*',
+  '🤖 Flow Builder Agent',
   '',
-  '/status \\- activity in the last 24h',
-  '/pending \\- proposals awaiting approve/reject',
-  '/trigger \\[programId\\] \\- run the agent now \\(top 5, or one program if given\\)',
-  '/help \\- this message',
+  '/status - activity in the last 24h',
+  '/pending - proposals awaiting approve/reject',
+  '/trigger [programId] - run the agent now (top candidates, or one program if given)',
+  '/help - this message',
 ].join('\n')
 
 async function handleStatus(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
   const summary = await getRecentAttemptsSummary(c.env.DB, 24)
   const lines = [
-    escapeMd(`📊 Last ${summary.windowHours}h`),
+    (`📊 Last ${summary.windowHours}h`),
     '',
-    ...Object.entries(summary.counts).map(([outcome, n]) => escapeMd(`${outcome}: ${n}`)),
-    Object.keys(summary.counts).length === 0 ? escapeMd('no attempts yet') : '',
+    ...Object.entries(summary.counts).map(([outcome, n]) => (`${outcome}: ${n}`)),
+    Object.keys(summary.counts).length === 0 ? ('no attempts yet') : '',
     '',
-    escapeMd(`Est. cost: $${summary.totalCostUsd.toFixed(4)}`),
+    (`Est. cost: $${summary.totalCostUsd.toFixed(4)}`),
   ].filter(Boolean)
   await sendText(c.env, chatId, lines.join('\n'))
 }
@@ -145,12 +145,12 @@ async function handleStatus(c: Context<{ Bindings: Bindings }>, chatId: string):
 async function handlePending(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
   const pending = await getPendingAttempts(c.env.DB, 10)
   if (pending.length === 0) {
-    await sendText(c.env, chatId, escapeMd('No proposals awaiting approval.'))
+    await sendText(c.env, chatId, ('No proposals awaiting approval.'))
     return
   }
-  const lines = [escapeMd(`⏳ ${pending.length} pending:`), '']
+  const lines = [(`⏳ ${pending.length} pending:`), '']
   for (const p of pending) {
-    lines.push(escapeMd(`${p.project_name ?? p.program_id} — attempt ${p.id} (${p.created_at})`))
+    lines.push((`${p.project_name ?? p.program_id} — attempt ${p.id} (${p.created_at})`))
   }
   await sendText(c.env, chatId, lines.join('\n'))
 }
@@ -160,18 +160,18 @@ const BASE58_PROGRAM_ID_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 
 async function handleTrigger(c: Context<{ Bindings: Bindings }>, chatId: string, programId?: string): Promise<void> {
   if (programId && !BASE58_PROGRAM_ID_RE.test(programId)) {
-    await sendText(c.env, chatId, escapeMd(`"${programId}" doesn't look like a valid program ID.`))
+    await sendText(c.env, chatId, (`"${programId}" doesn't look like a valid program ID.`))
     return
   }
   const workflow = c.env.FLOW_BUILDER_AGENT_WORKFLOW
   if (!workflow) {
-    await sendText(c.env, chatId, escapeMd('FLOW_BUILDER_AGENT_WORKFLOW binding not available.'))
+    await sendText(c.env, chatId, ('FLOW_BUILDER_AGENT_WORKFLOW binding not available.'))
     return
   }
   const instance = await workflow.create({ params: { trigger: 'admin', programId } })
   await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
-  const scope = programId ? `for \`${programId}\`` : '(top 5 candidates)'
-  await sendText(c.env, chatId, `🚀 Started ${escapeMd(scope)} — instance ${escapeMd(instance.id)}`)
+  const scope = programId ? `for ${programId}` : '(top candidates)'
+  await sendText(c.env, chatId, `🚀 Started ${scope} — instance ${instance.id}`)
 }
 
 async function handleCommand(c: Context<{ Bindings: Bindings }>, chatId: string, text: string): Promise<void> {

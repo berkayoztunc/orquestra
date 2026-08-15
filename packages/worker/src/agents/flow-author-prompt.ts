@@ -148,6 +148,11 @@ Rules:
   not exist resolves to undefined at run time and the node will fail (e.g. resolve.ata@1 with an
   undefined \`owner\` or \`mint\` throws "Cannot read properties of undefined"). If simulate_flow
   reports that, the named node has a bad reference — fix the ref, do not just retry.
+- A publishable flow MUST produce a transaction: at least one \`orquestra.build_instruction@1\` node
+  and exactly one terminal \`solana.compose_transaction@1\`. finalize_flow rejects anything else.
+  Never finalize a scratch/inspection flow.
+- To inspect an account's real field names, use \`read_account_data\` — never build a throwaway flow
+  to do it. Field names in \`$node.data.<field>\` must match the decoded account exactly.
 - Every step must be a tool call. Never reply with prose instead of calling a tool — doing so ends
   the run immediately and wastes the whole attempt. If you are ready to write FDL, call
   validate_flow; if you are done, call finalize_flow.

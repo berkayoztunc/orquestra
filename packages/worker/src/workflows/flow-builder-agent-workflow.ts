@@ -36,8 +36,14 @@ registerAllNodes()
 
 const TAG = '[flow-builder-agent]'
 
-/** Candidates processed per daily run — the primary AI-cost/RPC-cost lever. */
-export const MAX_ATTEMPTS_PER_RUN = 5
+/**
+ * Candidates processed per daily run — the primary AI-cost lever.
+ * Lowered 5 → 3 alongside the switch to a frontier model: a measured run cost
+ * $0.25, so 5/day was ~$38/month. Raise it again once the logged
+ * `usd_estimated` values confirm the per-attempt cost after the tool-output
+ * caps, rather than guessing.
+ */
+export const MAX_ATTEMPTS_PER_RUN = 3
 
 type Env = SolanaRpcEnv & {
   DB: D1Database

@@ -3,6 +3,7 @@ import { classifyParams } from '../src/services/flow-builder-log'
 import { estimateCost } from '../src/services/flow-builder-cost'
 import { buildProposalMessage } from '../src/services/telegram'
 import { buildSyntheticInputs, SIMULATION_WALLET } from '../src/services/flow-simulation-inputs'
+import { lintReferences, parseOutputFields } from '../src/agents/flow-lint'
 import type { FlowDocument } from '../src/flow-engine/fdl-schema'
 
 // Literal rather than imported from flow-author-agent.ts: that module pulls in
@@ -79,6 +80,71 @@ describe('estimateCost', () => {
   test('unknown model falls back rather than returning zero', () => {
     const unknown = estimateCost('@cf/some/model-that-does-not-exist', 10_000, 1_000)
     expect(unknown.usd).toBeGreaterThan(0)
+  })
+})
+
+describe('parseOutputFields', () => {
+  test('extracts top-level fields and ignores nested shapes', () => {
+    expect([...parseOutputFields('{ address: pubkey, bump: number }')].sort()).toEqual(['address', 'bump'])
+    expect([...parseOutputFields('{ address: pubkey, exists: boolean, createIx: FlowInstruction | null, tokenProgram: pubkey }')].sort())
+      .toEqual(['address', 'createIx', 'exists', 'tokenProgram'])
+  })
+
+  test('handles nested objects, arrays and optional keys', () => {
+    const fields = parseOutputFields(
+      '{ transactions: { unsignedTransaction: string, simulation?: { success, err } }[], risk: { level, reasons: string[] } }',
+    )
+    // Only depth-1 keys — nested `unsignedTransaction`/`level` must not leak out.
+    expect([...fields].sort()).toEqual(['risk', 'transactions'])
+  })
+
+  test('ignores parenthetical prose containing colons', () => {
+    const fields = parseOutputFields('{ address: pubkey (the token program actually used: auto-detected), bump: number }')
+    expect([...fields].sort()).toEqual(['address', 'bump'])
+  })
+})
+
+describe('lintReferences', () => {
+  const ataDoc = (ref: string) =>
+    baseDoc(
+      [
+        { id: 'ata', type: 'resolve.ata@1', in: { owner: '$inputs.wallet', mint: '$inputs.mint' } },
+        { id: 'ix', type: 'orquestra.build_instruction@1', in: { accounts: { tokenAccount: ref } } },
+      ],
+      { wallet: { type: 'pubkey' }, mint: { type: 'pubkey' } },
+    )
+
+  test('accepts a reference to a field the node actually emits', () => {
+    expect(lintReferences(ataDoc('$ata.address'))).toEqual([])
+  })
+
+  test('rejects a reference to a field the node does not emit', () => {
+    // This is the exact bug class that crashed production with
+    // "Cannot read properties of undefined (reading '_bn')".
+    const errors = lintReferences(ataDoc('$ata.addres'))
+    expect(errors).toHaveLength(1)
+    expect(errors[0].nodeId).toBe('ix')
+    expect(errors[0].message).toContain('addres')
+    expect(errors[0].message).toContain('address')
+  })
+
+  test('ignores $inputs refs and whole-node refs', () => {
+    const doc = baseDoc(
+      [
+        { id: 'ix', type: 'orquestra.build_instruction@1', in: { a: '$inputs.wallet', b: '$ata' } },
+        { id: 'ata', type: 'resolve.ata@1', in: {} },
+      ],
+      { wallet: { type: 'pubkey' } },
+    )
+    expect(lintReferences(doc)).toEqual([])
+  })
+
+  test('ignores refs to unknown node types rather than guessing', () => {
+    const doc = baseDoc([
+      { id: 'x', type: 'not.a.real.node@9', in: {} },
+      { id: 'ix', type: 'orquestra.build_instruction@1', in: { a: '$x.whatever' } },
+    ])
+    expect(lintReferences(doc)).toEqual([])
   })
 })
 

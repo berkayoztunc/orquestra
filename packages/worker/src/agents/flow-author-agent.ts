@@ -48,6 +48,7 @@ import { normalizeAccountMeta, expandInstructionArgs, getInstruction } from '../
 import { buildSyntheticInputs, SIMULATION_WALLET } from '../services/flow-simulation-inputs'
 import { resolveSolanaRpcUrl, type SolanaRpcEnv } from '../utils/solana-rpc'
 import { flowAuthorSystemPrompt } from './flow-author-prompt'
+import { lintReferences } from './flow-lint'
 
 registerAllNodes()
 
@@ -60,6 +61,11 @@ const RESEARCH_STEPS = 5
 // its own errors and hit the cap with steps still left. Simulations cost RPC,
 // not AI tokens, and they are the gate on whether a flow gets proposed at all.
 const MAX_SIMULATIONS_PER_DRAFT = 5
+// Cost controls. Every tool result stays in the conversation and is re-sent on
+// every later step, so a single fat result is paid for many times over: one
+// 20k-char doc read cost roughly half of a $0.25 run. Keep results small.
+const MAX_DOC_CHARS = 6_000
+const MAX_DOC_READS = 2
 
 const RESEARCH_TOOLS = ['list_instructions', 'get_instruction_detail', 'read_program_docs', 'search_similar_flows'] as const
 const BUILD_TOOLS = ['validate_flow', 'simulate_flow', 'finalize_flow', 'skip'] as const
@@ -156,6 +162,21 @@ function translateSeeds(info: PdaAccountInfo): { seeds: unknown[]; notes: string
   return { seeds, notes }
 }
 
+/** The SPL Associated Token Account program — a cross-program PDA owner. */
+const ATA_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+
+/**
+ * True when an instruction account is an associated token account. The strong
+ * signal is an IDL PDA whose `customProgram` is the ATA program; the name
+ * heuristic covers programs that document the account without PDA metadata.
+ * Getting this right matters because an ATA must be produced by
+ * `resolve.ata@1` (owner + mint), never declared as a flow input.
+ */
+function looksLikeAta(accountName: string, pdaInfo?: PdaAccountInfo): boolean {
+  if (pdaInfo?.customProgram === ATA_PROGRAM) return true
+  return /ata|associated.?token|token.?account/i.test(accountName)
+}
+
 export class FlowAuthorAgent extends Agent<Env, AgentState> {
   initialState: AgentState = {}
 
@@ -170,13 +191,14 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
     // traffic still spreads across replicas.
     const model = workersai(FLOW_AUTHOR_MODEL, {
       sessionAffinity: `flow-author:${input.programId}`,
-      reasoning_effort: 'medium',
+      reasoning_effort: 'low',
     } as any)
 
     const { rpcUrl } = resolveSolanaRpcUrl({ network: 'mainnet-beta', env: this.env })
     const nodeCtx: NodeContext = { db: this.env.DB, cache: this.env.CACHE, idls: this.env.IDLS, rpcUrl }
 
     let simulationsUsed = 0
+    let docReadsUsed = 0
     // Plain object rather than separate `let`s — TS narrows a nullable `let`
     // that is only reassigned inside a closure to `never` at the usage site.
     const terminal: { finalized: { fdl: unknown; rationale: string } | null; skipped: { reason: string } | null } = {
@@ -240,6 +262,26 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
                 hardcodeAddress: meta.address,
               }
             }
+            if (looksLikeAta(meta.name, pdaInfo)) {
+              return {
+                name: meta.name,
+                isMut: meta.isMut,
+                isSigner: meta.isSigner,
+                isOptional: meta.isOptional,
+                verdict: 'Resolvable',
+                resolveWith: 'resolve.ata@1',
+                nodeTemplate: {
+                  type: 'resolve.ata@1',
+                  in: { owner: '<owner pubkey ref>', mint: '<mint pubkey ref>' },
+                },
+                seedNotes: [
+                  'This is an associated token account: produce it with resolve.ata@1 from an owner and a mint. Never declare an ATA as a flow input.',
+                  'resolve.ata@1 outputs { address, exists, createIx, tokenProgram }. Use $node.address for this account.',
+                  'If the instruction also takes a *_token_program account, read $node.tokenProgram instead of adding an input.',
+                  'If the ATA may not exist yet, include $node.createIx? in compose_transaction instructions to create it.',
+                ],
+              }
+            }
             if (pdaInfo) {
               const { seeds, notes } = translateSeeds(pdaInfo)
               return {
@@ -286,11 +328,15 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
       }),
 
       read_program_docs: tool({
-        description: 'Read a section of the generated program documentation (llms.txt). Use "pdaAccounts" to understand PDA seed layouts and "instructions" for per-instruction prose.',
+        description: `Read a section of the generated program documentation (llms.txt). Use "pdaAccounts" for PDA seed layouts. Prefer get_instruction_detail first — it is more precise. Limit: ${MAX_DOC_READS} calls.`,
         inputSchema: z.object({
           section: z.enum(['overview', 'instructions', 'pdaAccounts', 'accounts']).describe('Which section to read.'),
         }),
         execute: async ({ section }) => {
+          if (docReadsUsed >= MAX_DOC_READS) {
+            return { error: `documentation read limit (${MAX_DOC_READS}) reached — use get_instruction_detail, or start drafting` }
+          }
+          docReadsUsed++
           const data = await loadIdl()
           if (!data) return { error: `project ${input.projectId} not found or not public` }
           const docs = generateDocumentation(
@@ -302,7 +348,7 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           )
           // Never return `docs.full` — it is unbounded and can be hundreds of KB.
           const text = docs[section] ?? ''
-          return { section, text: text.length > 20_000 ? `${text.slice(0, 20_000)}\n...[truncated]` : text }
+          return { section, text: text.length > MAX_DOC_CHARS ? `${text.slice(0, MAX_DOC_CHARS)}\n...[truncated]` : text }
         },
       }),
 
@@ -310,8 +356,11 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
         description: 'Search the published flow catalog for prior art — flows for similar protocols/intents whose node patterns you can borrow.',
         inputSchema: z.object({ query: z.string().optional(), intent: z.string().optional(), protocol: z.string().optional() }),
         execute: async ({ query, intent, protocol }) => {
-          const flows = await listFlows(this.env.DB, { query, intent, protocol, limit: 5 })
-          return flows.length > 0 ? flows : { message: 'no matching published flows' }
+          const flows = await listFlows(this.env.DB, { query, intent, protocol, limit: 3 })
+          if (flows.length === 0) return { message: 'no matching published flows' }
+          // Slugs + input shapes only: the full node graphs would sit in context
+          // for the rest of the run at no real benefit.
+          return flows.map((f: any) => ({ slug: f.slug, intent: f.intent, protocol: f.protocol, inputs: Object.keys(f.inputs ?? {}) }))
         },
       }),
 
@@ -327,6 +376,13 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
           const compiled = await compile(parsed.data)
           if (!compiled.ok) {
             lastErrors = compiled.errors.map((e) => `${e.nodeId ?? e.path ?? ''}: ${e.message}`)
+            return { ok: false, errors: lastErrors }
+          }
+          // Catches refs to fields a node does not emit — the compiler only
+          // checks the ref's root, so these otherwise crash mid-simulation.
+          const refErrors = lintReferences(parsed.data)
+          if (refErrors.length > 0) {
+            lastErrors = refErrors.map((e) => `${e.nodeId}: ${e.message}`)
             return { ok: false, errors: lastErrors }
           }
           lastErrors = []

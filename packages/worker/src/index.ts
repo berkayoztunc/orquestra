@@ -21,6 +21,7 @@ export { VerifiedAnalysisWorkflow } from './workflows/verified-analysis-workflow
 export { OsecDiscoverWorkflow } from './workflows/osec-discover-workflow'
 export { VerifiedMatchWorkflow } from './workflows/verified-match-workflow'
 export { VerifiedIdlImportWorkflow } from './workflows/verified-idl-import-workflow'
+export { FlowBuilderAgentWorkflow } from './workflows/flow-builder-agent-workflow'
 
 // Middleware
 import { errorHandler } from './middleware/error-handler'
@@ -41,6 +42,7 @@ import adminRoutes from './routes/admin'
 import discoveryRoutes from './routes/discovery'
 import listsRoutes from './routes/lists'
 import flowRoutes from './routes/flows'
+import telegramWebhookRoutes from './routes/telegram-webhook'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -75,6 +77,10 @@ type Env = {
     VERIFIED_IDL_IMPORT_WORKFLOW: any
     CANDIDATES_IMPORT_WORKFLOW: any
     CHAIN_DISCOVERY_WORKFLOW: any
+    FLOW_BUILDER_AGENT_WORKFLOW: any
+    TELEGRAM_BOT_TOKEN?: string
+    TELEGRAM_CHAT_ID?: string
+    TELEGRAM_WEBHOOK_SECRET?: string
   }
 }
 
@@ -128,6 +134,7 @@ app.route('/api/lists', listsRoutes)
 app.route('/api', apiRoutes)
 app.use('/flows/*', apiRateLimit)
 app.route('/flows', flowRoutes)
+app.route('/telegram', telegramWebhookRoutes)
 
 // 404 handler
 app.all('*', (c) => {

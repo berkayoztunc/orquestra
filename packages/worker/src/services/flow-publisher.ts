@@ -21,7 +21,7 @@ export async function publishFlowVersion(
   db: D1Database,
   doc: FlowDocument,
   plan: FlowPlan,
-  opts: { tier?: string; publish?: boolean } = {},
+  opts: { tier?: string; publish?: boolean; programId?: string } = {},
 ): Promise<PublishFlowResult> {
   const slug = plan.meta.slug
   const tier = opts.tier ?? 'instruction'
@@ -34,13 +34,16 @@ export async function publishFlowVersion(
     flowId = generateId()
     await db
       .prepare(
-        `INSERT INTO flows (id, slug, intent, protocol, tier, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)`,
+        `INSERT INTO flows (id, slug, intent, protocol, tier, status, program_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
       )
-      .bind(flowId, slug, plan.meta.intent, plan.meta.protocol ?? null, tier, now, now)
+      .bind(flowId, slug, plan.meta.intent, plan.meta.protocol ?? null, tier, opts.programId ?? null, now, now)
       .run()
   } else {
     flowId = existingFlow.id
+    if (opts.programId) {
+      await db.prepare(`UPDATE flows SET program_id = ? WHERE id = ?`).bind(opts.programId, flowId).run()
+    }
   }
 
   const existingVersion = await db

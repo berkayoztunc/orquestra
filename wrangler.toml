@@ -124,6 +124,15 @@ name = "candidates-import"
 binding = "CANDIDATES_IMPORT_WORKFLOW"
 class_name = "CandidatesImportWorkflow"
 
+# Workflow: Flow Builder Agent — daily, drafts FDL flows for verified programs
+# via Workers AI, compiles + simulates in-process, proposes improvements over
+# Telegram (see routes/telegram-webhook.ts). See migrations/026_flow_builder_agent.sql.
+[[workflows]]
+name = "flow-builder-agent"
+binding = "FLOW_BUILDER_AGENT_WORKFLOW"
+class_name = "FlowBuilderAgentWorkflow"
+schedules = ["0 6 * * *"]
+
 # Environment: Production
 [env.production]
 name = "orquestra-worker-prod"
@@ -212,6 +221,12 @@ name = "candidates-import-prod"
 binding = "CANDIDATES_IMPORT_WORKFLOW"
 class_name = "CandidatesImportWorkflow"
 
+[[env.production.workflows]]
+name = "flow-builder-agent-prod"
+binding = "FLOW_BUILDER_AGENT_WORKFLOW"
+class_name = "FlowBuilderAgentWorkflow"
+schedules = ["0 6 * * *"]
+
 # Environment: Development
 [env.development]
 name = "orquestra-worker-dev"
@@ -262,6 +277,11 @@ CORS_ORIGIN = "http://localhost:5173"
 # Optional secrets for RPC failover:
 #   SOLANA_MAINNET_FALLBACK_RPC_URLS — comma-separated backup mainnet RPC URLs
 #   SOLANA_FALLBACK_RPC_URLS         — comma-separated generic backup RPC URLs
+# Required secrets for the Flow Builder Agent (migration 026):
+#   TELEGRAM_BOT_TOKEN     — from BotFather
+#   TELEGRAM_CHAT_ID       — chat/group the agent posts proposals into
+#   TELEGRAM_WEBHOOK_SECRET — random string; also passed as `secret_token` in the
+#                             one-time `setWebhook` call registering /telegram/webhook
 #
 # Set with: wrangler secret put INGEST_API_KEY --env production
 

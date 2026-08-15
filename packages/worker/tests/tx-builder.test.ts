@@ -234,6 +234,55 @@ describe('Transaction Builder', () => {
     })
   })
 
+  describe('remainingAccounts (Anchor remaining_accounts)', () => {
+    test('appends extra account metas after the IDL-named accounts, in order', async () => {
+      const idl = {
+        name: 'remaining_accounts_program',
+        version: '0.31.0',
+        instructions: [
+          {
+            name: 'buy',
+            accounts: [
+              { name: 'user', isMut: true, isSigner: true },
+              { name: 'mint', isMut: false, isSigner: false },
+            ],
+            args: [],
+          },
+        ],
+      }
+
+      const result = await buildTransaction(
+        idl as any,
+        'buy',
+        {
+          accounts: {
+            user: '11111111111111111111111111111112',
+            mint: '11111111111111111111111111111113',
+          },
+          args: {},
+          feePayer: '11111111111111111111111111111112',
+          recentBlockhash: '11111111111111111111111111111111',
+          remainingAccounts: [
+            { pubkey: '11111111111111111111111111111114', isWritable: true },
+            { pubkey: '11111111111111111111111111111115', isSigner: true },
+          ],
+        },
+        '11111111111111111111111111111111',
+        'https://example-rpc.invalid',
+        { cluster: 'devnet', rpcUrlHost: 'example-rpc.invalid' },
+      )
+
+      expect(result.accounts.map((a) => a.pubkey)).toEqual([
+        '11111111111111111111111111111112',
+        '11111111111111111111111111111113',
+        '11111111111111111111111111111114',
+        '11111111111111111111111111111115',
+      ])
+      expect(result.accounts[2]).toMatchObject({ isSigner: false, isWritable: true })
+      expect(result.accounts[3]).toMatchObject({ isSigner: true, isWritable: false })
+    })
+  })
+
   describe('riskLevel + decodedError + compute units', () => {
     test('writable signer + transfer keyword in instruction name → high risk', async () => {
       const idl = {

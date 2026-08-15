@@ -31,6 +31,13 @@ export interface BuildInstructionInput {
   accounts: Record<string, string>
   args: Record<string, unknown>
   feePayer: string
+  /**
+   * Extra account metas appended after the IDL's named accounts — Anchor's
+   * `remaining_accounts` mechanism. For instructions that read a variable-length,
+   * caller-chosen tail of accounts the IDL cannot name individually (e.g. a
+   * program-selected fee/buyback recipient). Not validated against the IDL.
+   */
+  remainingAccounts?: { pubkey: string; isSigner?: boolean; isWritable?: boolean }[]
 }
 
 export interface BuildInstructionOutput {
@@ -74,6 +81,7 @@ export const buildInstructionNode: NodeImplementation<BuildInstructionInput, Bui
         accounts: input.accounts,
         args: input.args,
         feePayer: input.feePayer,
+        remainingAccounts: input.remainingAccounts,
       },
       project.programId,
       ctx.rpcUrl,

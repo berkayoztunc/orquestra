@@ -137,7 +137,12 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
       '{ projectId: string (Orquestra project id — NOT the program address; use search_programs to find ' +
       'it), instruction: string (exact instruction name from list_instructions), ' +
       'accounts: Record<accountName, pubkey> (every non-optional account the IDL declares for this ' +
-      'instruction), args: Record<argName, value> (every arg the IDL declares), feePayer: pubkey }',
+      'instruction), args: Record<argName, value> (every arg the IDL declares), feePayer: pubkey, ' +
+      'remainingAccounts?: { pubkey: pubkey, isSigner?: boolean, isWritable?: boolean }[] (Anchor ' +
+      '`remaining_accounts` — extra account metas appended after the IDL-named accounts, in order, for ' +
+      'instructions whose real on-chain program logic reads a variable-length caller-chosen tail of ' +
+      'accounts that the IDL has no name for, e.g. a dynamically-selected fee/buyback recipient. Not ' +
+      'validated against the IDL — get the order and flags right or the instruction will fail on-chain) }',
     output: '{ instruction: FlowInstruction, riskLevel: "low"|"medium"|"high", riskReasons: string[] }',
     example: {
       projectId: '$inputs.projectId',

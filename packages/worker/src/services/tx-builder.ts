@@ -39,6 +39,12 @@ export interface SimulationResult {
   build: BuildTransactionResponse
 }
 
+export interface RemainingAccount {
+  pubkey: string
+  isSigner?: boolean
+  isWritable?: boolean
+}
+
 export interface BuildTransactionRequest {
   accounts: Record<string, string>  // account name -> public key (base58)
   args: Record<string, any>         // arg name -> value
@@ -49,6 +55,15 @@ export interface BuildTransactionRequest {
   simulate?: boolean
   /** Encoding for serializedTransaction in the response. Defaults to 'base58'. Use 'base64' for the modern Solana standard. */
   encoding?: 'base58' | 'base64'
+  /**
+   * Extra account metas appended after the IDL's named accounts, in the order given —
+   * Anchor's `remaining_accounts` mechanism. Some instructions read a caller-chosen,
+   * variable-length tail of accounts (e.g. a whitelist entry, a dynamic fee recipient)
+   * that the IDL cannot name individually. Not validated against the IDL (there is
+   * nothing to validate against); the caller is responsible for supplying the right
+   * accounts in the right order for whatever remaining_accounts logic the program expects.
+   */
+  remainingAccounts?: RemainingAccount[]
 }
 
 export interface BuildTransactionResponse {
@@ -575,6 +590,15 @@ async function buildCodamaTx(
     throw new Error(`Missing required accounts: ${missingRequired.join(', ')}`)
   }
 
+  for (const acc of request.remainingAccounts ?? []) {
+    accountInfos.push({
+      name: `remaining[${accountInfos.length}]`,
+      pubkey: acc.pubkey,
+      isSigner: acc.isSigner ?? false,
+      isWritable: acc.isWritable ?? false,
+    })
+  }
+
   // Encode args
   const encodedArgs = encodeCodamaArgs(request.args, userArgs, idl)
 
@@ -719,6 +743,15 @@ export async function buildTransaction(
       isWritable: norm.isMut,
     }
   })
+
+  for (const acc of request.remainingAccounts ?? []) {
+    accountInfos.push({
+      name: `remaining[${accountInfos.length}]`,
+      pubkey: acc.pubkey,
+      isSigner: acc.isSigner ?? false,
+      isWritable: acc.isWritable ?? false,
+    })
+  }
 
   // Fetch recent blockhash if not provided (must use same RPC as cluster intent — see resolveSolanaRpcUrl at call sites)
   let blockhash = request.recentBlockhash

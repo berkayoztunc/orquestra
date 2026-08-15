@@ -48,6 +48,8 @@ type Env = SolanaRpcEnv & {
 
 type Params = {
   trigger?: 'cron' | 'manual' | 'admin'
+  /** Target one specific program by address instead of the normal priority pick — bypasses the 7-day cooldown too, since an explicit request should always run. */
+  programId?: string
 }
 
 type CandidateRow = {
@@ -109,7 +111,8 @@ function findInstructionName(doc: { nodes: Array<{ type: string; in: Record<stri
 export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'cron'
-    console.log(`${TAG} started (trigger=${trigger})`)
+    const targetProgramId = event.payload?.programId?.trim() || undefined
+    console.log(`${TAG} started (trigger=${trigger}${targetProgramId ? `, programId=${targetProgramId}` : ''})`)
 
     await step.do('register instance', { timeout: '10 seconds' }, async () => {
       await recordWorkflowInstance(this.env.DB, {
@@ -123,6 +126,26 @@ export class FlowBuilderAgentWorkflow extends WorkflowEntrypoint<Env, Params> {
       'select candidates',
       { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
+        // Explicit single-program request: bypass the priority pick, the
+        // 7-day cooldown, and even is_verified/is_public — a direct ask
+        // always runs, same as pointing the CLI at one program.
+        if (targetProgramId) {
+          const { results } = await this.env.DB.prepare(
+            `SELECT p.id, p.name, p.program_id, v.id AS version_id, f.id AS existing_flow_id
+             FROM projects p
+             JOIN idl_versions v ON v.project_id = p.id
+             LEFT JOIN flows f ON f.program_id = p.program_id AND f.status = 'published'
+             WHERE p.program_id = ?
+             GROUP BY p.id
+             LIMIT 1`,
+          )
+            .bind(targetProgramId)
+            .all()
+          const list = (results ?? []) as CandidateRow[]
+          console.log(`${TAG} ${list.length} candidate(s) for program ${targetProgramId}`)
+          return list
+        }
+
         const { results } = await this.env.DB.prepare(
           `SELECT p.id, p.name, p.program_id, v.id AS version_id, f.id AS existing_flow_id
            FROM projects p

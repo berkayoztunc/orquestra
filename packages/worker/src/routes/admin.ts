@@ -690,12 +690,15 @@ app.post('/sync/trigger-flow-builder', ingestKeyMiddleware, async (c) => {
   if (!workflow) return c.json({ error: 'FLOW_BUILDER_AGENT_WORKFLOW binding not available' }, 500)
 
   try {
-    const instance = await workflow.create({ params: { trigger: 'admin' } })
+    const body = await c.req.json().catch(() => ({})) as { programId?: string }
+    const programId = typeof body?.programId === 'string' ? body.programId.trim() || undefined : undefined
+    const instance = await workflow.create({ params: { trigger: 'admin', programId } })
     await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
     return c.json({
       triggered: true,
       instanceId: instance.id,
-      message: 'FlowBuilderAgentWorkflow started',
+      programId: programId ?? null,
+      message: programId ? `FlowBuilderAgentWorkflow started for ${programId}` : 'FlowBuilderAgentWorkflow started',
     })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)

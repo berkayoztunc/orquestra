@@ -132,7 +132,7 @@ const HELP_TEXT = [
   '',
   '/status \\- activity in the last 24h',
   '/pending \\- proposals awaiting approve/reject',
-  '/trigger \\- run the agent now',
+  '/trigger \\[programId\\] \\- run the agent now \\(top 5, or one program if given\\)',
   '/help \\- this message',
 ].join('\n')
 
@@ -162,26 +162,35 @@ async function handlePending(c: Context<{ Bindings: Bindings }>, chatId: string)
   await sendText(c.env, chatId, lines.join('\n'))
 }
 
-async function handleTrigger(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+/** Loose Solana base58 address shape check — 32-44 chars, base58 alphabet. */
+const BASE58_PROGRAM_ID_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
+async function handleTrigger(c: Context<{ Bindings: Bindings }>, chatId: string, programId?: string): Promise<void> {
+  if (programId && !BASE58_PROGRAM_ID_RE.test(programId)) {
+    await sendText(c.env, chatId, escapeMd(`"${programId}" doesn't look like a valid program ID.`))
+    return
+  }
   const workflow = c.env.FLOW_BUILDER_AGENT_WORKFLOW
   if (!workflow) {
     await sendText(c.env, chatId, escapeMd('FLOW_BUILDER_AGENT_WORKFLOW binding not available.'))
     return
   }
-  const instance = await workflow.create({ params: { trigger: 'admin' } })
+  const instance = await workflow.create({ params: { trigger: 'admin', programId } })
   await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'flow-builder-agent', trigger: 'admin' })
-  await sendText(c.env, chatId, escapeMd(`🚀 Started — instance ${instance.id}`))
+  const scope = programId ? `for \`${programId}\`` : '(top 5 candidates)'
+  await sendText(c.env, chatId, `🚀 Started ${escapeMd(scope)} — instance ${escapeMd(instance.id)}`)
 }
 
 async function handleCommand(c: Context<{ Bindings: Bindings }>, chatId: string, text: string): Promise<void> {
-  const command = text.trim().split(/\s+/)[0].split('@')[0]
+  const parts = text.trim().split(/\s+/)
+  const command = parts[0].split('@')[0]
   switch (command) {
     case '/status':
       return handleStatus(c, chatId)
     case '/pending':
       return handlePending(c, chatId)
     case '/trigger':
-      return handleTrigger(c, chatId)
+      return handleTrigger(c, chatId, parts[1])
     case '/start':
     case '/help':
       await sendText(c.env, chatId, HELP_TEXT)

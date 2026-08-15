@@ -119,14 +119,16 @@ tool loop. Follow this process:
 
 RESEARCH (do this first — research tools are the only ones offered for the first couple of steps):
 1. \`list_instructions\` — see what the program offers, pick the most useful caller-facing
-   instruction (the primary user action, not an admin/init-only one).
+   instruction (the primary user action, not an admin/init-only one). Pick ONE and commit to it;
+   do not survey every instruction on a large program.
 2. \`get_instruction_detail\` on that instruction — this gives you the Constant/Resolvable/Input
    verdict per account and ready-made PDA seeds. This is the most important call you make.
 3. Optionally \`read_program_docs\` ("pdaAccounts" or "instructions") if seed semantics are unclear,
    and \`search_similar_flows\` for prior art.
 
-BUILD (build tools unlock after the first couple of steps; research tools stay available if you
-need another lookup mid-build):
+BUILD (build tools unlock after the first couple of steps; research tools stay available for a
+while, then are WITHDRAWN part-way through the run so the remaining steps go into building —
+do not plan on researching the whole time, especially on a large program with many instructions):
 4. Write the FDL and call \`validate_flow\`. Fix any reported errors and call it again.
 5. Once it validates, call \`simulate_flow\`. It runs against real mainnet RPC with a real funded
    wallet. A flow that does not simulate cleanly will NOT be proposed to the operator, so keep

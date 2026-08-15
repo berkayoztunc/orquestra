@@ -59,8 +59,19 @@ export const FLOW_AUTHOR_MODEL = '@cf/moonshotai/kimi-k2.7-code'
 
 /** Total tool-loop steps, including the forced finalize on the last one. */
 const MAX_STEPS = 14
-/** Steps where ONLY research tools are offered, to front-load investigation. */
+/**
+ * Step phases. Two boundaries, not one — an earlier version had only a hard
+ * wall at step 5, which blocked a model that was ready to build early (it
+ * emitted prose and the run died); removing the wall entirely then let a model
+ * research for all 13 steps on a large program and never build at all.
+ *
+ *   [0, RESEARCH_ONLY_STEPS)      research only  — front-load investigation
+ *   [RESEARCH_ONLY_STEPS, RESEARCH_DEADLINE)  research + build — start when ready
+ *   [RESEARCH_DEADLINE, MAX-1)    build only     — research withdrawn, must build
+ *   MAX-1                         forced finalize
+ */
 const RESEARCH_ONLY_STEPS = 2
+const RESEARCH_DEADLINE = 8
 // Raised from 3 after a real run spent 4 simulate calls genuinely iterating on
 // its own errors and hit the cap with steps still left. Simulations cost RPC,
 // not AI tokens, and they are the gate on whether a flow gets proposed at all.
@@ -607,10 +618,15 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
         if (stepNumber < RESEARCH_ONLY_STEPS) {
           return { activeTools: [...RESEARCH_TOOLS], toolChoice: 'required' as const }
         }
-        // Overlapping phases, not a hard partition: research stays available so
-        // a mid-build lookup is possible, and building is unlocked as soon as
-        // the model is ready rather than at a fixed step.
-        return { activeTools: [...RESEARCH_TOOLS, ...BUILD_TOOLS], toolChoice: 'required' as const }
+        // Overlapping window: research stays available so a mid-build lookup is
+        // possible, and building unlocks as soon as the model is ready.
+        if (stepNumber < RESEARCH_DEADLINE) {
+          return { activeTools: [...RESEARCH_TOOLS, ...BUILD_TOOLS], toolChoice: 'required' as const }
+        }
+        // Deadline passed: withdraw research so the remaining steps go into
+        // validate/simulate/finalize. Without this a large program invites
+        // endless investigation and the run ends having built nothing.
+        return { activeTools: [...BUILD_TOOLS], toolChoice: 'required' as const }
       },
     })
 
@@ -658,6 +674,20 @@ export class FlowAuthorAgent extends Agent<Env, AgentState> {
     }
     const compiled = await compile(fdlParsed.data)
     if (!compiled.ok) {
+      // A forced finalize can hand back something never validated. Prefer a
+      // draft that actually compiled and simulated over the model's last gasp.
+      if (draftState.lastGood) {
+        return {
+          kind: 'compiled',
+          doc: draftState.lastGood.doc,
+          plan: draftState.lastGood.plan,
+          rationale: `(finalized document did not compile — fell back to last ${draftState.lastGood.simulated ? 'simulated' : 'validated'} draft)`,
+          steps: result.steps.length,
+          usage,
+          transcript,
+          simulationInputs: draftState.lastGood.simulated ? lastSimInputs : {},
+        }
+      }
       return {
         kind: 'no_finalize',
         steps: result.steps.length,

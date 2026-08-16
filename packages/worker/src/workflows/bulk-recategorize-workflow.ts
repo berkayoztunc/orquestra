@@ -1,6 +1,6 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { identifyProgram, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
-import { lookupProgramIdentity, mapHeliusCategory } from '../services/helius-identity'
+import { batchLookupProgramIdentity, mapHeliusCategory } from '../services/helius-identity'
 import { setCategoryAndAliases } from '../services/search'
 import { hibernateEvery } from '../utils/workflow-helpers'
 
@@ -10,6 +10,13 @@ const QUERY_LIMIT = 500
 // the whole catalog in a single instance instead of chunking across reruns.
 const BACKFILL_QUERY_LIMIT = 10_000
 const BATCH_SIZE = 25
+// Helius's batch-identity endpoint caps at 100 addresses per call. Using it
+// (one HTTP call per batch) instead of BATCH_SIZE sequential single lookups
+// is the real speed lever for backfill: 1/4 the Workflow steps for the same
+// catalog size, which also means 1/4 the `step.sleep` hibernation points —
+// each of which was observed stalling for hours on this account (a Workflows
+// platform resume issue, not anything in this code).
+const BACKFILL_BATCH_SIZE = 100
 
 type Env = {
   DB: any
@@ -90,28 +97,30 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
       return { categorized: 0, upgraded: 0, errors: 0, total: 0 }
     }
 
-    // ── Steps 2..N: process in batches of 25 ─────────────────────────────────
-    const totalBatches = Math.ceil(projects.length / BATCH_SIZE)
+    // ── Steps 2..N: process in batches ───────────────────────────────────────
+    const batchSize = mode === 'backfill' ? BACKFILL_BATCH_SIZE : BATCH_SIZE
+    const totalBatches = Math.ceil(projects.length / batchSize)
     let categorized = 0, upgraded = 0, errors = 0
 
     for (let i = 0; i < totalBatches; i++) {
-      const batch = projects.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE)
+      const batch = projects.slice(i * batchSize, (i + 1) * batchSize)
 
       const result = await step.do(
         `${mode} batch ${i + 1} of ${totalBatches}`,
-        // Worst case with the new 6s per-lookup timeout: 25 x 6s = 150s: 3
-        // minutes leaves margin instead of racing the old 2-minute cap.
-        { timeout: '3 minutes', retries: { limit: 1, delay: 10000, backoff: 'exponential' } },
+        // Backfill: one 15s-capped batch call covers up to 100 programs.
+        // Uncategorized: worst case 25 x 6s single lookups = 150s.
+        { timeout: mode === 'backfill' ? '1 minute' : '3 minutes', retries: { limit: 1, delay: 10000, backoff: 'exponential' } },
         async () => {
           let batchOk = 0, batchUpgraded = 0, batchErr = 0
 
-          for (const p of batch) {
-            try {
-              if (mode === 'backfill') {
-                // Helius only — a miss leaves the existing row exactly as it
-                // was, since the goal is upgrading rows Helius can verify,
-                // not re-running AI guesses on everything else.
-                const identity = await lookupProgramIdentity(p.program_id, this.env)
+          if (mode === 'backfill') {
+            // One HTTP call for the whole batch — see BACKFILL_BATCH_SIZE.
+            // A miss for any given program just leaves its existing
+            // AI-guessed row untouched; re-guessing isn't the point here.
+            const identities = await batchLookupProgramIdentity(batch.map((p) => p.program_id), this.env)
+            for (const p of batch) {
+              try {
+                const identity = identities.get(p.program_id)
                 if (identity) {
                   await setCategoryAndAliases(this.env.DB, p.id, mapHeliusCategory(identity.category), [], [], {
                     source: 'helius',
@@ -123,30 +132,36 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
                   batchUpgraded++
                 }
                 batchOk++
-                continue
+              } catch (err) {
+                console.error(`${TAG} failed to write ${p.id}:`, err)
+                batchErr++
               }
-
-              if (!p.idl_json) { batchErr++; continue } // uncategorized mode's query always selects it; guards the type only
-              const idl = JSON.parse(p.idl_json)
-              const instructions = extractInstructionNames(idl)
-              const accounts = extractAccountNames(idl)
-              const cat = await identifyProgram(this.env, {
-                name: p.name,
-                programId: p.program_id,
-                instructions,
-                accounts,
-              })
-              await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases, {
-                source: cat.source,
-                website: cat.website,
-                iconUrl: cat.iconUrl,
-                twitter: cat.twitter,
-                discord: cat.discord,
-              })
-              batchOk++
-            } catch (err) {
-              console.error(`${TAG} failed to process ${p.id}:`, err)
-              batchErr++
+            }
+          } else {
+            for (const p of batch) {
+              try {
+                if (!p.idl_json) { batchErr++; continue } // uncategorized mode's query always selects it; guards the type only
+                const idl = JSON.parse(p.idl_json)
+                const instructions = extractInstructionNames(idl)
+                const accounts = extractAccountNames(idl)
+                const cat = await identifyProgram(this.env, {
+                  name: p.name,
+                  programId: p.program_id,
+                  instructions,
+                  accounts,
+                })
+                await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases, {
+                  source: cat.source,
+                  website: cat.website,
+                  iconUrl: cat.iconUrl,
+                  twitter: cat.twitter,
+                  discord: cat.discord,
+                })
+                batchOk++
+              } catch (err) {
+                console.error(`${TAG} failed to process ${p.id}:`, err)
+                batchErr++
+              }
             }
           }
 
@@ -159,10 +174,11 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
       upgraded += result.upgraded
       errors += result.err
 
-      // Fast batches (esp. backfill's Helius-only lookups) can pile up
-      // subrequests within one isolate invocation — same pattern other
-      // per-batch workflows in this repo use.
-      await hibernateEvery(step, i + 1, 10, `batch ${i + 1}`)
+      // Every 30 batches, not 10: each sleep was observed stalling for hours
+      // on this account (a Workflows platform resume issue), so the fewer of
+      // them the better — this is purely a subrequest-budget safety net now
+      // that backfill needs far fewer steps overall.
+      await hibernateEvery(step, i + 1, 30, `batch ${i + 1}`)
     }
 
     const final = { categorized, upgraded, errors, total: projects.length, mode }

@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, afterEach } from 'bun:test'
-import { lookupProgramIdentity, mapHeliusCategory } from '../src/services/helius-identity'
+import { lookupProgramIdentity, batchLookupProgramIdentity, mapHeliusCategory } from '../src/services/helius-identity'
 import { identifyProgram } from '../src/services/ai-categorization'
 import { CATEGORY_TAXONOMY } from '../src/services/ai-categorization'
 
@@ -105,6 +105,64 @@ describe('lookupProgramIdentity', () => {
     ) as any
     const result = await lookupProgramIdentity('x', { HELIUS_API_KEY: 'test-key' })
     expect(result?.iconUrl).toBeUndefined()
+  })
+})
+
+describe('batchLookupProgramIdentity', () => {
+  test('returns an empty map when no API key is configured', async () => {
+    const result = await batchLookupProgramIdentity(['a', 'b'], {})
+    expect(result.size).toBe(0)
+  })
+
+  test('returns an empty map for an empty input without making a request', async () => {
+    const fetchSpy = mock(async () => new Response('[]'))
+    globalThis.fetch = fetchSpy as any
+    const result = await batchLookupProgramIdentity([], { HELIUS_API_KEY: 'test-key' })
+    expect(result.size).toBe(0)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  test('parses a real batch response shape (matches a live API check) and skips misses', async () => {
+    globalThis.fetch = mock(async () =>
+      new Response(
+        JSON.stringify([
+          { address: 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4', type: 'program', name: 'Jupiter Aggregator V6', category: 'Aggregator', icon: 'jupiterIcon.svg', website: 'https://jup.ag/' },
+          { address: 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', type: 'program', name: 'Orca Whirlpool Program', category: 'Swap', icon: 'orca.png' },
+          // A third address Helius doesn't recognize simply isn't present in
+          // the array at all — no error entry, no null placeholder.
+        ]),
+        { status: 200 },
+      ),
+    ) as any
+    const result = await batchLookupProgramIdentity(
+      ['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4', 'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc', 'SomeUnknownProgram'],
+      { HELIUS_API_KEY: 'test-key' },
+    )
+    expect(result.size).toBe(2)
+    expect(result.get('JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4')).toEqual({
+      address: 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
+      name: 'Jupiter Aggregator V6',
+      category: 'Aggregator',
+      iconUrl: 'https://orbmarkets.io/api/icons/jupiterIcon.svg',
+      website: 'https://jup.ag/',
+      twitter: undefined,
+      discord: undefined,
+    })
+    expect(result.has('SomeUnknownProgram')).toBe(false)
+  })
+
+  test('skips non-program entries (unresolved domains, wallet-type matches)', async () => {
+    globalThis.fetch = mock(async () =>
+      new Response(JSON.stringify([{ address: null, type: 'unknown', unresolved: true }, { address: 'x', type: 'wallet', name: 'toly', category: 'Key Opinion Leader' }]), { status: 200 }),
+    ) as any
+    const result = await batchLookupProgramIdentity(['a', 'x'], { HELIUS_API_KEY: 'test-key' })
+    expect(result.size).toBe(0)
+  })
+
+  test('returns an empty map (never throws) on a network error', async () => {
+    globalThis.fetch = mock(async () => { throw new Error('network down') }) as any
+    const result = await batchLookupProgramIdentity(['a'], { HELIUS_API_KEY: 'test-key' })
+    expect(result.size).toBe(0)
   })
 })
 

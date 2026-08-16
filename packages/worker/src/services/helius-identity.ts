@@ -91,6 +91,67 @@ export async function lookupProgramIdentity(
 }
 
 /**
+ * Batch lookup — up to 100 addresses in ONE HTTP call, vs. 100 sequential
+ * single lookups. This is the real speed lever for a bulk backfill: one
+ * network round trip covers a whole batch instead of N, which also means far
+ * fewer Workflow steps (and therefore far fewer `step.sleep` hibernation
+ * points) for the same catalog size. Returns a Map keyed by the input
+ * address for entries with no match, rather than throwing — a single bad
+ * address in a batch must not lose the other 99 results.
+ */
+export async function batchLookupProgramIdentity(
+  programIds: string[],
+  env: HeliusIdentityEnv,
+): Promise<Map<string, HeliusProgramIdentity>> {
+  const result = new Map<string, HeliusProgramIdentity>()
+  if (!env.HELIUS_API_KEY || programIds.length === 0) return result
+
+  try {
+    const controller = new AbortController()
+    // Longer than the single-lookup timeout — this call covers up to 100
+    // addresses server-side, not one.
+    const timeout = setTimeout(() => controller.abort(), 15_000)
+    let res: Response
+    try {
+      res = await fetch('https://api.helius.xyz/v1/wallet/batch-identity', {
+        method: 'POST',
+        headers: { 'X-Api-Key': env.HELIUS_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addresses: programIds }),
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+    if (!res.ok) {
+      console.error(`[helius-identity] batch lookup ${res.status}`)
+      return result
+    }
+    const data = (await res.json()) as unknown
+    if (!Array.isArray(data)) return result
+
+    for (const entry of data) {
+      const row = entry as Record<string, unknown>
+      const address = typeof row.address === 'string' ? row.address : null
+      if (!address || row.type !== 'program' || typeof row.name !== 'string' || typeof row.category !== 'string') {
+        continue
+      }
+      result.set(address, {
+        address,
+        name: row.name,
+        category: row.category,
+        iconUrl: typeof row.icon === 'string' ? resolveHeliusIconUrl(row.icon) : undefined,
+        website: typeof row.website === 'string' ? row.website : undefined,
+        twitter: typeof row.twitter === 'string' ? row.twitter : undefined,
+        discord: typeof row.discord === 'string' ? row.discord : undefined,
+      })
+    }
+  } catch (err) {
+    console.error('[helius-identity] batch lookup failed:', err)
+  }
+  return result
+}
+
+/**
  * Map Helius's ~28-value program category taxonomy onto our existing
  * CATEGORY_TAXONOMY (ai-categorization.ts). We keep our own taxonomy rather
  * than adopting theirs so the frontend's CATEGORY_LABELS and the FTS schema

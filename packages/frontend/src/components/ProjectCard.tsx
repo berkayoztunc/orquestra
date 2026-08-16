@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { CalendarDays, CheckCircle2, Code2, Layers, LockKeyhole, UserRound } from 'lucide-react'
+import { BadgeCheck, CalendarDays, CheckCircle2, Code2, Layers, LockKeyhole, UserRound } from 'lucide-react'
 import AddToListButton from './AddToListButton'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -30,6 +30,9 @@ interface ProjectCardProps {
     username?: string
     avatar_url?: string
     category?: string | null
+    /** Verified program logo (Helius Wallet Identity API) — preferred over avatar_url when present. */
+    icon_url?: string | null
+    category_source?: string | null
   }
   isOwner?: boolean
 }
@@ -48,6 +51,7 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
   const categoryLabel = project.category && project.category !== 'other'
     ? CATEGORY_LABELS[project.category]
     : null
+  const isVerifiedIdentity = project.category_source === 'helius'
 
   return (
     <Link
@@ -57,15 +61,20 @@ export default function ProjectCard({ project, isOwner }: ProjectCardProps): JSX
       <div className="mb-5 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden border border-border-low bg-sand-100 text-sm font-semibold text-sand-1500">
-            {project.avatar_url ? (
+            {project.icon_url ? (
+              <img src={project.icon_url} alt="" className="h-full w-full object-contain p-1" />
+            ) : project.avatar_url ? (
               <img src={project.avatar_url} alt="" className="h-full w-full object-cover" />
             ) : (
               project.name.charAt(0).toUpperCase()
             )}
           </div>
           <div className="min-w-0">
-            <h3 className="truncate text-lg font-semibold text-sand-1600 transition-colors group-hover:text-sand-1600">
-              {project.name}
+            <h3 className="flex items-center gap-1.5 truncate text-lg font-semibold text-sand-1600 transition-colors group-hover:text-sand-1600">
+              <span className="truncate">{project.name}</span>
+              {isVerifiedIdentity && (
+                <BadgeCheck className="h-4 w-4 shrink-0 text-blue-500" aria-label="Verified program" />
+              )}
             </h3>
             {!isOwner && project.username && (
               <div className="mt-1 flex items-center gap-1.5 text-xs text-sand-1100">

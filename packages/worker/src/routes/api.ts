@@ -321,6 +321,7 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
           COALESCE(pc.category, '') AS category,
           COALESCE(pc.tags, '') AS tags,
           COALESCE(pc.aliases, '') AS aliases,
+          pc.icon_url, pc.website, pc.source AS category_source,
           pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d,
           CASE WHEN aa.short_description IS NOT NULL THEN 1 ELSE 0 END AS has_ai_docs
         FROM projects p
@@ -402,8 +403,8 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
         return c.json({ error: 'Access denied' }, 403)
       }
 
-      // Enrich with version, socials, owner info (same as GET /projects/:projectId)
-      const [latestIdlResult, socialsResult] = await Promise.all([
+      // Enrich with version, socials, category/icon, owner info (same as GET /projects/:projectId)
+      const [latestIdlResult, socialsResult, categoryResult] = await Promise.all([
         db
           ?.prepare(
             'SELECT id, version, created_at FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
@@ -414,6 +415,13 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
           ?.prepare('SELECT twitter, discord, telegram, github, website FROM project_socials WHERE project_id = ?')
           .bind(project.id)
           .first(),
+        db
+          ?.prepare('SELECT category, tags, icon_url, website, twitter, discord, source FROM program_categories WHERE project_id = ?')
+          .bind(project.id)
+          .first() as Promise<
+          | { category?: string; tags?: string; icon_url?: string | null; website?: string | null; twitter?: string | null; discord?: string | null; source?: string }
+          | undefined
+        >,
       ])
 
       let apiKeyCount = 0
@@ -430,7 +438,17 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
           ...project,
           latestVersion: latestIdlResult?.version || 0,
           latestVersionDate: latestIdlResult?.created_at,
-          socials: socialsResult || {},
+          socials: {
+            website: (socialsResult as any)?.website || categoryResult?.website || null,
+            twitter: (socialsResult as any)?.twitter || categoryResult?.twitter || null,
+            discord: (socialsResult as any)?.discord || categoryResult?.discord || null,
+            telegram: (socialsResult as any)?.telegram || null,
+            github: (socialsResult as any)?.github || null,
+          },
+          category: categoryResult?.category || null,
+          categoryTags: categoryResult?.tags ? categoryResult.tags.split(',').filter(Boolean) : [],
+          iconUrl: categoryResult?.icon_url || null,
+          isVerifiedIdentity: categoryResult?.source === 'helius',
           apiKeyCount,
           isOwner: project.user_id === userId,
         },
@@ -530,7 +548,7 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
     }
 
     // Batch related queries for performance — single round-trip to D1
-    const [projectRes, latestIdlRes, socialsRes] = await db.batch([
+    const [projectRes, latestIdlRes, socialsRes, categoryRes] = await db.batch([
       db
         .prepare(
           'SELECT p.*, u.username, u.avatar_url FROM projects p JOIN users u ON p.user_id = u.id WHERE p.id = ?'
@@ -544,9 +562,15 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
       db
         .prepare('SELECT twitter, discord, telegram, github, website FROM project_socials WHERE project_id = ?')
         .bind(projectId),
+      db
+        .prepare('SELECT category, tags, icon_url, website, twitter, discord, source FROM program_categories WHERE project_id = ?')
+        .bind(projectId),
     ])
     const latestIdlResult = latestIdlRes?.results?.[0] as { version?: number; created_at?: string } | undefined
     const socialsResult = socialsRes?.results?.[0]
+    const categoryResult = categoryRes?.results?.[0] as
+      | { category?: string; tags?: string; icon_url?: string | null; website?: string | null; twitter?: string | null; discord?: string | null; source?: string }
+      | undefined
 
     const project = projectRes?.results?.[0] as any
 
@@ -574,7 +598,20 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
         ...project,
         latestVersion: latestIdlResult?.version || 0,
         latestVersionDate: latestIdlResult?.created_at,
-        socials: socialsResult || {},
+        // Owner-edited project_socials wins per-field; Helius-verified data
+        // (program_categories, from services/helius-identity.ts) fills in
+        // whatever the owner hasn't set themselves.
+        socials: {
+          website: socialsResult?.website || categoryResult?.website || null,
+          twitter: socialsResult?.twitter || categoryResult?.twitter || null,
+          discord: socialsResult?.discord || categoryResult?.discord || null,
+          telegram: socialsResult?.telegram || null,
+          github: socialsResult?.github || null,
+        },
+        category: categoryResult?.category || null,
+        categoryTags: categoryResult?.tags ? categoryResult.tags.split(',').filter(Boolean) : [],
+        iconUrl: categoryResult?.icon_url || null,
+        isVerifiedIdentity: categoryResult?.source === 'helius',
         apiKeyCount,
         isOwner: project.user_id === userId,
       },

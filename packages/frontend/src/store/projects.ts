@@ -17,6 +17,10 @@ interface Project {
   isOwner?: boolean
   socials?: Record<string, string>
   category?: string | null
+  category_source?: string | null
+  icon_url?: string | null
+  categoryTags?: string[]
+  isVerifiedIdentity?: boolean
   is_verified?: number | boolean | null
   verified_at?: string | null
   has_ai_docs?: number | null

@@ -171,9 +171,12 @@ app.post('/recategorize', ingestKeyMiddleware, async (c) => {
   const workflow = c.env?.BULK_RECATEGORIZE_WORKFLOW
   if (!workflow) return c.json({ error: 'BULK_RECATEGORIZE_WORKFLOW binding not available' }, 500)
 
+  const body = await c.req.json().catch(() => ({})) as { mode?: 'uncategorized' | 'backfill' }
+  const mode = body.mode === 'backfill' ? 'backfill' : 'uncategorized'
+
   try {
-    const instance = await workflow.create({ params: { trigger: 'admin' } })
-    return c.json({ triggered: true, instanceId: instance.id, message: 'BulkRecategorizeWorkflow started' })
+    const instance = await workflow.create({ params: { trigger: 'admin', mode } })
+    return c.json({ triggered: true, instanceId: instance.id, mode, message: `BulkRecategorizeWorkflow started (mode=${mode})` })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)
   }

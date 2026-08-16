@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeftRight, ArrowUpRight, Activity, Calendar, CheckCircle2, Clipboard, Clock3, Coins, FileJson, GitBranch, Globe2, Loader2, LockKeyhole, Plug, Share2, Sparkles, UploadCloud, Users, Workflow } from 'lucide-react'
+import { ArrowLeftRight, ArrowUpRight, Activity, BadgeCheck, Calendar, CheckCircle2, Clipboard, Clock3, Coins, FileJson, GitBranch, Globe2, Loader2, LockKeyhole, Plug, Share2, Sparkles, UploadCloud, Users, Workflow } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useProjectsStore } from '../store/projects'
@@ -583,7 +583,13 @@ export default function ProjectDetail(): JSX.Element {
           <div className="min-w-0 flex-1 space-y-5">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center border border-border-low bg-sand-100 text-lg font-semibold text-sand-1600">
-                {selectedProject.avatar_url ? (
+                {selectedProject.icon_url ? (
+                  <img
+                    src={selectedProject.icon_url}
+                    alt={selectedProject.name}
+                    className="h-full w-full object-contain p-1"
+                  />
+                ) : selectedProject.avatar_url ? (
                   <img
                     src={selectedProject.avatar_url}
                     alt={selectedProject.username || selectedProject.name}
@@ -616,6 +622,15 @@ export default function ProjectDetail(): JSX.Element {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                       </svg>
                       Verified Build
+                    </span>
+                  ) : null}
+                  {selectedProject.isVerifiedIdentity ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-600"
+                      title="Program identity verified via Helius"
+                    >
+                      <BadgeCheck className="h-3.5 w-3.5" />
+                      Verified Program
                     </span>
                   ) : null}
                   {selectedProject.username && (

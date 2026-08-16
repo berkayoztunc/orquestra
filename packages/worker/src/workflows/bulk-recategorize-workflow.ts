@@ -99,7 +99,9 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
 
       const result = await step.do(
         `${mode} batch ${i + 1} of ${totalBatches}`,
-        { timeout: '2 minutes', retries: { limit: 1, delay: 10000, backoff: 'exponential' } },
+        // Worst case with the new 6s per-lookup timeout: 25 x 6s = 150s: 3
+        // minutes leaves margin instead of racing the old 2-minute cap.
+        { timeout: '3 minutes', retries: { limit: 1, delay: 10000, backoff: 'exponential' } },
         async () => {
           let batchOk = 0, batchUpgraded = 0, batchErr = 0
 

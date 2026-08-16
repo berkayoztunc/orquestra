@@ -51,9 +51,21 @@ export async function lookupProgramIdentity(
   if (!env.HELIUS_API_KEY) return null
 
   try {
-    const res = await fetch(`https://api.helius.xyz/v1/wallet/${programId}/identity`, {
-      headers: { 'X-Api-Key': env.HELIUS_API_KEY },
-    })
+    // No timeout here meant one slow/hanging request could stall an entire
+    // Workflow batch until its 2-minute step timeout fired — a bulk backfill
+    // over thousands of programs was on pace for ~14 hours because of this,
+    // averaging minutes per batch instead of seconds.
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 6_000)
+    let res: Response
+    try {
+      res = await fetch(`https://api.helius.xyz/v1/wallet/${programId}/identity`, {
+        headers: { 'X-Api-Key': env.HELIUS_API_KEY },
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
     if (res.status === 404) return null
     if (!res.ok) {
       console.error(`[helius-identity] ${res.status} for ${programId}`)

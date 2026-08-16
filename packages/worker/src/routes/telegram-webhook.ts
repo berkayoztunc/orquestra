@@ -17,7 +17,7 @@ import { buildSyntheticInputs } from '../services/flow-simulation-inputs'
 import { publishFlowVersion } from '../services/flow-publisher'
 import { cachePlan } from '../services/flow-estimator'
 import { getAttempt, getDraft, transitionOutcome, getRecentAttemptsSummary, getPendingAttempts } from '../services/flow-builder-log'
-import { editProposalMessage, answerCallbackQuery, sendText, sendButtonMenu, type ButtonRow } from '../services/telegram'
+import { editProposalMessage, answerCallbackQuery, sendText, sendButtonMenu, setBotCommands, type ButtonRow } from '../services/telegram'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { verifyIngestKey } from '../middleware/auth'
 import { computePipelineHealth, runPipelineHealthCheck, startCandidatesImport, type HealthEnv } from '../services/pipeline-health'
@@ -173,6 +173,7 @@ const HELP_TEXT = [
   '/regen_analysis <projectId> [force] - regenerate AI analysis for one project',
   '/update_cache <projectId> [force] - rebuild IDL cache/docs for one project',
   '',
+  '/menu - refresh Telegram\'s "/" autocomplete list',
   '/help - this message',
 ].join('\n')
 
@@ -566,6 +567,10 @@ async function handleCommand(c: Context<{ Bindings: Bindings }>, chatId: string,
       return handleRegenAnalysis(c, chatId, parts[1], parts[2])
     case '/update_cache':
       return handleUpdateCache(c, chatId, parts[1], parts[2])
+    case '/menu':
+      await setBotCommands(c.env)
+      await sendText(c.env, chatId, '✅ "/" menu refreshed — reopen the chat\'s command list to see it.')
+      return
     case '/start':
     case '/help':
       await sendText(c.env, chatId, HELP_TEXT)

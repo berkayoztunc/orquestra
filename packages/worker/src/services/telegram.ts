@@ -241,6 +241,7 @@ export async function setBotCommands(env: TelegramEnv): Promise<void> {
       { command: 'sync_recategorize', description: 'AI/Helius categorize projects [backfill]' },
       { command: 'regen_analysis', description: 'Regenerate AI analysis for one project <id> [force]' },
       { command: 'update_cache', description: 'Rebuild IDL cache for one project <id> [force]' },
+      { command: 'menu', description: 'Refresh this "/" command list' },
       { command: 'help', description: 'List available commands' },
     ],
   })

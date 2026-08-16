@@ -185,8 +185,12 @@ export default function Flows(): JSX.Element {
             {filtered.map((flow) => (
               <Card key={flow.slug} interactive className="flex flex-col gap-3 p-5">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center border border-border-low bg-sand-100 text-sand-1400">
-                    <Workflow className="h-5 w-5" aria-hidden="true" />
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden border border-border-low bg-sand-100 text-sand-1400">
+                    {flow.iconUrl ? (
+                      <img src={flow.iconUrl} alt="" className="h-full w-full object-contain p-1" />
+                    ) : (
+                      <Workflow className="h-5 w-5" aria-hidden="true" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-sand-1600">{flow.meta.name}</h3>

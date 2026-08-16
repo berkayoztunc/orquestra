@@ -811,6 +811,7 @@ export interface FlowSummary {
   meta: FlowMeta
   inputs: Record<string, { type: string; description?: string }>
   outputs: Record<string, { type: string; description?: string }>
+  iconUrl?: string | null
 }
 
 export async function listFlows(params?: { q?: string; intent?: string; protocol?: string; limit?: number }): Promise<FlowSummary[]> {

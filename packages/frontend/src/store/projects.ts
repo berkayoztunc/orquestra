@@ -39,6 +39,7 @@ interface UpdateLog {
   old_hash: string | null
   new_hash: string
   detected_at: string
+  icon_url?: string | null
 }
 
 interface ProjectsState {

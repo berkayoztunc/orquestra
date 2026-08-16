@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Braces, FileText, Network, ShieldCheck, Terminal } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
+import { useAnalyticsStore } from '../store/analytics'
 import { getGitHubLoginUrl } from '../api/client'
 import CodeBlock from '../components/CodeBlock'
 import TwitterWall from '../components/TwitterWall'
@@ -12,7 +14,9 @@ import { HeroDecor } from '@/ui/HeroDecor'
 
 const proofStats = [
   { value: '30s', label: 'IDL to hosted API' },
-  { value: '9', label: 'MCP tools for agents' },
+  // 11 tools in the main Orquestra MCP server + 7 in the Flow Engine MCP
+  // server (services/analytics.ts's MCP_TOOL enum, ids 0-17) = 18 total.
+  { value: '18', label: 'MCP tools for agents' },
   { value: '0', label: 'client SDKs required' },
 ]
 
@@ -344,6 +348,14 @@ function SurfaceIllustration({ type }: { type: SurfaceVisual }): JSX.Element {
 }
 
 export default function Home(): JSX.Element {
+  const { analytics, loadAnalytics } = useAnalyticsStore()
+
+  useEffect(() => {
+    loadAnalytics()
+  }, [loadAnalytics])
+
+  const programsWithIdl = analytics ? analytics.platform.programs_with_idl.toLocaleString() : '—'
+
   return (
     <div className="relative">
       {/* Hero — centered with hatch icon + animated pulse lines */}
@@ -363,7 +375,7 @@ export default function Home(): JSX.Element {
             <CtaButtons />
           </div>
 
-          <div className="mt-16 grid w-full max-w-2xl grid-cols-3 divide-x divide-border-low border-y border-border-low">
+          <div className="mt-16 grid w-full max-w-2xl grid-cols-2 divide-x divide-y divide-border-low border-y border-border-low sm:grid-cols-4 sm:divide-y-0">
             {proofStats.map((stat) => (
               <div key={stat.label} className="px-4 py-5">
                 <p className="font-mono text-2xl text-sand-1600">{stat.value}</p>
@@ -372,6 +384,12 @@ export default function Home(): JSX.Element {
                 </p>
               </div>
             ))}
+            <div className="px-4 py-5">
+              <p className="font-mono text-2xl text-sand-1600">{programsWithIdl}</p>
+              <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.1em] text-sand-1100">
+                programs with IDL
+              </p>
+            </div>
           </div>
         </div>
       </section>

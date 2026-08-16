@@ -34,6 +34,8 @@ export interface FlowSummary {
   meta: FlowMeta
   inputs: Record<string, unknown>
   outputs: Record<string, unknown>
+  /** Logo for `meta.programs[0]` (the flow's primary program), from program_categories — null when unset/unverified. */
+  iconUrl?: string | null
 }
 
 async function fetchPublishedFlows(db: D1Database): Promise<FlowCatalogRow[]> {
@@ -52,6 +54,29 @@ async function fetchPublishedFlows(db: D1Database): Promise<FlowCatalogRow[]> {
 function rowToSummary(row: FlowCatalogRow): FlowSummary {
   const metadata = JSON.parse(row.metadata_json) as { meta: FlowMeta; inputs: Record<string, unknown>; outputs: Record<string, unknown> }
   return { slug: row.slug, intent: row.intent, protocol: row.protocol, tier: row.tier, ...metadata }
+}
+
+/**
+ * Attaches `iconUrl` for each summary's primary program (`meta.programs[0]`)
+ * via one batch lookup against `program_categories`, instead of a per-flow
+ * query. Mutates and returns the same array for convenience at call sites.
+ */
+async function attachIconUrls(db: D1Database, summaries: FlowSummary[]): Promise<FlowSummary[]> {
+  const programIds = [...new Set(summaries.map((f) => f.meta.programs?.[0]).filter((id): id is string => Boolean(id)))]
+  if (programIds.length === 0) return summaries
+
+  const placeholders = programIds.map(() => '?').join(',')
+  const { results } = await db
+    .prepare(`SELECT program_id, icon_url FROM program_categories WHERE program_id IN (${placeholders})`)
+    .bind(...programIds)
+    .all<{ program_id: string; icon_url: string | null }>()
+
+  const iconByProgram = new Map((results ?? []).map((r) => [r.program_id, r.icon_url]))
+  for (const summary of summaries) {
+    const primaryProgram = summary.meta.programs?.[0]
+    summary.iconUrl = primaryProgram ? (iconByProgram.get(primaryProgram) ?? null) : null
+  }
+  return summaries
 }
 
 export interface ListFlowsFilter {
@@ -87,7 +112,7 @@ export async function listFlows(db: D1Database, filter: ListFlowsFilter = {}): P
   if (filter.limit && filter.limit > 0) {
     summaries = summaries.slice(0, filter.limit)
   }
-  return summaries
+  return attachIconUrls(db, summaries)
 }
 
 export async function getFlowMetadata(db: D1Database, slug: string): Promise<FlowSummary | null> {
@@ -100,5 +125,7 @@ export async function getFlowMetadata(db: D1Database, slug: string): Promise<Flo
     )
     .bind(slug)
     .first<FlowCatalogRow>()
-  return row ? rowToSummary(row) : null
+  if (!row) return null
+  const [summary] = await attachIconUrls(db, [rowToSummary(row)])
+  return summary
 }

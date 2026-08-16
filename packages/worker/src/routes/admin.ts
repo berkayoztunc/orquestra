@@ -190,9 +190,10 @@ app.get('/sync/history', async (c) => {
       .prepare(
         `SELECT ul.id, ul.project_id, ul.program_id, ul.program_name,
                 ul.old_version, ul.new_version, ul.old_hash, ul.new_hash,
-                ul.detected_at, p.name AS project_name
+                ul.detected_at, p.name AS project_name, pc.icon_url
          FROM update_logs ul
          LEFT JOIN projects p ON p.id = ul.project_id
+         LEFT JOIN program_categories pc ON pc.project_id = ul.project_id
          ORDER BY ul.detected_at DESC
          LIMIT ? OFFSET ?`,
       )

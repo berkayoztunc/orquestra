@@ -17,6 +17,13 @@ const MCP_TOOL_NAMES: Record<number, string> = {
   8: 'Simulate instruction',
   9: 'Get program data',
   10: 'Simulate transaction',
+  11: 'Get flow schema',
+  12: 'Validate flow',
+  13: 'Simulate flow',
+  14: 'Publish flow',
+  15: 'List flows',
+  16: 'Get flow metadata',
+  17: 'Estimate flow',
 }
 
 /** Cap on-screen rows so the page fits one viewport without scrolling. */

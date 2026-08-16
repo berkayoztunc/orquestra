@@ -298,20 +298,44 @@ export async function getSignaturesForAddress(
     ],
   })
 
-  const response = await rpcFetch(rpcUrls, body, RPC_TIMEOUTS.signatures)
-  if (!response.ok) throw new Error(`RPC request failed: HTTP ${response.status}`)
+  // Some providers return a normal 200 OK with a JSON-RPC-level error for
+  // very high-traffic addresses (e.g. "Address is not supported" for the
+  // BPF Loader Upgradeable account, which every program deploy touches) —
+  // rpcFetch()'s failover only advances on transport-level failures
+  // (network error, timeout, 5xx/429), so a provider-side restriction like
+  // this would otherwise never reach the working fallback URLs. Loop over
+  // the URLs ourselves so a JSON-RPC error also advances to the next one.
+  const list = Array.isArray(rpcUrls) ? rpcUrls : [rpcUrls]
+  let lastError: unknown
 
-  const json = (await response.json()) as {
-    result?: Array<{ signature: string; slot: number; err: unknown }>
-    error?: { message?: string }
+  for (const url of list) {
+    try {
+      const response = await rpcFetch(url, body, RPC_TIMEOUTS.signatures)
+      if (!response.ok) {
+        lastError = new Error(`RPC request failed: HTTP ${response.status}`)
+        continue
+      }
+
+      const json = (await response.json()) as {
+        result?: Array<{ signature: string; slot: number; err: unknown }>
+        error?: { message?: string }
+      }
+      if (json.error) {
+        lastError = new Error(`RPC error: ${json.error.message ?? JSON.stringify(json.error)}`)
+        continue
+      }
+
+      return (json.result ?? []).map((r) => ({
+        signature: r.signature,
+        slot: r.slot,
+        err: r.err ? JSON.stringify(r.err) : null,
+      }))
+    } catch (err) {
+      lastError = err
+    }
   }
-  if (json.error) throw new Error(`RPC error: ${json.error.message ?? JSON.stringify(json.error)}`)
 
-  return (json.result ?? []).map((r) => ({
-    signature: r.signature,
-    slot: r.slot,
-    err: r.err ? JSON.stringify(r.err) : null,
-  }))
+  throw lastError instanceof Error ? lastError : new Error('RPC request failed: all endpoints unreachable')
 }
 
 export interface SignaturesSinceResult {

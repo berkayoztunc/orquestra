@@ -204,6 +204,20 @@ export async function sendText(env: TelegramEnv, chatId: string, text: string): 
   await callTelegram(env, 'sendMessage', { chat_id: chatId, text })
 }
 
+export interface ButtonRow {
+  text: string
+  callback_data: string
+}
+
+/**
+ * Plain text + inline keyboard — the `/admin` control panel menu and any
+ * other multi-choice admin prompt. `rows` is already laid out (2 buttons per
+ * row is the convention used elsewhere in this file); this just sends it.
+ */
+export async function sendButtonMenu(env: TelegramEnv, chatId: string, text: string, rows: ButtonRow[][]): Promise<void> {
+  await callTelegram(env, 'sendMessage', { chat_id: chatId, text, reply_markup: { inline_keyboard: rows } })
+}
+
 /** Registers the bot's command menu (Telegram's "/" autocomplete list). Call once, not per-request. */
 export async function setBotCommands(env: TelegramEnv): Promise<void> {
   await callTelegram(env, 'setMyCommands', {
@@ -211,6 +225,22 @@ export async function setBotCommands(env: TelegramEnv): Promise<void> {
       { command: 'status', description: 'Flow builder activity in the last 24h' },
       { command: 'pending', description: 'Proposals awaiting approve/reject' },
       { command: 'trigger', description: 'Run the flow builder agent now' },
+      { command: 'admin', description: 'Admin control panel (buttons)' },
+      { command: 'dashboard', description: 'Queue/status snapshot across the sync pipeline' },
+      { command: 'health', description: 'Pipeline health check detail' },
+      { command: 'remediate', description: 'Force health check + auto-remediation now' },
+      { command: 'analytics', description: 'Traffic + platform coverage summary' },
+      { command: 'sync_idl', description: 'Trigger IDL sync for all public projects' },
+      { command: 'sync_osec', description: 'Trigger OSEC verified-program discovery' },
+      { command: 'sync_verified_match', description: 'Match OSEC verified list against DB' },
+      { command: 'sync_verified_idl', description: 'Import on-chain IDL for verified programs missing one' },
+      { command: 'sync_verified_analysis', description: 'Generate AI docs for verified programs [force]' },
+      { command: 'sync_chain', description: 'Trigger chain discovery (new on-chain deploys)' },
+      { command: 'sync_import', description: 'Drain the candidates import queue [full-sweep]' },
+      { command: 'sync_metrics', description: 'Import Solana Compass program metrics' },
+      { command: 'sync_recategorize', description: 'AI/Helius categorize projects [backfill]' },
+      { command: 'regen_analysis', description: 'Regenerate AI analysis for one project <id> [force]' },
+      { command: 'update_cache', description: 'Rebuild IDL cache for one project <id> [force]' },
       { command: 'help', description: 'List available commands' },
     ],
   })

@@ -17,11 +17,16 @@ import { buildSyntheticInputs } from '../services/flow-simulation-inputs'
 import { publishFlowVersion } from '../services/flow-publisher'
 import { cachePlan } from '../services/flow-estimator'
 import { getAttempt, getDraft, transitionOutcome, getRecentAttemptsSummary, getPendingAttempts } from '../services/flow-builder-log'
-import { editProposalMessage, answerCallbackQuery, sendText } from '../services/telegram'
+import { editProposalMessage, answerCallbackQuery, sendText, sendButtonMenu, type ButtonRow } from '../services/telegram'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { verifyIngestKey } from '../middleware/auth'
+import { computePipelineHealth, runPipelineHealthCheck, startCandidatesImport, type HealthEnv } from '../services/pipeline-health'
+import { getAnalyticsSummary } from '../services/analytics'
 
 registerAllNodes()
+
+/** Every workflow binding a Telegram admin action can create an instance of. */
+type WorkflowBinding = { create(opts: { params: Record<string, unknown> }): Promise<{ id: string }> }
 
 type Bindings = {
   DB: D1Database
@@ -30,8 +35,19 @@ type Bindings = {
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
   TELEGRAM_WEBHOOK_SECRET?: string
-  FLOW_BUILDER_AGENT_WORKFLOW?: { create(opts: { params: Record<string, unknown> }): Promise<{ id: string }> }
-  SOLANA_RPC_URL?: string
+  FLOW_BUILDER_AGENT_WORKFLOW?: WorkflowBinding
+  IDL_SYNC_WORKFLOW?: WorkflowBinding
+  IDL_UPDATE_CACHE_WORKFLOW?: WorkflowBinding
+  BULK_RECATEGORIZE_WORKFLOW?: WorkflowBinding
+  VERIFIED_ANALYSIS_WORKFLOW?: WorkflowBinding
+  OSEC_DISCOVER_WORKFLOW?: WorkflowBinding
+  VERIFIED_MATCH_WORKFLOW?: WorkflowBinding
+  VERIFIED_IDL_IMPORT_WORKFLOW?: WorkflowBinding
+  CANDIDATES_IMPORT_WORKFLOW?: WorkflowBinding
+  CHAIN_DISCOVERY_WORKFLOW?: WorkflowBinding
+  PROGRAM_METRICS_WORKFLOW?: WorkflowBinding
+  AI_ANALYSIS_WORKFLOW?: WorkflowBinding
+  SOLANA_RPC_URL: string
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_FALLBACK_RPC_URLS?: string
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
@@ -125,13 +141,299 @@ async function handleApprove(c: Context<{ Bindings: Bindings }>, attemptId: stri
 }
 
 const HELP_TEXT = [
-  '🤖 Flow Builder Agent',
+  '🤖 Orquestra Admin Bot',
   '',
-  '/status - activity in the last 24h',
+  'Flow Builder:',
+  '/status - flow builder activity in the last 24h',
   '/pending - proposals awaiting approve/reject',
   '/trigger <programId> - list that program\'s instructions worth a flow, then pick one',
+  '',
+  'Control panel:',
+  '/admin - button menu for everything below',
+  '/dashboard - queue/status snapshot across the sync pipeline',
+  '/health - pipeline health check detail (per-check status)',
+  '/remediate - force health check + auto-remediation now',
+  '/analytics - traffic + platform coverage summary',
+  '',
+  'Sync & discovery:',
+  '/sync_idl - re-check IDLs for all public projects',
+  '/sync_osec - fetch OSEC verified-program list, enqueue new candidates',
+  '/sync_chain - scan for newly deployed on-chain programs',
+  '/sync_import [full-sweep] - drain the pending candidates queue',
+  '',
+  'Verification:',
+  '/sync_verified_match - match OSEC verified list against DB, update is_verified flags',
+  '/sync_verified_idl - fetch on-chain IDL for verified programs missing one',
+  '',
+  'Analysis & categorization:',
+  '/sync_verified_analysis [force] - generate AI docs/analysis for verified programs',
+  '/sync_metrics - import Solana Compass program activity metrics',
+  '/sync_recategorize [backfill] - AI/Helius categorize projects',
+  '  (no arg: only uncategorized projects; backfill: re-check already-categorized ones against Helius only)',
+  '/regen_analysis <projectId> [force] - regenerate AI analysis for one project',
+  '/update_cache <projectId> [force] - rebuild IDL cache/docs for one project',
+  '',
   '/help - this message',
 ].join('\n')
+
+/**
+ * Config-driven trigger table — one entry per admin workflow that takes no
+ * more than a single optional string argument. Both text commands
+ * (`handleCommand`) and `/admin` button taps (`adm:<key>[:<arg>]` callback
+ * data) go through the same `handleAdminAction`, so the trigger logic for
+ * each workflow lives in exactly one place.
+ */
+interface AdminAction {
+  /** Shown in the confirmation message once triggered. */
+  label: string
+  /** Which workflow binding on `Bindings` to call `.create()` on. */
+  binding: keyof Bindings
+  /** `workflow` column value for `recordWorkflowInstance` / the health checker's registry. */
+  workflowName: string
+  /** Builds the Workflow's `params` payload from the optional command/button argument. */
+  buildParams: (arg?: string) => Record<string, unknown>
+}
+
+const ADMIN_ACTIONS: Record<string, AdminAction> = {
+  idlsync: {
+    label: 'IDL sync (all public projects)',
+    binding: 'IDL_SYNC_WORKFLOW',
+    workflowName: 'idl-sync',
+    buildParams: () => ({ trigger: 'admin' }),
+  },
+  osec: {
+    label: 'OSEC verified-program discovery',
+    binding: 'OSEC_DISCOVER_WORKFLOW',
+    workflowName: 'osec-discover',
+    buildParams: () => ({ trigger: 'admin' }),
+  },
+  vmatch: {
+    label: 'Verified match (OSEC list vs DB)',
+    binding: 'VERIFIED_MATCH_WORKFLOW',
+    workflowName: 'verified-match',
+    buildParams: () => ({ trigger: 'admin' }),
+  },
+  vidl: {
+    label: 'Verified IDL import',
+    binding: 'VERIFIED_IDL_IMPORT_WORKFLOW',
+    workflowName: 'verified-idl-import',
+    buildParams: () => ({ trigger: 'admin' }),
+  },
+  vanalysis: {
+    label: 'Verified analysis (AI docs)',
+    binding: 'VERIFIED_ANALYSIS_WORKFLOW',
+    workflowName: 'verified-analysis',
+    buildParams: (arg) => ({ trigger: 'admin', force: arg === 'force' }),
+  },
+  chain: {
+    label: 'Chain discovery (new on-chain deploys)',
+    binding: 'CHAIN_DISCOVERY_WORKFLOW',
+    workflowName: 'chain-discovery',
+    buildParams: () => ({ trigger: 'admin' }),
+  },
+  metrics: {
+    label: 'Program metrics import',
+    binding: 'PROGRAM_METRICS_WORKFLOW',
+    workflowName: 'program-metrics-import',
+    buildParams: () => ({}),
+  },
+  recat: {
+    label: 'Recategorize projects',
+    binding: 'BULK_RECATEGORIZE_WORKFLOW',
+    workflowName: 'bulk-recategorize',
+    buildParams: (arg) => ({ trigger: 'admin', mode: arg === 'backfill' ? 'backfill' : 'uncategorized' }),
+  },
+}
+
+async function handleAdminAction(c: Context<{ Bindings: Bindings }>, chatId: string, key: string, arg?: string): Promise<void> {
+  const action = ADMIN_ACTIONS[key]
+  if (!action) {
+    await sendText(c.env, chatId, `Unknown admin action "${key}".`)
+    return
+  }
+  const workflow = c.env[action.binding] as WorkflowBinding | undefined
+  if (!workflow) {
+    await sendText(c.env, chatId, `${action.binding} binding not available.`)
+    return
+  }
+  try {
+    const params = action.buildParams(arg)
+    const instance = await workflow.create({ params })
+    await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: action.workflowName, trigger: 'admin', params })
+    await sendText(c.env, chatId, `🚀 ${action.label} started — instance ${instance.id}`)
+  } catch (err) {
+    await sendText(c.env, chatId, `⚠️ Failed to start ${action.label}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+/**
+ * candidates-import is the one workflow with an existing stack-avoidance
+ * guard (`startCandidatesImport` in pipeline-health.ts, also used by the
+ * cron and remediation paths) — routed separately from the generic table so
+ * that guard applies here too instead of stacking duplicate import instances.
+ */
+async function handleSyncImport(c: Context<{ Bindings: Bindings }>, chatId: string, arg?: string): Promise<void> {
+  const mode = arg === 'full-sweep' ? 'full-sweep' : 'import'
+  const res = await startCandidatesImport(c.env as unknown as HealthEnv, 'admin', mode)
+  await sendText(
+    c.env,
+    chatId,
+    res.started ? `🚀 Candidates import (${mode}) started — instance ${res.instanceId}` : `Import not started: ${res.reason}`,
+  )
+}
+
+async function handleHealth(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const health = await computePipelineHealth(c.env as unknown as HealthEnv)
+  const icon = health.status === 'ok' ? '✅' : health.status === 'degraded' ? '⚠️' : '🔴'
+  const lines = [
+    `${icon} Pipeline: ${health.status}`,
+    '',
+    ...health.checks.map((ch) => `${ch.ok ? '✅' : ch.severity === 'critical' ? '🔴' : '⚠️'} ${ch.name}: ${ch.detail}`),
+  ]
+  await sendText(c.env, chatId, lines.join('\n'))
+}
+
+async function handleRemediate(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  await sendText(c.env, chatId, '🛠 Running health check + auto-remediation…')
+  const health = await runPipelineHealthCheck(c.env as unknown as HealthEnv)
+  const icon = health.status === 'ok' ? '✅' : health.status === 'degraded' ? '⚠️' : '🔴'
+  const lines = [
+    `${icon} Pipeline: ${health.status}`,
+    '',
+    ...health.checks.filter((ch) => !ch.ok).map((ch) => `${ch.severity === 'critical' ? '🔴' : '⚠️'} ${ch.name}: ${ch.detail}`),
+    health.remediations.length ? '' : undefined,
+    ...health.remediations.map((r) => `→ ${r}`),
+  ].filter((l): l is string => l !== undefined)
+  await sendText(c.env, chatId, lines.length > 2 ? lines.join('\n') : `${icon} Pipeline: ${health.status} — nothing to remediate`)
+}
+
+async function handleAnalytics(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const a = await getAnalyticsSummary(c.env.DB)
+  const last7 = a.daily_api.slice(-7).reduce((sum, d) => sum + Number(d.total), 0)
+  const idlPct = a.platform.total_programs > 0 ? (100 * a.platform.programs_with_idl) / a.platform.total_programs : 0
+  const lines = [
+    '📈 Analytics',
+    '',
+    `All-time: ${a.totals_alltime.api} API · ${a.totals_alltime.mcp} MCP requests`,
+    `Last 7d API requests: ${last7}`,
+    '',
+    'Top programs:',
+    ...a.top_programs.slice(0, 5).map((p, i) => `${i + 1}. ${p.name} — ${p.total}`),
+    '',
+    `Platform: ${a.platform.total_programs} programs, ${idlPct.toFixed(1)}% with IDL, ${a.platform.verified_programs} verified`,
+    `IDL versions: ${a.platform.idl_versions_total} · Workflow runs: ${a.platform.workflow_runs_total}`,
+  ]
+  await sendText(c.env, chatId, lines.join('\n'))
+}
+
+async function handleDashboard(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const db = c.env.DB
+  const [candidates, osec, verifiedIdl, verifiedAnalysis, metrics] = await Promise.all([
+    db.prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN status = 'has_idl' THEN 1 ELSE 0 END) AS has_idl,
+              SUM(CASE WHEN status = 'no_idl' THEN 1 ELSE 0 END) AS no_idl
+       FROM program_candidates`,
+    ).first<{ total: number; pending: number; has_idl: number; no_idl: number }>(),
+    db.prepare(
+      `SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending
+       FROM program_candidates WHERE source = 'osec'`,
+    ).first<{ total: number; pending: number }>(),
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM projects p LEFT JOIN idl_versions v ON v.project_id = p.id
+       WHERE p.is_verified = 1 AND v.id IS NULL`,
+    ).first<{ n: number }>(),
+    db.prepare(
+      `SELECT COUNT(DISTINCT p.id) AS n FROM projects p
+       JOIN idl_versions v ON v.project_id = p.id
+       LEFT JOIN ai_analyses aa ON aa.project_id = p.id
+       WHERE p.is_verified = 1 AND p.is_public = 1 AND aa.id IS NULL`,
+    ).first<{ n: number }>(),
+    db.prepare(`SELECT COUNT(*) AS total, MAX(fetched_at) AS last_fetched FROM program_metrics`).first<{ total: number; last_fetched: string | null }>(),
+  ])
+  const lines = [
+    '📋 Pipeline dashboard',
+    '',
+    `Candidates queue: ${candidates?.total ?? 0} total, ${candidates?.pending ?? 0} pending, ${candidates?.has_idl ?? 0} has_idl, ${candidates?.no_idl ?? 0} no_idl`,
+    `OSEC candidates: ${osec?.total ?? 0} total, ${osec?.pending ?? 0} pending`,
+    `Verified programs missing IDL: ${verifiedIdl?.n ?? 0}`,
+    `Verified programs missing AI analysis: ${verifiedAnalysis?.n ?? 0}`,
+    `Program metrics: ${metrics?.total ?? 0} rows, last fetched ${metrics?.last_fetched ?? 'never'}`,
+  ]
+  await sendText(c.env, chatId, lines.join('\n'))
+}
+
+/** `/regen_analysis <projectId> [force]` — regenerate AI docs/analysis for one project. */
+async function handleRegenAnalysis(c: Context<{ Bindings: Bindings }>, chatId: string, projectId?: string, forceArg?: string): Promise<void> {
+  if (!projectId) {
+    await sendText(c.env, chatId, 'Usage: /regen_analysis <projectId> [force]')
+    return
+  }
+  const workflow = c.env.AI_ANALYSIS_WORKFLOW
+  if (!workflow) {
+    await sendText(c.env, chatId, 'AI_ANALYSIS_WORKFLOW binding not available.')
+    return
+  }
+  const force = forceArg === 'force'
+  const instance = await workflow.create({ params: { projectId, force } })
+  await sendText(c.env, chatId, `🚀 Regenerating analysis for ${projectId} (force=${force}) — instance ${instance.id}`)
+}
+
+/** `/update_cache <projectId> [force]` — rebuild IDL summary/docs/category cache for one project. */
+async function handleUpdateCache(c: Context<{ Bindings: Bindings }>, chatId: string, projectId?: string, forceArg?: string): Promise<void> {
+  if (!projectId) {
+    await sendText(c.env, chatId, 'Usage: /update_cache <projectId> [force]')
+    return
+  }
+  const workflow = c.env.IDL_UPDATE_CACHE_WORKFLOW
+  if (!workflow) {
+    await sendText(c.env, chatId, 'IDL_UPDATE_CACHE_WORKFLOW binding not available.')
+    return
+  }
+  const force = forceArg === 'force'
+  const instance = await workflow.create({ params: { projectId, force } })
+  await sendText(c.env, chatId, `🚀 Rebuilding IDL cache for ${projectId} (force=${force}) — instance ${instance.id}`)
+}
+
+/** `/admin` — button menu covering every action `ADMIN_ACTIONS` plus the health/analytics reads. */
+async function handleAdminMenu(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
+  const rows: ButtonRow[][] = [
+    [{ text: '🔄 IDL Sync', callback_data: 'adm:idlsync' }, { text: '🔎 OSEC Discover', callback_data: 'adm:osec' }],
+    [{ text: '⛓ Chain Discovery', callback_data: 'adm:chain' }, { text: '📦 Import Queue', callback_data: 'adm:import' }],
+    [{ text: '📦 Import (full sweep)', callback_data: 'adm:import:full-sweep' }],
+    [{ text: '✅ Verified Match', callback_data: 'adm:vmatch' }, { text: '📥 Verified IDL Import', callback_data: 'adm:vidl' }],
+    [{ text: '🧠 Verified Analysis', callback_data: 'adm:vanalysis' }, { text: '🧠 + Force', callback_data: 'adm:vanalysis:force' }],
+    [{ text: '📊 Program Metrics', callback_data: 'adm:metrics' }, { text: '🏷 Recategorize', callback_data: 'adm:recat' }],
+    [{ text: '🏷 Recategorize (backfill)', callback_data: 'adm:recat:backfill' }],
+    [{ text: '❤️ Health', callback_data: 'adm:health' }, { text: '🛠 Remediate Now', callback_data: 'adm:remediate' }],
+    [{ text: '📈 Analytics', callback_data: 'adm:analytics' }, { text: '📋 Dashboard', callback_data: 'adm:dashboard' }],
+  ]
+  await sendButtonMenu(c.env, chatId, '🤖 Admin control panel', rows)
+}
+
+/**
+ * Dispatch for `adm:<key>[:<arg>]` callback data — covers the four read-only
+ * actions (health/remediate/analytics/dashboard) plus every `ADMIN_ACTIONS`
+ * trigger and the guarded candidates-import path. Single entry point so
+ * `/admin` button taps and the equivalent text commands can never drift.
+ */
+async function handleAdmKey(c: Context<{ Bindings: Bindings }>, chatId: string, key: string, arg?: string): Promise<void> {
+  switch (key) {
+    case 'health':
+      return handleHealth(c, chatId)
+    case 'remediate':
+      return handleRemediate(c, chatId)
+    case 'analytics':
+      return handleAnalytics(c, chatId)
+    case 'dashboard':
+      return handleDashboard(c, chatId)
+    case 'import':
+      return handleSyncImport(c, chatId, arg)
+    default:
+      return handleAdminAction(c, chatId, key, arg)
+  }
+}
 
 async function handleStatus(c: Context<{ Bindings: Bindings }>, chatId: string): Promise<void> {
   const summary = await getRecentAttemptsSummary(c.env.DB, 24)
@@ -232,6 +534,38 @@ async function handleCommand(c: Context<{ Bindings: Bindings }>, chatId: string,
       return handlePending(c, chatId)
     case '/trigger':
       return handleTrigger(c, chatId, parts[1])
+    case '/admin':
+      return handleAdminMenu(c, chatId)
+    case '/dashboard':
+      return handleDashboard(c, chatId)
+    case '/health':
+      return handleHealth(c, chatId)
+    case '/remediate':
+      return handleRemediate(c, chatId)
+    case '/analytics':
+      return handleAnalytics(c, chatId)
+    case '/sync_idl':
+      return handleAdminAction(c, chatId, 'idlsync')
+    case '/sync_osec':
+      return handleAdminAction(c, chatId, 'osec')
+    case '/sync_verified_match':
+      return handleAdminAction(c, chatId, 'vmatch')
+    case '/sync_verified_idl':
+      return handleAdminAction(c, chatId, 'vidl')
+    case '/sync_verified_analysis':
+      return handleAdminAction(c, chatId, 'vanalysis', parts[1])
+    case '/sync_chain':
+      return handleAdminAction(c, chatId, 'chain')
+    case '/sync_import':
+      return handleSyncImport(c, chatId, parts[1])
+    case '/sync_metrics':
+      return handleAdminAction(c, chatId, 'metrics')
+    case '/sync_recategorize':
+      return handleAdminAction(c, chatId, 'recat', parts[1])
+    case '/regen_analysis':
+      return handleRegenAnalysis(c, chatId, parts[1], parts[2])
+    case '/update_cache':
+      return handleUpdateCache(c, chatId, parts[1], parts[2])
     case '/start':
     case '/help':
       await sendText(c.env, chatId, HELP_TEXT)
@@ -267,6 +601,8 @@ app.post('/webhook', async (c) => {
           await handleReject(c, parts[1])
         } else if (action === 'fb' && parts[1] && parts[2] !== undefined) {
           await handleBuildChoice(c, senderChatId, parts[1], parts[2])
+        } else if (action === 'adm' && parts[1]) {
+          await handleAdmKey(c, senderChatId, parts[1], parts[2])
         }
       } catch (err) {
         console.error('[telegram-webhook] callback handling failed:', err)

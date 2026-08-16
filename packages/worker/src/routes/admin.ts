@@ -4,6 +4,7 @@ import { recordWorkflowInstance } from '../services/workflow-registry'
 import { computePipelineHealth, runPipelineHealthCheck, startCandidatesImport, HEALTH_KV_KEY } from '../services/pipeline-health'
 import { importProgramMetrics } from '../services/program-metrics'
 import { fetchWithTimeout } from '../utils/solana-rpc'
+import { getAnalyticsSummary } from '../services/analytics'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -26,6 +27,7 @@ type Env = {
     VERIFIED_MATCH_WORKFLOW: any
     VERIFIED_IDL_IMPORT_WORKFLOW: any
     FLOW_BUILDER_AGENT_WORKFLOW: any
+    CHAIN_DISCOVERY_WORKFLOW: any
   }
 }
 
@@ -52,109 +54,7 @@ app.get('/analytics', async (c) => {
   if (!db) return c.json({ error: 'Database not available' }, 500)
 
   try {
-    const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns, idlVersionsTotal] = await Promise.all([
-      // Daily HTTP API totals (last 30 days)
-      db
-        .prepare(
-          `SELECT date, SUM(count) AS total
-           FROM analytics
-           WHERE event_type = 0
-             AND date >= CAST(strftime('%Y%m%d', 'now', '-30 days') AS INTEGER)
-           GROUP BY date
-           ORDER BY date ASC`,
-        )
-        .all(),
-
-      // Daily MCP totals per tool (last 30 days)
-      db
-        .prepare(
-          `SELECT date, tool_id, SUM(count) AS total
-           FROM analytics
-           WHERE event_type = 1
-             AND date >= CAST(strftime('%Y%m%d', 'now', '-30 days') AS INTEGER)
-           GROUP BY date, tool_id
-           ORDER BY date ASC`,
-        )
-        .all(),
-
-      // Top 6 programs by combined API + MCP request count (all time)
-      db
-        .prepare(
-          `SELECT a.project_id, p.name, SUM(a.count) AS total
-           FROM analytics a
-           INNER JOIN projects p ON p.id = a.project_id
-           GROUP BY a.project_id
-           ORDER BY total DESC
-           LIMIT 6`,
-        )
-        .all(),
-
-      // All-time API vs MCP request totals
-      db
-        .prepare(
-          `SELECT
-             SUM(CASE WHEN event_type = 0 THEN count ELSE 0 END) AS api_total,
-             SUM(CASE WHEN event_type = 1 THEN count ELSE 0 END) AS mcp_total
-           FROM analytics`,
-        )
-        .first(),
-
-      // IDL-presence + verified-build coverage across the FULL sync universe
-      // (`program_candidates` — every program_id the discovery pipeline has
-      // ever queued/scanned, PK-deduped, ~60K+ rows), not just the small
-      // imported `projects` catalog. status='has_idl' means the sync pipeline
-      // confirmed an on-chain IDL (see idl-sync.ts). is_verified is tracked
-      // only on imported `projects` rows and set per program_id (see
-      // verified-match-workflow.ts), so dedupe verified via DISTINCT program_id.
-      db
-        .prepare(
-          `SELECT
-             (SELECT COUNT(*) FROM program_candidates) AS total,
-             (SELECT COUNT(*) FROM program_candidates WHERE status = 'has_idl') AS with_idl,
-             (SELECT COUNT(DISTINCT program_id) FROM projects WHERE is_verified = 1) AS verified,
-             (SELECT COUNT(DISTINCT pc.program_id)
-                FROM program_candidates pc
-                INNER JOIN projects p ON p.program_id = pc.program_id
-                WHERE pc.status = 'has_idl' AND p.is_verified = 1) AS with_idl_and_verified`,
-        )
-        .first(),
-
-      // Total Workflow instances ever created (chain-discovery, idl-sync,
-      // osec-discover, candidates-import, verified-match/-analysis, ...)
-      db
-        .prepare(`SELECT COUNT(*) AS total FROM workflow_instances`)
-        .first(),
-
-      // Total IDL versions ever uploaded across public projects (all
-      // versions, not just latest — depth/maturity signal)
-      db
-        .prepare(
-          `SELECT COUNT(*) AS total
-           FROM idl_versions v
-           INNER JOIN projects p ON p.id = v.project_id
-           WHERE p.is_public = 1`,
-        )
-        .first(),
-    ])
-
-    // D1 may return BigInt for COUNT/SUM — coerce explicitly
-    return c.json({
-      daily_api: dailyApi.results ?? [],
-      daily_mcp: dailyMcp.results ?? [],
-      top_programs: topPrograms.results ?? [],
-      totals_alltime: {
-        api: Number((allTimeTotals as any)?.api_total ?? 0),
-        mcp: Number((allTimeTotals as any)?.mcp_total ?? 0),
-      },
-      platform: {
-        total_programs: Number((verifiedStats as any)?.total ?? 0),
-        programs_with_idl: Number((verifiedStats as any)?.with_idl ?? 0),
-        verified_programs: Number((verifiedStats as any)?.verified ?? 0),
-        programs_with_idl_and_verified: Number((verifiedStats as any)?.with_idl_and_verified ?? 0),
-        workflow_runs_total: Number((workflowRuns as any)?.total ?? 0),
-        idl_versions_total: Number((idlVersionsTotal as any)?.total ?? 0),
-      },
-    })
+    return c.json(await getAnalyticsSummary(db))
   } catch {
     return c.json({ error: 'Failed to fetch analytics' }, 500)
   }
@@ -778,6 +678,27 @@ app.post('/sync/trigger-osec-discover', ingestKeyMiddleware, async (c) => {
   } catch (err) {
     console.error('[admin] trigger-osec-discover error:', err)
     return c.json({ error: 'Failed to start OSEC discover workflow', details: String(err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/sync/trigger-chain-discovery
+ * Triggers ChainDiscoveryWorkflow — pages getSignaturesForAddress against the
+ * BPF Loader Upgradeable program from its saved cursor, extracts newly
+ * deployed program ids, and enqueues them as candidates. Normally runs on
+ * its own daily cron (30 1 * * *) plus the 45-min health-check remediation;
+ * this route lets it be kicked off on demand too.
+ * Auth: X-Ingest-Key header required.
+ */
+app.post('/sync/trigger-chain-discovery', ingestKeyMiddleware, async (c) => {
+  const wf = c.env?.CHAIN_DISCOVERY_WORKFLOW
+  if (!wf) return c.json({ error: 'CHAIN_DISCOVERY_WORKFLOW not bound' }, 500)
+  try {
+    const instance = await wf.create({ params: { trigger: 'admin' } })
+    await recordWorkflowInstance(c.env.DB, { instanceId: instance.id, workflow: 'chain-discovery', trigger: 'admin' })
+    return c.json({ triggered: true, instanceId: instance.id, message: 'ChainDiscoveryWorkflow started' })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
   }
 })
 

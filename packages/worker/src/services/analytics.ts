@@ -97,3 +97,134 @@ export function incrementEvent(
     })(),
   )
 }
+
+// ── Summary reads ────────────────────────────────────────────────────────────
+// Extracted from routes/admin.ts's GET /analytics handler so both the HTTP
+// route and the Telegram /analytics command read from one query set.
+
+export interface AnalyticsSummary {
+  daily_api: Array<{ date: number; total: number }>
+  daily_mcp: Array<{ date: number; tool_id: number; total: number }>
+  top_programs: Array<{ project_id: string; name: string; total: number }>
+  totals_alltime: { api: number; mcp: number }
+  platform: {
+    total_programs: number
+    programs_with_idl: number
+    verified_programs: number
+    programs_with_idl_and_verified: number
+    workflow_runs_total: number
+    idl_versions_total: number
+  }
+}
+
+/**
+ * Last-30-day daily breakdowns for API and MCP traffic, all-time traffic
+ * totals, the top 6 most-accessed programs, and platform stats (IDL
+ * coverage across the full program_candidates sync universe, verified rate,
+ * IDL+verified overlap, total workflow runs, total IDL versions).
+ */
+export async function getAnalyticsSummary(db: any): Promise<AnalyticsSummary> {
+  const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns, idlVersionsTotal] = await Promise.all([
+    // Daily HTTP API totals (last 30 days)
+    db
+      .prepare(
+        `SELECT date, SUM(count) AS total
+         FROM analytics
+         WHERE event_type = 0
+           AND date >= CAST(strftime('%Y%m%d', 'now', '-30 days') AS INTEGER)
+         GROUP BY date
+         ORDER BY date ASC`,
+      )
+      .all(),
+
+    // Daily MCP totals per tool (last 30 days)
+    db
+      .prepare(
+        `SELECT date, tool_id, SUM(count) AS total
+         FROM analytics
+         WHERE event_type = 1
+           AND date >= CAST(strftime('%Y%m%d', 'now', '-30 days') AS INTEGER)
+         GROUP BY date, tool_id
+         ORDER BY date ASC`,
+      )
+      .all(),
+
+    // Top 6 programs by combined API + MCP request count (all time)
+    db
+      .prepare(
+        `SELECT a.project_id, p.name, SUM(a.count) AS total
+         FROM analytics a
+         INNER JOIN projects p ON p.id = a.project_id
+         GROUP BY a.project_id
+         ORDER BY total DESC
+         LIMIT 6`,
+      )
+      .all(),
+
+    // All-time API vs MCP request totals
+    db
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN event_type = 0 THEN count ELSE 0 END) AS api_total,
+           SUM(CASE WHEN event_type = 1 THEN count ELSE 0 END) AS mcp_total
+         FROM analytics`,
+      )
+      .first(),
+
+    // IDL-presence + verified-build coverage across the FULL sync universe
+    // (`program_candidates` — every program_id the discovery pipeline has
+    // ever queued/scanned, PK-deduped, ~60K+ rows), not just the small
+    // imported `projects` catalog. status='has_idl' means the sync pipeline
+    // confirmed an on-chain IDL (see idl-sync.ts). is_verified is tracked
+    // only on imported `projects` rows and set per program_id (see
+    // verified-match-workflow.ts), so dedupe verified via DISTINCT program_id.
+    db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM program_candidates) AS total,
+           (SELECT COUNT(*) FROM program_candidates WHERE status = 'has_idl') AS with_idl,
+           (SELECT COUNT(DISTINCT program_id) FROM projects WHERE is_verified = 1) AS verified,
+           (SELECT COUNT(DISTINCT pc.program_id)
+              FROM program_candidates pc
+              INNER JOIN projects p ON p.program_id = pc.program_id
+              WHERE pc.status = 'has_idl' AND p.is_verified = 1) AS with_idl_and_verified`,
+      )
+      .first(),
+
+    // Total Workflow instances ever created (chain-discovery, idl-sync,
+    // osec-discover, candidates-import, verified-match/-analysis, ...)
+    db
+      .prepare(`SELECT COUNT(*) AS total FROM workflow_instances`)
+      .first(),
+
+    // Total IDL versions ever uploaded across public projects (all
+    // versions, not just latest — depth/maturity signal)
+    db
+      .prepare(
+        `SELECT COUNT(*) AS total
+         FROM idl_versions v
+         INNER JOIN projects p ON p.id = v.project_id
+         WHERE p.is_public = 1`,
+      )
+      .first(),
+  ])
+
+  // D1 may return BigInt for COUNT/SUM — coerce explicitly
+  return {
+    daily_api: (dailyApi.results ?? []) as AnalyticsSummary['daily_api'],
+    daily_mcp: (dailyMcp.results ?? []) as AnalyticsSummary['daily_mcp'],
+    top_programs: (topPrograms.results ?? []) as AnalyticsSummary['top_programs'],
+    totals_alltime: {
+      api: Number((allTimeTotals as any)?.api_total ?? 0),
+      mcp: Number((allTimeTotals as any)?.mcp_total ?? 0),
+    },
+    platform: {
+      total_programs: Number((verifiedStats as any)?.total ?? 0),
+      programs_with_idl: Number((verifiedStats as any)?.with_idl ?? 0),
+      verified_programs: Number((verifiedStats as any)?.verified ?? 0),
+      programs_with_idl_and_verified: Number((verifiedStats as any)?.with_idl_and_verified ?? 0),
+      workflow_runs_total: Number((workflowRuns as any)?.total ?? 0),
+      idl_versions_total: Number((idlVersionsTotal as any)?.total ?? 0),
+    },
+  }
+}

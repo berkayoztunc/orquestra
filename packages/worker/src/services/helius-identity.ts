@@ -18,10 +18,24 @@ export interface HeliusProgramIdentity {
   name: string
   /** Raw Helius category, e.g. "Swap", "Borrow Lend" — see mapHeliusCategory. */
   category: string
-  icon?: string
+  /** Full, directly-fetchable image URL — already resolved from the raw filename Helius returns. */
+  iconUrl?: string
   website?: string
   twitter?: string
   discord?: string
+}
+
+/**
+ * Helius's `identity` response gives a bare filename (e.g. "jupiterIcon.svg"),
+ * not a URL — not documented anywhere in their API docs. Confirmed live via
+ * browser devtools against the real Orb frontend (which renders these icons
+ * through Next.js's image-optimization proxy) and verified directly with
+ * curl: `https://orbmarkets.io/api/icons/{filename}` serves the raw image
+ * (200, correct image/* content-type, no auth) — this is Orb's own backing
+ * asset endpoint, the proxy just resizes/re-encodes it for their frontend.
+ */
+function resolveHeliusIconUrl(icon: string): string {
+  return `https://orbmarkets.io/api/icons/${icon}`
 }
 
 /**
@@ -53,7 +67,7 @@ export async function lookupProgramIdentity(
       address: programId,
       name: data.name,
       category: data.category,
-      icon: typeof data.icon === 'string' ? data.icon : undefined,
+      iconUrl: typeof data.icon === 'string' ? resolveHeliusIconUrl(data.icon) : undefined,
       website: typeof data.website === 'string' ? data.website : undefined,
       twitter: typeof data.twitter === 'string' ? data.twitter : undefined,
       discord: typeof data.discord === 'string' ? data.discord : undefined,

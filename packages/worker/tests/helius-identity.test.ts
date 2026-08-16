@@ -72,7 +72,7 @@ describe('lookupProgramIdentity', () => {
       address: 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',
       name: 'Jupiter Aggregator V6',
       category: 'Aggregator',
-      icon: 'jupiterIcon.svg',
+      iconUrl: 'https://orbmarkets.io/api/icons/jupiterIcon.svg',
       website: 'https://jup.ag/',
       twitter: 'https://x.com/JupiterExchange',
       discord: 'https://discord.gg/jup',
@@ -85,6 +85,26 @@ describe('lookupProgramIdentity', () => {
     ) as any
     const result = await lookupProgramIdentity('x', { HELIUS_API_KEY: 'test-key' })
     expect(result).toBeNull()
+  })
+
+  test('resolves the bare icon filename into a real, directly-fetchable URL', async () => {
+    // Helius returns a bare filename ("jupiterIcon.svg"), not a URL — this is
+    // undocumented; the real endpoint (orbmarkets.io/api/icons/<filename>,
+    // confirmed live: 200, correct image/* content-type, no auth) was found
+    // by inspecting Orb's own network traffic, not from any API docs.
+    globalThis.fetch = mock(async () =>
+      new Response(JSON.stringify({ address: 'x', type: 'program', name: 'Orca Whirlpool Program', category: 'Swap', icon: 'orca.png' }), { status: 200 }),
+    ) as any
+    const result = await lookupProgramIdentity('x', { HELIUS_API_KEY: 'test-key' })
+    expect(result?.iconUrl).toBe('https://orbmarkets.io/api/icons/orca.png')
+  })
+
+  test('leaves iconUrl undefined when Helius returns no icon', async () => {
+    globalThis.fetch = mock(async () =>
+      new Response(JSON.stringify({ address: 'x', type: 'program', name: 'No Logo Program', category: 'Other' }), { status: 200 }),
+    ) as any
+    const result = await lookupProgramIdentity('x', { HELIUS_API_KEY: 'test-key' })
+    expect(result?.iconUrl).toBeUndefined()
   })
 })
 

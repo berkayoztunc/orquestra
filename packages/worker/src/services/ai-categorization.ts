@@ -196,7 +196,7 @@ export async function identifyProgram(
       aliases: [],
       source: 'helius',
       website: identity.website,
-      iconUrl: identity.icon,
+      iconUrl: identity.iconUrl,
       twitter: identity.twitter,
       discord: identity.discord,
     }

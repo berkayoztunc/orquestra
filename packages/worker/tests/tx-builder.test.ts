@@ -5,6 +5,7 @@ import {
   validateBuildRequest,
   decodeAnchorErrorFromLogs,
   extractComputeUnits,
+  assessRiskLevelAnchor,
   packInstructionsIntoBatches,
 } from '../src/services/tx-builder'
 
@@ -384,6 +385,79 @@ describe('Transaction Builder', () => {
         'Program X success',
       ])
       expect(cu).toBe(12345)
+    })
+
+    test('extractComputeUnits reports the OUTER program, not an inner CPI', () => {
+      // Real mainnet logs (let_me_buy make_purchase, tx 2KxAbvtke5s...). The inner SPL
+      // Token CPI returns first, so its `consumed` line comes first -- a first-match scan
+      // reported 105 for a transaction the chain charged 36,399 for.
+      const cu = extractComputeUnits([
+        'Program BUYuxRfhCMWavaUWxhGtPP3ksKEDZxCD5gzknk3JfAya invoke [1]',
+        'Program log: Instruction: MakePurchase',
+        'Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [2]',
+        'Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed 105 of 173022 compute units',
+        'Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA success',
+        'Program BUYuxRfhCMWavaUWxhGtPP3ksKEDZxCD5gzknk3JfAya consumed 36399 of 200000 compute units',
+        'Program BUYuxRfhCMWavaUWxhGtPP3ksKEDZxCD5gzknk3JfAya success',
+      ])
+      expect(cu).toBe(36399)
+    })
+
+    test('extractComputeUnits sums a multi-instruction transaction', () => {
+      // The caller is billed for every top-level instruction, so no single line is it.
+      const cu = extractComputeUnits([
+        'Program A invoke [1]',
+        'Program A consumed 1000 of 200000 compute units',
+        'Program A success',
+        'Program B invoke [1]',
+        'Program C invoke [2]',
+        'Program C consumed 50 of 199000 compute units',
+        'Program C success',
+        'Program B consumed 2000 of 199000 compute units',
+        'Program B success',
+      ])
+      expect(cu).toBe(3000)
+    })
+
+    test('the fee payer alone no longer makes every instruction high risk', () => {
+      const instruction = {
+        name: 'poke',
+        accounts: [
+          { name: 'payer', isMut: true, isSigner: true },
+          { name: 'log', isMut: true, isSigner: false },
+        ],
+        args: [],
+      } as any
+      const accounts = { payer: 'FeePayer1', log: 'Log1' }
+      const risk = assessRiskLevelAnchor(instruction, accounts, {}, accounts.payer)
+      expect(risk.level).not.toBe('high')
+    })
+
+    test('a second writable signer IS still high risk', () => {
+      const instruction = {
+        name: 'poke',
+        accounts: [
+          { name: 'payer', isMut: true, isSigner: true },
+          { name: 'other', isMut: true, isSigner: true },
+        ],
+        args: [],
+      } as any
+      const accounts = { payer: 'FeePayer1', other: 'Other1' }
+      const risk = assessRiskLevelAnchor(instruction, accounts, {}, accounts.payer)
+      expect(risk.level).toBe('high')
+      expect(risk.reasons.join(' ')).toContain('other')
+    })
+
+    test('a purchase is high risk for a reason that is actually about the purchase', () => {
+      const instruction = {
+        name: 'make_purchase',
+        accounts: [{ name: 'signer', isMut: true, isSigner: true }],
+        args: [],
+      } as any
+      const accounts = { signer: 'Buyer1' }
+      const risk = assessRiskLevelAnchor(instruction, accounts, {}, accounts.signer)
+      expect(risk.level).toBe('high')
+      expect(risk.reasons.join(' ')).toContain('make_purchase')
     })
 
     test('extractComputeUnits returns null when absent', () => {

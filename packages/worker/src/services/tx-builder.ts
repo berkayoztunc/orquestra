@@ -427,17 +427,23 @@ function encodeCodamaArgs(
  * - `medium`: any writable account besides the fee payer.
  * - `low`: read-only or no writable accounts.
  */
-function assessRiskLevelAnchor(
+export function assessRiskLevelAnchor(
   instruction: AnchorInstruction,
   accounts: Record<string, string>,
   args: Record<string, any>,
+  feePayer?: string,
 ): { level: RiskLevel; reasons: string[] } {
   const reasons: string[] = []
   let level: RiskLevel = 'low'
 
+  // The fee payer is a writable signer on EVERY transaction -- it pays the fee, which
+  // mutates its balance. Counting it makes `high` a constant, and a score that is always
+  // `high` is one a caller learns to ignore. What is notable is a writable signer that is
+  // NOT the fee payer: a second party mutating their own account.
   const writableSigners = instruction.accounts.filter((a) => {
     const n = normalizeAccountMeta(a)
-    return n.isMut && n.isSigner
+    if (!(n.isMut && n.isSigner)) return false
+    return !feePayer || accounts[a.name] !== feePayer
   })
   if (writableSigners.length > 0) {
     level = 'high'
@@ -452,7 +458,7 @@ function assessRiskLevelAnchor(
     reasons.push(`${writables.length} writable account(s)`)
   }
 
-  const transferKeywords = /(transfer|withdraw|deposit|mint|burn|stake|unstake|swap|close|fund)/i
+  const transferKeywords = /(transfer|withdraw|deposit|mint|burn|stake|unstake|swap|close|fund|purchase|buy|sell|pay|claim|redeem|repay|liquidate|settle)/i
   if (transferKeywords.test(instruction.name)) {
     level = 'high'
     reasons.push(`instruction name "${instruction.name}" matches value-transfer keyword`)
@@ -474,10 +480,18 @@ function assessRiskLevelCodama(
   instructionName: string,
   accounts: Array<{ name: string; isWritable: boolean; isSigner: boolean | 'either' | undefined }>,
   args: Record<string, any>,
+  resolved?: Record<string, string>,
+  feePayer?: string,
 ): { level: RiskLevel; reasons: string[] } {
   const reasons: string[] = []
   let level: RiskLevel = 'low'
-  const writableSigners = accounts.filter((a) => a.isWritable && (a.isSigner === true || a.isSigner === 'either'))
+  // See assessRiskLevelAnchor -- the fee payer is writable+signer on every transaction.
+  const writableSigners = accounts.filter(
+    (a) =>
+      a.isWritable &&
+      (a.isSigner === true || a.isSigner === 'either') &&
+      (!feePayer || !resolved || resolved[a.name] !== feePayer),
+  )
   if (writableSigners.length > 0) {
     level = 'high'
     reasons.push(`${writableSigners.length} writable signer(s): ${writableSigners.map((a) => a.name).join(', ')}`)
@@ -487,7 +501,7 @@ function assessRiskLevelCodama(
     level = 'medium'
     reasons.push(`${writables.length} writable account(s)`)
   }
-  if (/(transfer|withdraw|deposit|mint|burn|stake|unstake|swap|close|fund)/i.test(instructionName)) {
+  if (/(transfer|withdraw|deposit|mint|burn|stake|unstake|swap|close|fund|purchase|buy|sell|pay|claim|redeem|repay|liquidate|settle)/i.test(instructionName)) {
     level = 'high'
     reasons.push(`instruction name "${instructionName}" matches value-transfer keyword`)
   }
@@ -532,11 +546,36 @@ export function decodeAnchorErrorFromLogs(
 /** Extract `Program X consumed N of M compute units` from logs. */
 export function extractComputeUnits(logs: string[] | null | undefined): number | null {
   if (!logs) return null
+
+  // Sum the TOP-LEVEL programs. A first-match scan is wrong twice over:
+  //
+  //   1. A CPI's `consumed` line comes BEFORE its caller's, because the inner program
+  //      returns first. Taking the first match reports the CPI's units instead of the
+  //      transaction's -- a real let_me_buy purchase reported 105 instead of 36,399.
+  //   2. A transaction with several top-level instructions is billed for all of them, so
+  //      no single line is the answer either.
+  //
+  // Depth comes from the `invoke [N]` marker: [1] is top level, [2]+ is a CPI. Each
+  // `consumed` line closes the most recently opened frame.
+  let total: number | null = null
+  const depths: number[] = []
   for (const line of logs) {
-    const m = line.match(/consumed\s+(\d+)\s+of\s+\d+\s+compute units/)
-    if (m && m[1]) return parseInt(m[1], 10)
+    const invoke = line.match(/^Program \S+ invoke \[(\d+)\]/)
+    if (invoke && invoke[1]) {
+      depths.push(parseInt(invoke[1], 10))
+      continue
+    }
+    const consumed = line.match(/consumed\s+(\d+)\s+of\s+\d+\s+compute units/)
+    if (consumed && consumed[1]) {
+      const depth = depths.pop()
+      // Count a line that closes a top-level frame -- or one with no `invoke` to pair
+      // with, so a caller passing bare `consumed` lines still gets an answer.
+      if (depth === undefined || depth === 1) {
+        total = (total ?? 0) + parseInt(consumed[1], 10)
+      }
+    }
   }
-  return null
+  return total
 }
 
 // ─── Codama native tx builder ─────────────────────────────────────────────────
@@ -651,6 +690,8 @@ async function buildCodamaTx(
     instructionName,
     instruction.accounts.map((a: any) => ({ name: a.name, isWritable: a.isWritable, isSigner: a.isSigner })),
     request.args || {},
+    request.accounts || {},
+    request.feePayer,
   )
 
   return {
@@ -800,7 +841,12 @@ export async function buildTransaction(
     simulationLogs = sim.logs
   }
 
-  const anchorRisk = assessRiskLevelAnchor(instruction, request.accounts || {}, request.args || {})
+  const anchorRisk = assessRiskLevelAnchor(
+    instruction,
+    request.accounts || {},
+    request.args || {},
+    request.feePayer,
+  )
   const decodedError = simulationError
     ? decodeAnchorErrorFromLogs(simulationLogs, anchorIdl.errors)
     : null

@@ -4,17 +4,19 @@ import { LAST_DISCOVERY_KV_KEY } from '../services/pipeline-health'
 import { recordWorkflowInstance, hasActiveInstance } from '../services/workflow-registry'
 import { checkExistingIds } from '../services/db-batch'
 import { enqueueCandidates } from '../services/candidates'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[osec-discover-workflow]'
 const CHECK_BATCH = 100  // max IDs per IN() query
 const INSERT_BATCH = 100 // max IDs per INSERT step
 
-type Env = { DB: any; CACHE: any; OSEC_DISCOVER_WORKFLOW: any }
+type Env = { DB: any; CACHE: any; OSEC_DISCOVER_WORKFLOW: any; TELEGRAM_BOT_TOKEN?: string; TELEGRAM_CHAT_ID?: string }
 type Params = { trigger?: 'manual' | 'admin' | 'remediation' }
 
 export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'manual'
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger}, instance=${event.instanceId})`)
 
     await step.do(
@@ -43,6 +45,8 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
       return { skipped: true, reason: 'already-running' }
     }
 
+    try {
+
     // ── Step 1: fetch all OSEC program IDs ───────────────────────────────────
     const osecIds = await step.do(
       'fetch osec verified list',
@@ -68,7 +72,9 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (osecIds.length === 0) {
       console.log(`${TAG} empty OSEC list — aborting`)
-      return { total: 0, alreadyInDb: 0, alreadyQueued: 0, queued: 0 }
+      const result = { total: 0, alreadyInDb: 0, alreadyQueued: 0, queued: 0 }
+      await sendWorkflowReport(this.env, { workflow: 'osec-discover', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     await stampDiscovery()
@@ -87,7 +93,9 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (newIds.length === 0) {
       console.log(`${TAG} all OSEC programs already in DB`)
-      return { total: osecIds.length, alreadyInDb: osecIds.length, alreadyQueued: 0, queued: 0 }
+      const result = { total: osecIds.length, alreadyInDb: osecIds.length, alreadyQueued: 0, queued: 0 }
+      await sendWorkflowReport(this.env, { workflow: 'osec-discover', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     // ── Step 3: find which new IDs are NOT already in program_candidates ──────
@@ -104,12 +112,14 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (toEnqueue.length === 0) {
       console.log(`${TAG} all new OSEC programs already in candidate queue`)
-      return {
+      const result = {
         total: osecIds.length,
         alreadyInDb: osecIds.length - newIds.length,
         alreadyQueued: newIds.length,
         queued: 0,
       }
+      await sendWorkflowReport(this.env, { workflow: 'osec-discover', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     // ── Steps 4..N: batch-insert into program_candidates ─────────────────────
@@ -140,6 +150,19 @@ export class OsecDiscoverWorkflow extends WorkflowEntrypoint<Env, Params> {
     }
     console.log(`${TAG} complete`, result)
     console.log(`${TAG} next: trigger IDL sync workflow to process ${inserted} new candidates`)
+    await sendWorkflowReport(this.env, { workflow: 'osec-discover', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
     return result
+
+    } catch (err) {
+      await sendWorkflowReport(this.env, {
+        workflow: 'osec-discover',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 }

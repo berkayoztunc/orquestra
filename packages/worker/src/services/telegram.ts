@@ -204,6 +204,44 @@ export async function sendText(env: TelegramEnv, chatId: string, text: string): 
   await callTelegram(env, 'sendMessage', { chat_id: chatId, text })
 }
 
+export interface WorkflowReportParams {
+  /** e.g. 'chain-discovery' — matches the `workflow` column in workflow_instances. */
+  workflow: string
+  /** event.payload?.trigger — 'cron' | 'admin' | 'remediation' | ... */
+  trigger: string
+  instanceId: string
+  /** Date.now() captured at the top of run(), so elapsed time covers the whole instance. */
+  startedAt: number
+  ok: boolean
+  /** The workflow's own final return value — already a flat, human-readable summary in every workflow. */
+  result?: Record<string, unknown>
+  /** err.message on failure. */
+  error?: string
+}
+
+/**
+ * One report per finished workflow instance, sent so admin doesn't have to
+ * poll /health or /dashboard to know whether the sync pipeline is actually
+ * running. Deliberately generic — every workflow's existing return object is
+ * already a flat summary, so this needs no per-workflow formatting logic.
+ * Callers only send this from a run's true final instance (not continuation
+ * rounds, not concurrency-guard skips) — see each workflow's run() for where.
+ */
+export async function sendWorkflowReport(env: TelegramEnv, params: WorkflowReportParams): Promise<void> {
+  if (!env.TELEGRAM_CHAT_ID) return
+  const elapsed = ((Date.now() - params.startedAt) / 1000).toFixed(1)
+  const icon = params.ok ? '✅' : '❌'
+  const lines = [`${icon} ${params.workflow} (${params.trigger}) — ${elapsed}s`, `instance ${params.instanceId}`]
+  if (params.ok) {
+    for (const [key, value] of Object.entries(params.result ?? {})) {
+      lines.push(`  ${key}: ${typeof value === 'object' && value !== null ? JSON.stringify(value) : value}`)
+    }
+  } else if (params.error) {
+    lines.push(`  error: ${params.error}`)
+  }
+  await sendText(env, env.TELEGRAM_CHAT_ID, lines.join('\n'))
+}
+
 export interface ButtonRow {
   text: string
   callback_data: string

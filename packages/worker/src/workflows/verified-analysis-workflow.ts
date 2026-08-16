@@ -2,6 +2,7 @@ import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:work
 import { runProjectAnalysisPipeline } from '../services/project-analysis-pipeline'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { hibernateEvery } from '../utils/workflow-helpers'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[verified-analysis-workflow]'
 
@@ -21,6 +22,8 @@ type Env = {
   IDLS: any
   API_BASE_URL: string
   VERIFIED_ANALYSIS_WORKFLOW: any
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = {
@@ -50,7 +53,10 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
     const trigger = event.payload?.trigger ?? 'manual'
     const force = event.payload?.force ?? false
     const round = event.payload?.round ?? 0
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger} force=${force} round=${round})`)
+
+    try {
 
     // ── Step 1: query verified programs that have IDLs ────────────────────────
     // force=false → only programs missing AI analysis (new programs)
@@ -105,7 +111,9 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (projects.length === 0) {
       console.log(`${TAG} nothing to process`)
-      return { processed: 0, errors: 0, total: 0 }
+      const result = { processed: 0, errors: 0, total: 0 }
+      await sendWorkflowReport(this.env, { workflow: 'verified-analysis', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     // ── Steps 2..N: full pipeline per project ─────────────────────────────────
@@ -177,7 +185,8 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
     // projects would be re-selected forever.
     const mayHaveMore = projects.length === CHUNK_SIZE
     const madeProgress = force || processed > 0
-    if (mayHaveMore && madeProgress && round < MAX_ROUNDS) {
+    const willContinue = mayHaveMore && madeProgress && round < MAX_ROUNDS
+    if (willContinue) {
       await step.do(
         'spawn continuation',
         { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
@@ -197,6 +206,22 @@ export class VerifiedAnalysisWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const result = { processed, errors, total: projects.length, round }
     console.log(`${TAG} complete`, result)
+    // Only the final instance of a logical run reports.
+    if (!willContinue) {
+      await sendWorkflowReport(this.env, { workflow: 'verified-analysis', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+    }
     return result
+
+    } catch (err) {
+      await sendWorkflowReport(this.env, {
+        workflow: 'verified-analysis',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 }

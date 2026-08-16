@@ -3,6 +3,7 @@ import { identifyProgram, extractInstructionNames, extractAccountNames } from '.
 import { batchLookupProgramIdentity, mapHeliusCategory } from '../services/helius-identity'
 import { setCategoryAndAliases } from '../services/search'
 import { hibernateEvery } from '../utils/workflow-helpers'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[bulk-recategorize-workflow]'
 const QUERY_LIMIT = 500
@@ -22,6 +23,8 @@ type Env = {
   DB: any
   AI: any
   HELIUS_API_KEY?: string
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = {
@@ -49,7 +52,10 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'manual'
     const mode = event.payload?.mode ?? 'uncategorized'
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger}, mode=${mode})`)
+
+    try {
 
     // ── Step 1: query target projects ──────────────────────────────────────
     const projects = await step.do(
@@ -94,7 +100,9 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (!projects.length) {
       console.log(`${TAG} nothing to process, done`)
-      return { categorized: 0, upgraded: 0, errors: 0, total: 0 }
+      const result = { categorized: 0, upgraded: 0, errors: 0, total: 0 }
+      await sendWorkflowReport(this.env, { workflow: 'bulk-recategorize', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     // ── Steps 2..N: process in batches ───────────────────────────────────────
@@ -183,6 +191,19 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const final = { categorized, upgraded, errors, total: projects.length, mode }
     console.log(`${TAG} workflow complete`, final)
+    await sendWorkflowReport(this.env, { workflow: 'bulk-recategorize', trigger, instanceId: event.instanceId, startedAt, ok: true, result: final })
     return final
+
+    } catch (err) {
+      await sendWorkflowReport(this.env, {
+        workflow: 'bulk-recategorize',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 }

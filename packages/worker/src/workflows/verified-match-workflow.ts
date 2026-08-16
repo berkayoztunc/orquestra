@@ -2,6 +2,7 @@ import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:work
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
 import { recordWorkflowInstance } from '../services/workflow-registry'
 import { checkExistingIds } from '../services/db-batch'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[verified-match]'
 const DB_BATCH = 100 // max IDs per IN() clause
@@ -16,6 +17,8 @@ const UNMARK_SAFETY_RATIO = 0.8
 type Env = {
   DB: any
   VERIFIED_ANALYSIS_WORKFLOW: any
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = { trigger?: 'admin' | 'manual' | 'cron' }
@@ -29,7 +32,10 @@ type Params = { trigger?: 'admin' | 'manual' | 'cron' }
 export class VerifiedMatchWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'manual'
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger})`)
+
+    try {
 
     // ── Step 1: fetch OSEC verified list ───────────────────────────────────
     const { programIds, total } = await step.do(
@@ -44,7 +50,9 @@ export class VerifiedMatchWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (total === 0) {
       console.log(`${TAG} OSEC list empty — aborting to protect existing flags`)
-      return { total: 0, matched: 0, missing: 0, marked: 0, unmarked: 0 }
+      const result = { total: 0, matched: 0, missing: 0, marked: 0, unmarked: 0 }
+      await sendWorkflowReport(this.env, { workflow: 'verified-match', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     // ── Step 2: match against DB ────────────────────────────────────────────
@@ -131,6 +139,19 @@ export class VerifiedMatchWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const finalResult = { total, matched: matchedIds.length, missing: missingIds.length, marked, unmarked }
     console.log(`${TAG} complete`, finalResult)
+    await sendWorkflowReport(this.env, { workflow: 'verified-match', trigger, instanceId: event.instanceId, startedAt, ok: true, result: finalResult })
     return finalResult
+
+    } catch (err) {
+      await sendWorkflowReport(this.env, {
+        workflow: 'verified-match',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 }

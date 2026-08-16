@@ -7,6 +7,7 @@ import { generateId } from '../utils/id'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
 import { hashIdl } from '../utils/crypto'
 import { deriveIdlProgramName } from '../utils/idl-naming'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[verified-idl-import]'
 const DB_BATCH = 100      // max IDs per IN() clause
@@ -24,6 +25,8 @@ type Env = {
   SOLANA_FALLBACK_RPC_URLS?: string
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
   VERIFIED_ANALYSIS_WORKFLOW: any
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = { trigger?: 'admin' | 'manual' | 'cron' }
@@ -43,7 +46,10 @@ function sleep(ms: number): Promise<void> {
 export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
   async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
     const trigger = event.payload?.trigger ?? 'manual'
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger})`)
+
+    try {
 
     // ── Step 1: fetch OSEC verified list ───────────────────────────────────
     const { programIds, total } = await step.do(
@@ -58,7 +64,9 @@ export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     if (total === 0) {
       console.log(`${TAG} OSEC list empty — aborting`)
-      return { total: 0, missingFromDb: 0, missingIdl: 0, imported: 0, noIdl: 0 }
+      const result = { total: 0, missingFromDb: 0, missingIdl: 0, imported: 0, noIdl: 0 }
+      await sendWorkflowReport(this.env, { workflow: 'verified-idl-import', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
+      return result
     }
 
     // ── Step 2: compute target set ──────────────────────────────────────────
@@ -233,6 +241,19 @@ export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const finalResult = { total, missingFromDb: missingFromDbCount, missingIdl: missingIdlCount, imported, noIdl }
     console.log(`${TAG} complete`, finalResult)
+    await sendWorkflowReport(this.env, { workflow: 'verified-idl-import', trigger, instanceId: event.instanceId, startedAt, ok: true, result: finalResult })
     return finalResult
+
+    } catch (err) {
+      await sendWorkflowReport(this.env, {
+        workflow: 'verified-idl-import',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
+import { sendWorkflowReport } from '../services/telegram'
 
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 500
@@ -6,6 +7,8 @@ const TAG = '[program-metrics-workflow]'
 
 type Env = {
   DB: any
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = Record<string, never>
@@ -39,8 +42,11 @@ const UPSERT_SQL = `
 `.trim()
 
 export class ProgramMetricsWorkflow extends WorkflowEntrypoint<Env, Params> {
-  async run(_event: WorkflowEvent<Params>, step: WorkflowStep) {
+  async run(event: WorkflowEvent<Params>, step: WorkflowStep) {
+    const startedAt = Date.now()
     console.log(`${TAG} workflow started`)
+
+    try {
 
     const fetchedAt = new Date().toISOString()
 
@@ -122,6 +128,20 @@ export class ProgramMetricsWorkflow extends WorkflowEntrypoint<Env, Params> {
     }
 
     console.log(`${TAG} workflow complete — ${imported} rows across ${totalPages} pages`)
-    return { imported, pages: totalPages }
+    const result = { imported, pages: totalPages }
+    await sendWorkflowReport(this.env, { workflow: 'program-metrics-import', trigger: 'cron', instanceId: event.instanceId, startedAt, ok: true, result })
+    return result
+
+    } catch (err) {
+      await sendWorkflowReport(this.env, {
+        workflow: 'program-metrics-import',
+        trigger: 'cron',
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      throw err
+    }
   }
 }

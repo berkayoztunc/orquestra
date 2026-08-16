@@ -8,6 +8,7 @@ import { generateId } from '../utils/id'
 import { hibernateEvery } from '../utils/workflow-helpers'
 import { finalizeSyncRunFailed } from '../services/sync-runs'
 import { enqueueCandidates } from '../services/candidates'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[chain-discovery-workflow]'
 
@@ -39,6 +40,8 @@ type Env = {
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_FALLBACK_RPC_URLS?: string
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = {
@@ -55,6 +58,7 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
     const trigger = event.payload?.trigger ?? 'schedule'
     const round = event.payload?.round ?? 0
     const isContinuation = trigger === 'continuation'
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger}, round=${round}, instance=${event.instanceId})`)
 
     const rpcUrls = buildMainnetRpcUrlList(this.env)
@@ -211,6 +215,14 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
         { timeout: '15 seconds', retries: { limit: 3, delay: 3000, backoff: 'exponential' } },
         async () => finalizeSyncRunFailed(this.env.DB, runId, {}, { requireRunning: true }),
       )
+      await sendWorkflowReport(this.env, {
+        workflow: 'chain-discovery',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
       throw err
     }
 
@@ -273,6 +285,7 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const result = { runId, queued: totalQueued, txFetched }
     console.log(`${TAG} complete`, result)
+    await sendWorkflowReport(this.env, { workflow: 'chain-discovery', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
     return result
   }
 }

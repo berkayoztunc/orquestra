@@ -5,6 +5,7 @@ import { recordWorkflowInstance } from '../services/workflow-registry'
 import { generateId } from '../utils/id'
 import { hibernateEvery } from '../utils/workflow-helpers'
 import { finalizeSyncRunFailed } from '../services/sync-runs'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[candidates-import-workflow]'
 
@@ -34,6 +35,8 @@ const MAX_ROUNDS = 60
 
 type Env = SyncEnv & {
   CANDIDATES_IMPORT_WORKFLOW: any
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 export type CandidatesImportParams = {
@@ -62,6 +65,7 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
         ? event.payload?.sweepStart ?? new Date().toISOString().replace('T', ' ').slice(0, 19)
         : undefined
 
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger}, mode=${mode}, round=${round})`)
 
     const runId = await step.do(
@@ -128,6 +132,14 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
           candidates_imported: imported,
         }),
       )
+      await sendWorkflowReport(this.env, {
+        workflow: 'candidates-import',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
       throw err
     }
 
@@ -149,7 +161,8 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
     )
 
     // Self-continue while work remains — each instance stays small and durable.
-    if (!queueEmpty && round < MAX_ROUNDS) {
+    const willContinue = !queueEmpty && round < MAX_ROUNDS
+    if (willContinue) {
       await step.do(
         'spawn continuation',
         { timeout: '30 seconds', retries: { limit: 2, delay: 5000, backoff: 'exponential' } },
@@ -174,6 +187,11 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
 
     const summary = { runId, mode, round, checked, imported, queueEmpty }
     console.log(`${TAG} complete`, summary)
+    // Only the final instance of a logical run reports — continuation rounds
+    // stay silent (see willContinue above).
+    if (!willContinue) {
+      await sendWorkflowReport(this.env, { workflow: 'candidates-import', trigger, instanceId: event.instanceId, startedAt, ok: true, result: summary })
+    }
     return summary
   }
 }

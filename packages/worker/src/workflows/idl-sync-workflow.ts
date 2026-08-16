@@ -5,6 +5,7 @@ import { recordWorkflowInstance, hasActiveInstance } from '../services/workflow-
 import { generateId } from '../utils/id'
 import { hibernateEvery } from '../utils/workflow-helpers'
 import { finalizeSyncRunFailed } from '../services/sync-runs'
+import { sendWorkflowReport } from '../services/telegram'
 
 const TAG = '[idl-sync-workflow]'
 const BATCH_SIZE = 20 // matches CONCURRENCY in idl-sync.ts
@@ -27,6 +28,8 @@ type Env = {
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_FALLBACK_RPC_URLS?: string
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
+  TELEGRAM_BOT_TOKEN?: string
+  TELEGRAM_CHAT_ID?: string
 }
 
 type Params = {
@@ -42,6 +45,7 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
     const trigger = event.payload?.trigger ?? 'cron'
     const startOffset = event.payload?.startOffset ?? 0
     const isContinuation = trigger === 'continuation'
+    const startedAt = Date.now()
     console.log(`${TAG} started (trigger=${trigger}, startOffset=${startOffset}, instance=${event.instanceId})`)
 
     await step.do(
@@ -219,6 +223,7 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const result = { runId, total, updated, unchanged, skipped, errors, categorized, candidatesChecked: candidates.checked, candidatesImported: candidates.imported }
     console.log(`${TAG} workflow complete`, result)
+    await sendWorkflowReport(this.env, { workflow: 'idl-sync', trigger, instanceId: event.instanceId, startedAt, ok: true, result })
     return result
 
     } catch (err) {
@@ -235,6 +240,14 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
           error_count: errors,
         }, { requireRunning: true }),
       )
+      await sendWorkflowReport(this.env, {
+        workflow: 'idl-sync',
+        trigger,
+        instanceId: event.instanceId,
+        startedAt,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
       throw err
     }
   }

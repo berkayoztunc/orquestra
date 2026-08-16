@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { detectIDLFormat } from '../services/idl-parser'
 import { autoSeedCategory } from '../services/program-auto-detect'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
+import { identifyProgram, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
 import { writeIdlSummaryCache } from '../services/idl-summary'
 import { generateId } from '../utils/id'
@@ -74,6 +74,7 @@ type Env = {
     AI: Ai
     API_BASE_URL: string
     INGEST_API_KEY: string
+    HELIUS_API_KEY?: string
   }
 }
 
@@ -150,12 +151,12 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
 
     if (!project) {
       let aiCategorizationResult:
-        | Awaited<ReturnType<typeof categorizeProgramWithAI>>
+        | Awaited<ReturnType<typeof identifyProgram>>
         | null = null
 
       if (c.env?.AI) {
         try {
-          aiCategorizationResult = await categorizeProgramWithAI(c.env.AI, {
+          aiCategorizationResult = await identifyProgram(c.env, {
             name: programName,
             description: programDescription,
             programId: body.programId,
@@ -208,6 +209,13 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
             aiCategorizationResult.category,
             aiCategorizationResult.tags,
             aiCategorizationResult.aliases,
+            {
+              source: aiCategorizationResult.source,
+              website: aiCategorizationResult.website,
+              iconUrl: aiCategorizationResult.iconUrl,
+              twitter: aiCategorizationResult.twitter,
+              discord: aiCategorizationResult.discord,
+            },
           )
         } catch (err) {
           console.error('[ingest] Failed to save AI categorization result:', err)
@@ -225,14 +233,20 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
                 .bind(projectId)
                 .first()
               if (!existing) {
-                const result = await categorizeProgramWithAI(c.env.AI, {
+                const result = await identifyProgram(c.env, {
                   name: programName,
                   description: programDescription,
                   programId: body.programId,
                   instructions: extractInstructionNames(body.idl),
                   accounts: extractAccountNames(body.idl),
                 })
-                await setCategoryAndAliases(db, projectId, result.category, result.tags, result.aliases)
+                await setCategoryAndAliases(db, projectId, result.category, result.tags, result.aliases, {
+                  source: result.source,
+                  website: result.website,
+                  iconUrl: result.iconUrl,
+                  twitter: result.twitter,
+                  discord: result.discord,
+                })
               }
             } catch (err) {
               console.error('[ingest] Background AI categorization failed:', err)

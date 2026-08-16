@@ -98,6 +98,7 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
               0,
               CHUNK,
               sweepStart ? { sweepBefore: sweepStart } : undefined,
+              this.env.HELIUS_API_KEY,
             )
             return { checked: r.checked, imported: r.imported }
           },

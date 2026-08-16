@@ -6,7 +6,7 @@ import { validateIDL, parseIDL, detectIDLFormat } from '../services/idl-parser'
 import { generateDocumentation } from '../services/doc-generator'
 import { validateIDLUpload } from '../services/validation'
 import { autoSeedCategory } from '../services/program-auto-detect'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
+import { identifyProgram, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
 import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import { deleteIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-summary'
@@ -32,6 +32,7 @@ type Env = {
     AI: Ai
     API_BASE_URL: string
     AI_ANALYSIS_MODEL?: string
+    HELIUS_API_KEY?: string
   }
 }
 
@@ -136,14 +137,20 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
               .bind(projectId)
               .first()
             if (!existing) {
-              const result = await categorizeProgramWithAI(c.env.AI, {
+              const result = await identifyProgram(c.env, {
                 name: body.name,
                 description: body.description,
                 programId: body.programId,
                 instructions: extractInstructionNames(body.idl),
                 accounts: extractAccountNames(body.idl),
               })
-              await setCategoryAndAliases(db, projectId, result.category, result.tags, result.aliases)
+              await setCategoryAndAliases(db, projectId, result.category, result.tags, result.aliases, {
+                source: result.source,
+                website: result.website,
+                iconUrl: result.iconUrl,
+                twitter: result.twitter,
+                discord: result.discord,
+              })
             }
           } catch (err) {
             console.error('[idl] Background AI categorization failed:', err)

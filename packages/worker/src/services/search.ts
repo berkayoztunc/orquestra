@@ -281,28 +281,58 @@ async function fallbackLikeSearch(
 /**
  * Add program category and aliases (call when creating/updating a project)
  */
+export interface CategoryExtra {
+  source?: string
+  website?: string
+  iconUrl?: string
+  twitter?: string
+  discord?: string
+}
+
 export async function setCategoryAndAliases(
   db: D1Database,
   projectId: string,
   category: string,
   tags: string[] = [],
-  aliases: string[] = []
+  aliases: string[] = [],
+  extra?: CategoryExtra
 ): Promise<void> {
   const tagStr = tags.join(',')
   const aliasStr = aliases.join(',')
 
+  // COALESCE(excluded.x, x) on the extra fields: a later AI-fallback run (no
+  // website/icon/socials) must not null out data a prior Helius run stored.
   const upsertSQL = `
-    INSERT INTO program_categories (id, project_id, category, tags, aliases)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO program_categories (id, project_id, category, tags, aliases, source, website, icon_url, twitter, discord)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(project_id) DO UPDATE SET
       category = excluded.category,
       tags = excluded.tags,
       aliases = excluded.aliases,
+      source = COALESCE(excluded.source, source),
+      website = COALESCE(excluded.website, website),
+      icon_url = COALESCE(excluded.icon_url, icon_url),
+      twitter = COALESCE(excluded.twitter, twitter),
+      discord = COALESCE(excluded.discord, discord),
       created_at = CURRENT_TIMESTAMP
   `
 
   const id = generateId()
-  await db.prepare(upsertSQL).bind(id, projectId, category, tagStr, aliasStr).run()
+  await db
+    .prepare(upsertSQL)
+    .bind(
+      id,
+      projectId,
+      category,
+      tagStr,
+      aliasStr,
+      extra?.source ?? 'ai',
+      extra?.website ?? null,
+      extra?.iconUrl ?? null,
+      extra?.twitter ?? null,
+      extra?.discord ?? null,
+    )
+    .run()
 }
 
 /**

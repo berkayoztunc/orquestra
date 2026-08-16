@@ -1,7 +1,7 @@
 import type { WorkflowStep } from 'cloudflare:workers'
 import { generateDocumentation } from './doc-generator'
 import { generateAndStoreAIAnalysis } from './ai-analysis'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from './ai-categorization'
+import { identifyProgram, extractInstructionNames, extractAccountNames } from './ai-categorization'
 import { setCategoryAndAliases } from './search'
 import { writeIdlSummaryCache } from './idl-summary'
 import { generateId } from '../utils/id'
@@ -12,6 +12,7 @@ export interface ProjectAnalysisPipelineEnv {
   CACHE: any
   IDLS?: any
   API_BASE_URL: string
+  HELIUS_API_KEY?: string
 }
 
 export interface PreloadedProject {
@@ -180,13 +181,19 @@ export async function runProjectAnalysisPipeline(
     const cat = await runStage(step, 'categorize program', CATEGORIZE_STEP_OPTS, async () => {
       const instructions = extractInstructionNames(idl)
       const accounts = extractAccountNames(idl)
-      const result = await categorizeProgramWithAI(env.AI, {
+      const result = await identifyProgram(env, {
         name: project.name,
         programId: project.program_id,
         instructions,
         accounts,
       })
-      await setCategoryAndAliases(env.DB, project.id, result.category, result.tags, result.aliases)
+      await setCategoryAndAliases(env.DB, project.id, result.category, result.tags, result.aliases, {
+        source: result.source,
+        website: result.website,
+        iconUrl: result.iconUrl,
+        twitter: result.twitter,
+        discord: result.discord,
+      })
       return result
     })
     category = cat.category

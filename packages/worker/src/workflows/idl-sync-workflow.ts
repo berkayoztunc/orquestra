@@ -21,6 +21,7 @@ type Env = {
   IDLS: any
   CACHE: any
   AI?: any
+  HELIUS_API_KEY?: string
   IDL_SYNC_WORKFLOW: any
   SOLANA_RPC_URL: string
   SOLANA_MAINNET_RPC_URL?: string
@@ -182,6 +183,8 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
           Date.now(), // fresh wallStart — step timeout handles the limit
           0,
           CANDIDATES_PER_RUN,
+          undefined,
+          this.env.HELIUS_API_KEY,
         )
         console.log(`${TAG} candidates done: checked=${result.checked} imported=${result.imported}`)
         return result

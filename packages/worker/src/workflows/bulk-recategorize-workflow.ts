@@ -1,5 +1,5 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
+import { identifyProgram, extractInstructionNames, extractAccountNames } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
 
 const TAG = '[bulk-recategorize-workflow]'
@@ -9,6 +9,7 @@ const BATCH_SIZE = 25
 type Env = {
   DB: any
   AI: any
+  HELIUS_API_KEY?: string
 }
 
 type Params = { trigger?: 'manual' | 'admin' }
@@ -70,13 +71,19 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
               const idl = JSON.parse(p.idl_json)
               const instructions = extractInstructionNames(idl)
               const accounts = extractAccountNames(idl)
-              const cat = await categorizeProgramWithAI(this.env.AI, {
+              const cat = await identifyProgram(this.env, {
                 name: p.name,
                 programId: p.program_id,
                 instructions,
                 accounts,
               })
-              await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases)
+              await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases, {
+                source: cat.source,
+                website: cat.website,
+                iconUrl: cat.iconUrl,
+                twitter: cat.twitter,
+                discord: cat.discord,
+              })
               batchOk++
             } catch (err) {
               console.error(`${TAG} failed to categorize ${p.id}:`, err)

@@ -1,6 +1,6 @@
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount, getIdlAccountAddress, getAnchorIdlPdaAddress } from './idl-fetcher'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, toTitleCase } from './ai-categorization'
+import { identifyProgram, extractInstructionNames, extractAccountNames, toTitleCase } from './ai-categorization'
 import { setCategoryAndAliases } from './search'
 import { generateId } from '../utils/id'
 import { buildMainnetRpcUrlList, getSignaturesForAddress } from '../utils/solana-rpc'
@@ -13,6 +13,7 @@ export interface SyncEnv {
   CACHE: KVNamespace
   // Use `any` to avoid Ai type conflicts between @cloudflare/workers-types versions
   AI?: any
+  HELIUS_API_KEY?: string
   SOLANA_RPC_URL: string
   SOLANA_MAINNET_RPC_URL?: string
   SOLANA_FALLBACK_RPC_URLS?: string
@@ -353,6 +354,7 @@ async function processOneCandidate(
   programId: string,
   aiCallCount: number,
   aiUsedRef: { value: number },
+  heliusApiKey?: string,
 ): Promise<ProcessOneCandidateResult> {
   const onChain = await withTimeout(
     fetchIdlWithSource(programId, rpcUrls),
@@ -400,7 +402,7 @@ async function processOneCandidate(
     if (canUseAi) {
       aiUsedRef.value++
       try {
-        const catResult = await categorizeProgramWithAI(ai, {
+        const catResult = await identifyProgram({ AI: ai, HELIUS_API_KEY: heliusApiKey }, {
           name: rawName,
           description: null,
           programId,
@@ -419,7 +421,13 @@ async function processOneCandidate(
         })
 
         if (upserted.created) {
-          await setCategoryAndAliases(db, upserted.projectId, catResult.category, catResult.tags, catResult.aliases)
+          await setCategoryAndAliases(db, upserted.projectId, catResult.category, catResult.tags, catResult.aliases, {
+            source: catResult.source,
+            website: catResult.website,
+            iconUrl: catResult.iconUrl,
+            twitter: catResult.twitter,
+            discord: catResult.discord,
+          })
         }
       } catch (err) {
         console.error(`[idl-sync] AI failed for candidate ${programId}:`, err)
@@ -509,6 +517,7 @@ export async function processCandidates(
      */
     sweepBefore?: string
   },
+  heliusApiKey?: string,
 ): Promise<{ checked: number; imported: number; aiCallsUsed: number }> {
   // Pending candidates + stale no_idl entries due for recheck
   const { results: pending } = await db
@@ -570,7 +579,7 @@ export async function processCandidates(
 
       const programId = uniqueProgramIds[idx]
       try {
-        const result = await processOneCandidate(db, rpcUrls, ai, programId, aiCallCount, aiUsedRef)
+        const result = await processOneCandidate(db, rpcUrls, ai, programId, aiCallCount, aiUsedRef, heliusApiKey)
         checked += result.checked
         imported += result.imported
       } catch (err) {
@@ -632,13 +641,19 @@ export async function syncProjectBatch(
         try {
           const instructions = extractInstructionNames(sr.idl)
           const accounts = extractAccountNames(sr.idl)
-          const cat = await categorizeProgramWithAI(env.AI, {
+          const cat = await identifyProgram(env, {
             name: sr.programName,
             programId: sr.programId,
             instructions,
             accounts,
           })
-          await setCategoryAndAliases(env.DB, sr.projectId, cat.category, cat.tags, cat.aliases)
+          await setCategoryAndAliases(env.DB, sr.projectId, cat.category, cat.tags, cat.aliases, {
+            source: cat.source,
+            website: cat.website,
+            iconUrl: cat.iconUrl,
+            twitter: cat.twitter,
+            discord: cat.discord,
+          })
           aiCallCount++
           categorized++
         } catch { /* non-fatal */ }

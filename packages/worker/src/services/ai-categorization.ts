@@ -4,6 +4,8 @@
  * easier to find via full-text search.
  */
 
+import { lookupProgramIdentity, mapHeliusCategory } from './helius-identity'
+
 // Fixed taxonomy — must stay in sync with KNOWN_PROGRAMS categories
 // in program-auto-detect.ts and with CATEGORY_LABELS in the frontend.
 export const CATEGORY_TAXONOMY = [
@@ -40,6 +42,12 @@ export interface CategorizationResult {
   display_name: string
   /** One or two sentence description of what the program does. AI-generated; empty string on failure. */
   short_description: string
+  /** Where this categorization came from — verified Helius data, or an AI guess. */
+  source?: 'helius' | 'ai'
+  website?: string
+  iconUrl?: string
+  twitter?: string
+  discord?: string
 }
 
 /**
@@ -165,6 +173,36 @@ function fallback(name?: string): CategorizationResult {
     tags: [],
     aliases: [],
   }
+}
+
+/**
+ * Categorize a program, preferring verified Helius identity data over an AI
+ * guess. Tries Helius first (skips the Workers AI call entirely on a hit —
+ * cheaper and more accurate); falls back to categorizeProgramWithAI whenever
+ * Helius has no answer (404 — the normal case for most programs — missing
+ * key, or a network error).
+ */
+export async function identifyProgram(
+  env: { AI?: any; HELIUS_API_KEY?: string },
+  input: CategorizationInput,
+): Promise<CategorizationResult> {
+  const identity = await lookupProgramIdentity(input.programId, env)
+  if (identity) {
+    return {
+      category: mapHeliusCategory(identity.category),
+      display_name: identity.name.slice(0, 40),
+      short_description: '',
+      tags: [],
+      aliases: [],
+      source: 'helius',
+      website: identity.website,
+      iconUrl: identity.icon,
+      twitter: identity.twitter,
+      discord: identity.discord,
+    }
+  }
+  const aiResult = await categorizeProgramWithAI(env.AI, input)
+  return { ...aiResult, source: 'ai' }
 }
 
 /**

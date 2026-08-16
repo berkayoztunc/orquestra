@@ -290,6 +290,11 @@ CORS_ORIGIN = "http://localhost:5173"
 #   JWT_SECRET          — JWT signing secret
 #   GITHUB_OAUTH_SECRET — GitHub OAuth app secret
 #   INGEST_API_KEY      — Service key for CLI bulk IDL ingest (X-Ingest-Key header)
+#   HELIUS_API_KEY      — Optional. Verified program name/category/socials via Helius
+#                         Wallet Identity API (services/helius-identity.ts). Falls back
+#                         to AI categorization (categorizeProgramWithAI) when unset or
+#                         a program isn't in Helius's DB — never required for the app
+#                         to function.
 # Optional secrets for RPC failover:
 #   SOLANA_MAINNET_FALLBACK_RPC_URLS — comma-separated backup mainnet RPC URLs
 #   SOLANA_FALLBACK_RPC_URLS         — comma-separated generic backup RPC URLs

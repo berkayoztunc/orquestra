@@ -1,7 +1,7 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { fetchIdlWithSource, hasProgramOwnedAnchorIdlAccount } from '../services/idl-fetcher'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
-import { categorizeProgramWithAI, extractInstructionNames, extractAccountNames, toTitleCase } from '../services/ai-categorization'
+import { identifyProgram, extractInstructionNames, extractAccountNames, toTitleCase } from '../services/ai-categorization'
 import { setCategoryAndAliases } from '../services/search'
 import { generateId } from '../utils/id'
 import { fetchOsecVerifiedProgramIds } from '../services/osec'
@@ -16,6 +16,7 @@ const RPC_THROTTLE_MS = 350 // delay between each program's on-chain RPC fetch â
 type Env = {
   DB: any
   AI: any
+  HELIUS_API_KEY?: string
   IDLS: any
   CACHE: any
   SOLANA_RPC_URL: string
@@ -178,13 +179,19 @@ export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
               let category = 'unknown'
               if (this.env.AI && onChain.idl) {
                 try {
-                  const cat = await categorizeProgramWithAI(this.env.AI, {
+                  const cat = await identifyProgram(this.env, {
                     name: rawName,
                     programId,
                     instructions: extractInstructionNames(onChain.idl),
                     accounts: extractAccountNames(onChain.idl),
                   })
-                  await setCategoryAndAliases(this.env.DB, projectId, cat.category, cat.tags, cat.aliases)
+                  await setCategoryAndAliases(this.env.DB, projectId, cat.category, cat.tags, cat.aliases, {
+                    source: cat.source,
+                    website: cat.website,
+                    iconUrl: cat.iconUrl,
+                    twitter: cat.twitter,
+                    discord: cat.discord,
+                  })
                   category = cat.category
                 } catch { /* categorization optional */ }
               }

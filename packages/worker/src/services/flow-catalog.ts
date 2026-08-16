@@ -58,8 +58,10 @@ function rowToSummary(row: FlowCatalogRow): FlowSummary {
 
 /**
  * Attaches `iconUrl` for each summary's primary program (`meta.programs[0]`)
- * via one batch lookup against `program_categories`, instead of a per-flow
- * query. Mutates and returns the same array for convenience at call sites.
+ * via one batch lookup, instead of a per-flow query. `program_categories` is
+ * keyed by `project_id` (not a program address), so this has to join through
+ * `projects` to get from program_id -> project_id -> icon_url. Mutates and
+ * returns the same array for convenience at call sites.
  */
 async function attachIconUrls(db: D1Database, summaries: FlowSummary[]): Promise<FlowSummary[]> {
   const programIds = [...new Set(summaries.map((f) => f.meta.programs?.[0]).filter((id): id is string => Boolean(id)))]
@@ -67,7 +69,12 @@ async function attachIconUrls(db: D1Database, summaries: FlowSummary[]): Promise
 
   const placeholders = programIds.map(() => '?').join(',')
   const { results } = await db
-    .prepare(`SELECT program_id, icon_url FROM program_categories WHERE program_id IN (${placeholders})`)
+    .prepare(
+      `SELECT p.program_id, pc.icon_url
+       FROM projects p
+       JOIN program_categories pc ON pc.project_id = p.id
+       WHERE p.program_id IN (${placeholders})`,
+    )
     .bind(...programIds)
     .all<{ program_id: string; icon_url: string | null }>()
 

@@ -6,6 +6,9 @@ import { hibernateEvery } from '../utils/workflow-helpers'
 
 const TAG = '[bulk-recategorize-workflow]'
 const QUERY_LIMIT = 500
+// Backfill rows carry no idl_json (see below), so one query can safely cover
+// the whole catalog in a single instance instead of chunking across reruns.
+const BACKFILL_QUERY_LIMIT = 10_000
 const BATCH_SIZE = 25
 
 type Env = {
@@ -30,7 +33,9 @@ type Params = {
 }
 
 type ProjectRow = {
-  id: string; name: string; program_id: string; idl_json: string
+  id: string; name: string; program_id: string
+  /** Only present in 'uncategorized' mode — 'backfill' never parses the IDL, so omitting it here keeps step 1's output well under the 1MiB cap even for thousands of rows. */
+  idl_json?: string
 }
 
 export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
@@ -44,16 +49,19 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
       `query ${mode} projects`,
       { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
+        // Backfill never touches idl_json (Helius is looked up by program_id
+        // alone), so it's dropped from the SELECT entirely — the first run
+        // hit Cloudflare's 1MiB step-output cap fetching every row's IDL blob
+        // at once for data the mode never uses. Rows are tiny without it, so
+        // one instance can comfortably cover the whole backfill in one pass.
         const { results } = await this.env.DB
           .prepare(
             mode === 'backfill'
               ? `
-                SELECT p.id, p.name, p.program_id, v.idl_json
+                SELECT p.id, p.name, p.program_id
                 FROM projects p
-                JOIN idl_versions v ON v.project_id = p.id
                 JOIN program_categories pc ON pc.project_id = p.id
                 WHERE p.is_public = 1 AND pc.source IS NOT 'helius'
-                GROUP BY p.id
                 ORDER BY p.created_at DESC
                 LIMIT ?
               `
@@ -69,7 +77,7 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
                 LIMIT ?
               `,
           )
-          .bind(QUERY_LIMIT)
+          .bind(mode === 'backfill' ? BACKFILL_QUERY_LIMIT : QUERY_LIMIT)
           .all()
 
         console.log(`${TAG} found ${results?.length ?? 0} ${mode} projects`)
@@ -116,6 +124,7 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
                 continue
               }
 
+              if (!p.idl_json) { batchErr++; continue } // uncategorized mode's query always selects it; guards the type only
               const idl = JSON.parse(p.idl_json)
               const instructions = extractInstructionNames(idl)
               const accounts = extractAccountNames(idl)

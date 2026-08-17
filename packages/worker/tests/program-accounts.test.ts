@@ -303,6 +303,10 @@ function makeEnv(idl: AnchorIDL | CodamaIDL = anchorIdl) {
           bind() {
             return {
               async first() {
+                // Visibility is resolved from `projects` before any IDL read.
+                if (sql.includes('FROM projects')) {
+                  return { id: 'proj_test', program_id: PROGRAM_ID, is_public: 1, user_id: 'user_test' }
+                }
                 if (sql.includes('FROM idl_versions')) {
                   return { idl_json: JSON.stringify(idl), program_id: PROGRAM_ID }
                 }

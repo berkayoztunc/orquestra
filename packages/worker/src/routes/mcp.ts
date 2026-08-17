@@ -120,7 +120,8 @@ const buildInstructionSchema = {
     .string()
     .optional()
     .describe(
-      'Optional full RPC URL (e.g. Helius devnet). When set, overrides the default RPC for this cluster.',
+      'Optional full RPC URL (e.g. Helius devnet). When set, overrides the default RPC for this cluster. ' +
+      'Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).',
     ),
   simulate: z
     .boolean()
@@ -149,7 +150,7 @@ const simulateInstructionSchema = {
   rpcUrl: z
     .string()
     .optional()
-    .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over `network`.'),
+    .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over `network`. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
 }
 
 const derivePdaSchema = {
@@ -189,7 +190,7 @@ const getProgramDataSchema = {
   rpcUrl: z
     .string()
     .optional()
-    .describe('Optional full RPC URL override. Takes precedence over network.'),
+    .describe('Optional full RPC URL override. Takes precedence over network. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
   dataSize: z
     .number()
     .int()
@@ -247,7 +248,7 @@ const simulateTransactionSchema = {
   rpcUrl: z
     .string()
     .optional()
-    .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over network.'),
+    .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over network. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
 }
 
 // ── MCP server factory ────────────────────────────────────────────────────────

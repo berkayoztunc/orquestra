@@ -5,6 +5,8 @@ import { computePipelineHealth, runPipelineHealthCheck, startCandidatesImport, H
 import { importProgramMetrics } from '../services/program-metrics'
 import { fetchWithTimeout } from '../utils/solana-rpc'
 import { getAnalyticsSummary } from '../services/analytics'
+import { deleteProjectIdlCache } from '../services/idl-cache'
+import { invalidateCache } from '../middleware/cache'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -883,6 +885,34 @@ app.post('/sync/trigger-import', ingestKeyMiddleware, async (c) => {
   try {
     const res = await startCandidatesImport(env, 'admin', mode)
     return c.json({ triggered: res.started, instanceId: res.instanceId, reason: res.reason, mode })
+  } catch (err: any) {
+    return c.json({ error: String(err?.message ?? err) }, 500)
+  }
+})
+
+/**
+ * POST /api/admin/purge-private-idl-cache
+ *
+ * One-time cleanup for entries written before the IDL read paths enforced
+ * `is_public` ahead of the cache. Those writers cached private IDLs with a
+ * 7-day TTL, so the code fix alone leaves them readable until they expire.
+ * Idempotent — safe to re-run. Auth: X-Ingest-Key required.
+ */
+app.post('/purge-private-idl-cache', ingestKeyMiddleware, async (c) => {
+  try {
+    const projects = await c.env.DB
+      ?.prepare('SELECT id FROM projects WHERE is_public = 0')
+      .all()
+
+    const rows = (projects?.results ?? []) as Array<{ id: string }>
+    let keysDeleted = 0
+
+    for (const row of rows) {
+      keysDeleted += await deleteProjectIdlCache(c.env.IDLS, c.env.DB, row.id)
+      await invalidateCache(c.env.CACHE, [`api:/api/${row.id}/`, `api:/project/${row.id}/`])
+    }
+
+    return c.json({ privateProjects: rows.length, keysDeleted })
   } catch (err: any) {
     return c.json({ error: String(err?.message ?? err) }, 500)
   }

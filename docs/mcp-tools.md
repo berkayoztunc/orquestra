@@ -130,7 +130,7 @@ Inputs:
 - `feePayer`
 - `recentBlockhash` - optional
 - `network` - optional `mainnet-beta`, `devnet`, or `testnet`
-- `rpcUrl` - optional RPC URL override
+- `rpcUrl` - optional RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
 - `simulate` - optional boolean
 - `encoding` - optional `base58` or `base64`
 
@@ -250,7 +250,7 @@ Inputs:
 - `projectId`
 - `accountType` - optional IDL account type name
 - `network` - optional `mainnet-beta`, `devnet`, or `testnet`
-- `rpcUrl` - optional RPC URL override
+- `rpcUrl` - optional RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
 - `dataSize` - optional exact account data length
 - `memcmp` - optional raw byte-offset filters
 - `fieldFilters` - optional fixed-offset IDL field filters; requires `accountType`

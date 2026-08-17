@@ -44,7 +44,7 @@ import { recordFlowRun } from '../services/flow-runs'
 import { listFlows, getFlowMetadata } from '../services/flow-catalog'
 import { cachePlan, estimateFlow } from '../services/flow-estimator'
 import { verifyIngestKey } from '../middleware/auth'
-import { resolveSolanaRpcUrl } from '../utils/solana-rpc'
+import { resolveSolanaRpcUrl, RpcUrlNotAllowedError } from '../utils/solana-rpc'
 import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
 
 registerAllNodes()
@@ -63,6 +63,16 @@ registerAllNodes()
  * ever describes the flow's own structure, never server internals.
  */
 function systemErrorContent(toolName: string, err: unknown) {
+  // A rejected caller-supplied `rpcUrl` is an input problem, not a server fault —
+  // report it as such so the agent can correct the call instead of retrying.
+  // The message carries the hostname only, never the URL (which may embed a key).
+  if (err instanceof RpcUrlNotAllowedError) {
+    return {
+      isError: true,
+      content: [{ type: 'text' as const, text: `**Invalid input:** ${err.message}` }],
+    }
+  }
+
   console.error(`[flow-mcp] ${toolName} failed unexpectedly`, err)
   return {
     isError: true,
@@ -107,7 +117,7 @@ const estimateFlowSchema = {
   slug: z.string().describe('The flow slug to run, from list_flows.'),
   inputs: z.record(z.string(), z.any()).default({}).describe('Values for the flow\'s declared `inputs` (see get_flow_metadata) — e.g. { "wallet": "...", "amount": "1000" }.'),
   network: z.enum(['mainnet-beta', 'devnet', 'testnet']).optional().describe('Solana cluster. Defaults to mainnet-beta.'),
-  rpcUrl: z.string().optional().describe('Optional full RPC URL override. Takes precedence over network.'),
+  rpcUrl: z.string().optional().describe('Optional full RPC URL override. Takes precedence over network. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
 }
 
 const validateFlowSchema = {
@@ -126,7 +136,7 @@ const simulateFlowSchema = {
     .enum(['mainnet-beta', 'devnet', 'testnet'])
     .optional()
     .describe('Solana cluster for resolver/simulation RPC calls. Defaults to mainnet-beta.'),
-  rpcUrl: z.string().optional().describe('Optional full RPC URL override. Takes precedence over network.'),
+  rpcUrl: z.string().optional().describe('Optional full RPC URL override. Takes precedence over network. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
 }
 
 const publishFlowSchema = {

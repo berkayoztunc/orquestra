@@ -15,6 +15,12 @@ FRONTEND_URL = "http://localhost:5173"
 API_BASE_URL = "http://localhost:8787"
 CORS_ORIGIN = "http://localhost:5173"
 
+# Caller-supplied RPC URL allowlist (SSRF guard, utils/solana-rpc.ts).
+# '1' rejects a caller `rpcUrl`/`network` whose host is not on
+# SOLANA_RPC_ALLOWLIST with a 400. Applies ONLY to URLs sent by a caller —
+# the SOLANA_*_RPC_URL values are trusted and never checked.
+RPC_ALLOWLIST_ENFORCE = "1"
+
 # Routes for production
 [route]
 pattern = "api.orquestra.dev/*"
@@ -275,6 +281,12 @@ FRONTEND_URL = "https://orquestra.dev"
 API_BASE_URL = "https://api.orquestra.dev"
 CORS_ORIGIN = "https://orquestra.dev"
 
+# Caller-supplied RPC URL allowlist (SSRF guard, utils/solana-rpc.ts).
+# '1' rejects a caller `rpcUrl`/`network` whose host is not on
+# SOLANA_RPC_ALLOWLIST with a 400. Applies ONLY to URLs sent by a caller —
+# the SOLANA_*_RPC_URL values are trusted and never checked.
+RPC_ALLOWLIST_ENFORCE = "1"
+
 # Environment Variables - Development
 [env.development.vars]
 ENVIRONMENT = "development"
@@ -284,6 +296,12 @@ JWT_EXPIRY = "30d"
 FRONTEND_URL = "http://localhost:5173"
 API_BASE_URL = "http://localhost:8787"
 CORS_ORIGIN = "http://localhost:5173"
+
+# Caller-supplied RPC URL allowlist (SSRF guard, utils/solana-rpc.ts).
+# '1' rejects a caller `rpcUrl`/`network` whose host is not on
+# SOLANA_RPC_ALLOWLIST with a 400. Applies ONLY to URLs sent by a caller —
+# the SOLANA_*_RPC_URL values are trusted and never checked.
+RPC_ALLOWLIST_ENFORCE = "1"
 
 # Secrets (set via: wrangler secret put <NAME>)
 # Required secrets for production:
@@ -298,6 +316,12 @@ CORS_ORIGIN = "http://localhost:5173"
 # Optional secrets for RPC failover:
 #   SOLANA_MAINNET_FALLBACK_RPC_URLS — comma-separated backup mainnet RPC URLs
 #   SOLANA_FALLBACK_RPC_URLS         — comma-separated generic backup RPC URLs
+# Optional secret for the caller-supplied RPC allowlist (SSRF guard):
+#   SOLANA_RPC_ALLOWLIST_EXTRA — comma-separated extra allowlisted RPC hostnames.
+#                                Lets an operator add a provider during an incident
+#                                without a redeploy. Unset by default; the enforcement
+#                                flag itself is RPC_ALLOWLIST_ENFORCE in [vars] above,
+#                                kept in plaintext so the current posture is reviewable.
 # Required secrets for the Flow Builder Agent (migration 026):
 #   TELEGRAM_BOT_TOKEN     — from BotFather
 #   TELEGRAM_CHAT_ID       — chat/group the agent posts proposals into

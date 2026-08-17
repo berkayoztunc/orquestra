@@ -114,6 +114,8 @@ export interface AnalyticsSummary {
     programs_with_idl_and_verified: number
     workflow_runs_total: number
     idl_versions_total: number
+    /** Distinct public projects with at least one indexed IDL — the real catalog count, unlike `programs_with_idl` (sync-pipeline coverage over the much larger candidates universe). */
+    catalog_programs_with_idl: number
   }
 }
 
@@ -124,7 +126,7 @@ export interface AnalyticsSummary {
  * IDL+verified overlap, total workflow runs, total IDL versions).
  */
 export async function getAnalyticsSummary(db: any): Promise<AnalyticsSummary> {
-  const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns, idlVersionsTotal] = await Promise.all([
+  const [dailyApi, dailyMcp, topPrograms, allTimeTotals, verifiedStats, workflowRuns, idlVersionsTotal, catalogIdlPrograms] = await Promise.all([
     // Daily HTTP API totals (last 30 days)
     db
       .prepare(
@@ -207,6 +209,18 @@ export async function getAnalyticsSummary(db: any): Promise<AnalyticsSummary> {
          WHERE p.is_public = 1`,
       )
       .first(),
+
+    // Distinct public projects with at least one IDL version — the real
+    // catalog count (e.g. 4,495), not the sync-pipeline's candidate-universe
+    // coverage number (`with_idl` above, e.g. 796 out of ~64K).
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT v.project_id) AS total
+         FROM idl_versions v
+         INNER JOIN projects p ON p.id = v.project_id
+         WHERE p.is_public = 1`,
+      )
+      .first(),
   ])
 
   // D1 may return BigInt for COUNT/SUM — coerce explicitly
@@ -224,6 +238,7 @@ export async function getAnalyticsSummary(db: any): Promise<AnalyticsSummary> {
       verified_programs: Number((verifiedStats as any)?.verified ?? 0),
       programs_with_idl_and_verified: Number((verifiedStats as any)?.with_idl_and_verified ?? 0),
       workflow_runs_total: Number((workflowRuns as any)?.total ?? 0),
+      catalog_programs_with_idl: Number((catalogIdlPrograms as any)?.total ?? 0),
       idl_versions_total: Number((idlVersionsTotal as any)?.total ?? 0),
     },
   }

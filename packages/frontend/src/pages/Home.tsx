@@ -354,7 +354,7 @@ export default function Home(): JSX.Element {
     loadAnalytics()
   }, [loadAnalytics])
 
-  const programsWithIdl = analytics ? analytics.platform.programs_with_idl.toLocaleString() : '—'
+  const programsWithIdl = analytics ? analytics.platform.catalog_programs_with_idl.toLocaleString() : '—'
 
   return (
     <div className="relative">

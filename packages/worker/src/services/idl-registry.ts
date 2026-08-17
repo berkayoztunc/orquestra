@@ -10,6 +10,7 @@
 
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import type { AnchorIDL, CodamaIDL } from './idl-parser'
+import { getVisibleProject } from './project-visibility'
 
 export interface FetchedProjectIdl {
   idl: AnchorIDL | CodamaIDL
@@ -21,6 +22,12 @@ export async function fetchProjectIdl(
   projectId: string,
   env: { DB: D1Database; IDLS: KVNamespace },
 ): Promise<FetchedProjectIdl | null> {
+  // Visibility before the cache read — checking it only on the D1 fallback lets
+  // a cached private IDL through unchecked. No caller identity here, so this
+  // stays public-only.
+  const project = await getVisibleProject(env.DB, projectId)
+  if (!project) return null
+
   const cached = await env.IDLS?.get(`project:${projectId}`)
   if (cached) {
     try {
@@ -36,16 +43,16 @@ export async function fetchProjectIdl(
   }
 
   const row = await env.DB.prepare(
-    `SELECT p.name, p.program_id, p.is_public, v.idl_json
+    `SELECT p.name, p.program_id, v.idl_json
      FROM projects p
      JOIN idl_versions v ON v.project_id = p.id
      WHERE p.id = ?
      ORDER BY v.version DESC LIMIT 1`,
   )
     .bind(projectId)
-    .first<{ name: string; program_id: string; is_public: number; idl_json: string }>()
+    .first<{ name: string; program_id: string; idl_json: string }>()
 
-  if (!row || !row.is_public) return null
+  if (!row) return null
 
   try {
     const idl = JSON.parse(row.idl_json) as AnchorIDL | CodamaIDL

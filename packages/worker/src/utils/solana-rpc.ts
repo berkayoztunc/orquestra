@@ -3,6 +3,8 @@
  * Aligns cluster selection so blockhash fetch uses the same chain as the client's intent.
  */
 
+import { isUrlAllowlisted, type AllowlistEntry } from './url-allowlist'
+
 export type ResolvedCluster = 'mainnet-beta' | 'devnet' | 'testnet' | 'custom'
 
 export type SolanaRpcEnv = {
@@ -12,6 +14,74 @@ export type SolanaRpcEnv = {
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
   SOLANA_DEVNET_RPC_URL?: string
   SOLANA_TESTNET_RPC_URL?: string
+  /** Extra allowlisted RPC hosts, comma-separated. Operator-only — see SOLANA_RPC_ALLOWLIST. */
+  SOLANA_RPC_ALLOWLIST_EXTRA?: string
+  /** '1' enforces the allowlist. Anything else logs rejections but allows them through. */
+  RPC_ALLOWLIST_ENFORCE?: string
+}
+
+// ────────────────────────────────────────────────────────
+// Caller-supplied RPC URL allowlist (SSRF guard)
+// ────────────────────────────────────────────────────────
+
+/**
+ * Hosts a *caller* may point us at via `rpcUrlOverride` / a URL-valued `network`.
+ *
+ * This exists because `/mcp`, `/flow/mcp` and `POST /flows/:slug/estimate` accept
+ * an RPC URL with no credential, and the resolved string goes straight into
+ * `fetch()` — without this list that is an unauthenticated SSRF into anything
+ * Cloudflare egress can reach. Same posture as the flow engine's
+ * `EXTERNAL_HTTP_ALLOWLIST`: a short, reviewed list of hosts, not an open proxy.
+ *
+ * URLs that come from the environment are NOT checked against this list — see
+ * `resolveSolanaRpcUrl`. Env values are trusted and their hostnames are secrets.
+ */
+export const SOLANA_RPC_ALLOWLIST: AllowlistEntry[] = [
+  { host: 'api.mainnet-beta.solana.com' },
+  { host: 'api.devnet.solana.com' },
+  { host: 'api.testnet.solana.com' },
+  // Providers that issue a per-customer subdomain.
+  { host: 'helius-rpc.com', allowSubdomains: true },
+  { host: 'quiknode.pro', allowSubdomains: true },
+  { host: 'rpcpool.com', allowSubdomains: true },
+]
+
+/** Thrown when a caller-supplied RPC URL is not allowlisted. Carries the host only — never the URL, which may embed an API key. */
+export class RpcUrlNotAllowedError extends Error {
+  readonly host: string
+
+  constructor(host: string) {
+    super(
+      `RPC host "${host}" is not allowlisted. Use a named cluster (mainnet-beta, devnet, testnet) ` +
+        `or an https URL on an allowlisted RPC provider.`,
+    )
+    this.name = 'RpcUrlNotAllowedError'
+    this.host = host
+  }
+}
+
+function rpcAllowlist(env: SolanaRpcEnv): AllowlistEntry[] {
+  const extra = parseRpcUrlList(env.SOLANA_RPC_ALLOWLIST_EXTRA).map((host) => ({ host }))
+  return extra.length > 0 ? [...SOLANA_RPC_ALLOWLIST, ...extra] : SOLANA_RPC_ALLOWLIST
+}
+
+/**
+ * Gate a caller-supplied RPC URL. Returns the URL unchanged when allowed.
+ *
+ * While `RPC_ALLOWLIST_ENFORCE` is not '1' this only logs — deploy in that mode
+ * first, watch for legitimate hosts in the logs, then enforce. Mirrors the
+ * `RESPONSE_CACHE_DISABLED` kill-switch convention in `middleware/cache.ts`.
+ */
+function assertRpcUrlAllowed(rpcUrl: string, env: SolanaRpcEnv): string {
+  if (isUrlAllowlisted(rpcUrl, rpcAllowlist(env))) return rpcUrl
+
+  const host = rpcUrlHost(rpcUrl)
+  if (env.RPC_ALLOWLIST_ENFORCE !== '1') {
+    console.warn(`[rpc-allowlist] would reject caller-supplied RPC host "${host}" (log-only; set RPC_ALLOWLIST_ENFORCE=1 to enforce)`)
+    return rpcUrl
+  }
+
+  throw new RpcUrlNotAllowedError(host)
 }
 
 export function parseRpcUrlList(raw?: string | null): string[] {
@@ -39,9 +109,15 @@ export function buildMainnetRpcUrlList(env: SolanaRpcEnv): string[] {
  *
  * Precedence:
  * 1. `rpcUrlOverride` — explicit URL (e.g. Helius devnet with API key)
- * 2. `network` starting with http(s) — treated as custom RPC URL (same as REST body.network)
+ * 2. `network` as an https URL — treated as custom RPC URL (same as REST body.network)
  * 3. Named clusters: devnet, testnet, mainnet / mainnet-beta
  * 4. Default: mainnet-beta public RPC (or env overrides)
+ *
+ * Cases 1 and 2 are caller-supplied and go through the SSRF allowlist; the
+ * named-cluster and env-derived paths below do not, because env values are
+ * trusted and their hostnames are secrets we cannot enumerate here.
+ *
+ * @throws {RpcUrlNotAllowedError} when a caller-supplied URL is not allowlisted.
  */
 export function resolveSolanaRpcUrl(opts: {
   network?: string | null
@@ -50,14 +126,16 @@ export function resolveSolanaRpcUrl(opts: {
 }): { rpcUrl: string; cluster: ResolvedCluster } {
   const trimmedOverride = opts.rpcUrlOverride?.trim()
   if (trimmedOverride) {
-    return { rpcUrl: trimmedOverride, cluster: 'custom' }
+    return { rpcUrl: assertRpcUrlAllowed(trimmedOverride, opts.env), cluster: 'custom' }
   }
 
   const raw = (opts.network ?? 'mainnet').trim()
   const lower = raw.toLowerCase()
 
+  // `http://` is deliberately not accepted — the documented contract for
+  // `network` is a named cluster or an https RPC URL.
   if (lower.startsWith('http://') || lower.startsWith('https://')) {
-    return { rpcUrl: raw, cluster: 'custom' }
+    return { rpcUrl: assertRpcUrlAllowed(raw, opts.env), cluster: 'custom' }
   }
 
   switch (lower) {

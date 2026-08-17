@@ -79,6 +79,20 @@ Optional Solana RPC variables:
 - `SOLANA_DEVNET_RPC_URL`
 - `SOLANA_TESTNET_RPC_URL`
 
+### Caller-supplied RPC URL allowlist
+
+`/mcp`, `/flow/mcp`, and several REST routes accept an `rpcUrl` (or a URL-valued
+`network`) from the caller without authentication. Those values are checked
+against the allowlist in `packages/worker/src/utils/solana-rpc.ts`; the RPC URLs
+configured above are trusted and never checked.
+
+- `RPC_ALLOWLIST_ENFORCE` — `'1'` rejects a non-allowlisted caller URL with 400.
+  Any other value logs the rejected hostname and lets it through. **Deploy
+  log-only first**, watch `wrangler tail` for legitimate hosts, add them, then
+  set to `'1'`.
+- `SOLANA_RPC_ALLOWLIST_EXTRA` — comma-separated extra allowlisted RPC
+  hostnames, so a provider can be added without a redeploy.
+
 ## Runtime Notes
 
 - `/mcp` bypasses Hono CORS middleware and is handled directly by the Streamable HTTP transport.

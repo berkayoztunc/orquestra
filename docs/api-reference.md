@@ -105,7 +105,7 @@ Upload limits:
   "feePayer": "<pubkey>",
   "recentBlockhash": "<optional-blockhash>",
   "network": "mainnet-beta",
-  "rpcUrl": "https://optional-rpc.example",
+  "rpcUrl": "https://mainnet.helius-rpc.com/?api-key=...",
   "simulate": true,
   "encoding": "base64"
 }
@@ -114,7 +114,7 @@ Upload limits:
 Notes:
 
 - `network` supports `mainnet-beta`, `devnet`, and `testnet`.
-- `rpcUrl` overrides the cluster RPC.
+- `rpcUrl` overrides the cluster RPC. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
 - If `recentBlockhash` is omitted, the worker fetches one from the selected RPC.
 - `encoding` defaults to `base58`; `base64` is recommended for modern Solana RPC usage.
 - `simulate: true` runs unsigned preflight and may return decoded Anchor errors.
@@ -125,7 +125,7 @@ Notes:
 {
   "accountType": "Counter",
   "network": "mainnet-beta",
-  "rpcUrl": "https://optional-rpc.example",
+  "rpcUrl": "https://mainnet.helius-rpc.com/?api-key=...",
   "dataSize": 48,
   "memcmp": [{ "offset": 8, "bytes": "<base58-bytes>" }],
   "fieldFilters": [{ "field": "authority", "bytes": "<pubkey>" }],

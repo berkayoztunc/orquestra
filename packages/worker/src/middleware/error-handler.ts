@@ -1,4 +1,5 @@
 import { Context, Next } from 'hono'
+import { RpcUrlNotAllowedError } from '../utils/solana-rpc'
 
 /**
  * Structured API error class for consistent error responses
@@ -32,6 +33,12 @@ export async function errorHandler(c: Context, next: Next) {
         },
         err.statusCode as 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500,
       )
+    }
+
+    // A caller-supplied RPC URL that failed the allowlist is a client error, not a 500.
+    // The message carries the hostname only, never the full URL (which may embed an API key).
+    if (err instanceof RpcUrlNotAllowedError) {
+      return c.json({ error: err.message, code: 'RPC_URL_NOT_ALLOWED' }, 400)
     }
 
     // Log unexpected errors

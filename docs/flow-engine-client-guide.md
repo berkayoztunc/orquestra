@@ -104,7 +104,7 @@ Inputs:
 - `inputs` — values for the flow's declared inputs (see its `inputs` schema from `list_flows` /
   `get_flow_metadata`), e.g. `{ "wallet": "...", "amount": "1000" }`.
 - `network` — optional, `mainnet-beta` | `devnet` | `testnet`. Defaults to `mainnet-beta`.
-- `rpcUrl` — optional full RPC URL override.
+- `rpcUrl` — optional full RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
 
 Actually **runs** a published flow: resolves accounts, builds the real instruction(s) from the live
 IDL, composes and simulates. Returns the unsigned transaction(s) (base64 v0) — this is the tool that
@@ -135,7 +135,7 @@ Inputs:
 - `fdl` — the full FDL document (doesn't need to be published).
 - `inputs` — test values for the flow's declared `inputs`, e.g. `{ "wallet": "...", "amount": "1000" }`.
 - `network` — optional, `mainnet-beta` | `devnet` | `testnet`. Defaults to `mainnet-beta`.
-- `rpcUrl` — optional full RPC URL override.
+- `rpcUrl` — optional full RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
 
 Compiles **and actually runs** the flow: real IDL lookups, real PDA/ATA resolution against live chain
 state, real instruction building, real transaction composition and simulation. Nothing is published, no

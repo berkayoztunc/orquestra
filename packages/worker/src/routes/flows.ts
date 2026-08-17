@@ -5,7 +5,7 @@ import { registerAllNodes } from '../flow-engine'
 import { compile } from '../flow-engine/compiler'
 import type { FlowDocument } from '../flow-engine/fdl-schema'
 import type { NodeContext } from '../flow-engine/types'
-import { resolveSolanaRpcUrl } from '../utils/solana-rpc'
+import { resolveSolanaRpcUrl, RpcUrlNotAllowedError } from '../utils/solana-rpc'
 import { ingestKeyMiddleware } from '../middleware/auth'
 import { publishFlowVersion } from '../services/flow-publisher'
 import { recordFlowRun } from '../services/flow-runs'
@@ -46,6 +46,12 @@ const app = new Hono<Env>()
  * flow's own structure or the caller's own inputs, never server internals.
  */
 function systemErrorResponse(c: Context<Env>, route: string, err: unknown) {
+  // A caller-supplied RPC URL that failed the allowlist is the caller's problem,
+  // not a system fault — and it must not be reported as a retryable 500.
+  if (err instanceof RpcUrlNotAllowedError) {
+    return c.json({ ok: false, kind: 'invalid_input', reason: err.message }, 400)
+  }
+
   console.error(`${route} failed`, err)
   return c.json(
     {

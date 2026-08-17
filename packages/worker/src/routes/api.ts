@@ -5,7 +5,7 @@ import { invalidateCache } from '../middleware/cache'
 import { parseIDL, getInstruction, resolveType, getDefaultValue, expandInstructionArgs, getDefinedTypeName, resolveDefinedType, resolveAccountFields, resolveEventFields, normalizeAccountMeta, validateIDL, detectIDLFormat, getCodamaInstruction, getCodamaUserArgs, resolveCodamaType, describeCodamaDiscriminator, resolveCodamaAccountFields } from '../services/idl-parser'
 import type { AnchorIDL, CodamaIDL } from '../services/idl-parser'
 import { buildTransaction, validateBuildRequest, simulateRawTransaction, setBlockhashCacheDisabled } from '../services/tx-builder'
-import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo } from '../utils/solana-rpc'
+import { resolveSolanaRpcUrl, rpcUrlHost, fetchAccountInfo, RpcUrlNotAllowedError } from '../utils/solana-rpc'
 import { listPdaAccounts, derivePda, listCodamaPdaAccounts, deriveCodamaPda } from '../services/pda'
 import { detectAccountType, deserializeAccountData, detectCodamaAccountType, deserializeCodamaAccountData } from '../services/account-parser'
 import { queryProgramAccounts, normalizeProgramAccountsQuery } from '../services/program-accounts'
@@ -16,6 +16,8 @@ import { searchProjects } from '../services/search'
 import { autoSeedCategory } from '../services/program-auto-detect'
 import { getInstructionSummary, getPublicIdlSummary, readIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-summary'
 import { generateId } from '../utils/id'
+import { getVisibleProject } from '../services/project-visibility'
+import { deleteProjectIdlCache } from '../services/idl-cache'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -680,12 +682,23 @@ app.put('/projects/:projectId', authMiddleware, async (c) => {
         .run()
     }
 
-    // Invalidate cached responses for this project
+    // Invalidate cached responses for this project. The per-project read
+    // prefixes matter when `isPublic` flips to false: without them the IDL
+    // responses stay in the edge cache (s-maxage=60) after the project is
+    // private, still answering anonymous callers.
     await invalidateCache(c.env?.CACHE, [
       `api:/api/projects/${projectId}`,
       `api:/api/projects?`,
+      `api:/api/${projectId}/`,
+      `api:/project/${projectId}/`,
       `projects:`,
     ])
+
+    // A project turned private must not leave its IDL sitting in the KV cache
+    // that the public read paths consult.
+    if (body.isPublic === false) {
+      await deleteProjectIdlCache(c.env?.IDLS, c.env?.DB, projectId)
+    }
 
     return c.json({ message: 'Project updated', projectId })
   } catch (err) {
@@ -835,22 +848,32 @@ app.post('/projects/:projectId/keys/:keyId/rotate', authMiddleware, async (c) =>
 // ── Public API Endpoints ────────────────────────────────
 
 // Helper: Get project IDL
-async function getProjectIDL(db: any, kv: any, projectId: string): Promise<{ idl: AnchorIDL; programId: string } | null> {
-  // Try KV cache first
+//
+// Visibility is resolved from the DB BEFORE the cache is read. The previous
+// ordering checked `is_public` only on the DB fallback, so any private IDL that
+// had been warmed into KV was served to anonymous callers for the life of the
+// cache entry. `getVisibleProject` also gives us the owner exception, so a user
+// can still reach their own private project.
+async function getProjectIDL(
+  db: any,
+  kv: any,
+  projectId: string,
+  userId?: string,
+): Promise<{ idl: AnchorIDL; programId: string } | null> {
+  const project = await getVisibleProject(db, projectId, userId)
+  if (!project) return null
+
   if (kv) {
     const cached = await kv.get(`idl:${projectId}:latest`)
     if (cached) {
-      const project = await db?.prepare('SELECT program_id FROM projects WHERE id = ?').bind(projectId).first()
-      if (project) {
-        return { idl: JSON.parse(cached), programId: project.program_id as string }
-      }
+      return { idl: JSON.parse(cached), programId: project.program_id }
     }
   }
 
   // Fall back to DB
   const result = await db
     ?.prepare(
-      'SELECT iv.idl_json, iv.cpi_md, p.program_id FROM idl_versions iv JOIN projects p ON iv.project_id = p.id WHERE iv.project_id = ? AND (p.is_public = 1) ORDER BY iv.version DESC LIMIT 1'
+      'SELECT iv.idl_json, iv.cpi_md FROM idl_versions iv WHERE iv.project_id = ? ORDER BY iv.version DESC LIMIT 1'
     )
     .bind(projectId)
     .first()
@@ -859,7 +882,7 @@ async function getProjectIDL(db: any, kv: any, projectId: string): Promise<{ idl
 
   return {
     idl: JSON.parse(result.idl_json as string),
-    programId: result.program_id as string,
+    programId: project.program_id,
   }
 }
 
@@ -912,7 +935,7 @@ app.get('/:projectId/instructions/:name', async (c) => {
 
 // Build transaction
 // Defaults: `network` omitted → mainnet-beta RPC for blockhash. For devnet programs always pass `network: "devnet"` or `rpcUrl`, or supply `recentBlockhash` from your RPC.
-app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
+app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
   const instructionName = c.req.param('name')
 
@@ -936,7 +959,7 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
       return c.json({ error: 'Missing required fields: accounts, args, feePayer' }, 400)
     }
 
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
@@ -977,6 +1000,9 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, async (c) => {
 
     return c.json(result)
   } catch (err) {
+    if (err instanceof RpcUrlNotAllowedError) {
+      return c.json({ error: err.message, code: 'RPC_URL_NOT_ALLOWED' }, 400)
+    }
     return c.json({ error: 'Failed to build transaction', details: (err as Error).message }, 500)
   }
 })
@@ -1004,7 +1030,7 @@ app.get('/:projectId/pda', async (c) => {
 })
 
 // Derive a PDA address
-app.post('/:projectId/pda/derive', async (c) => {
+app.post('/:projectId/pda/derive', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
@@ -1016,7 +1042,7 @@ app.post('/:projectId/pda/derive', async (c) => {
 
     const { instruction, account, seedValues } = validation.data!
 
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
@@ -1045,7 +1071,7 @@ app.post('/:projectId/pda/derive', async (c) => {
 })
 
 // Fetch and parse an on-chain account by address
-app.get('/:projectId/pda/fetch/:address', async (c) => {
+app.get('/:projectId/pda/fetch/:address', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
   const address = c.req.param('address')
   const network = c.req.query('network') || 'mainnet-beta'
@@ -1056,7 +1082,7 @@ app.get('/:projectId/pda/fetch/:address', async (c) => {
   }
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
@@ -1129,7 +1155,7 @@ app.get('/:projectId/pda/fetch/:address', async (c) => {
 })
 
 // Query program-owned accounts with dataSize/memcmp filters and IDL decoding
-app.post('/:projectId/program-accounts/query', async (c) => {
+app.post('/:projectId/program-accounts/query', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
@@ -1205,7 +1231,7 @@ app.post('/:projectId/program-accounts/query', async (c) => {
       return c.json({ error: 'Invalid program account query', details: errors }, 400)
     }
 
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
@@ -1227,6 +1253,9 @@ app.post('/:projectId/program-accounts/query', async (c) => {
 
     return c.json({ projectId, ...result })
   } catch (err) {
+    if (err instanceof RpcUrlNotAllowedError) {
+      return c.json({ error: err.message, code: 'RPC_URL_NOT_ALLOWED' }, 400)
+    }
     const message = (err as Error).message
     const isClientError =
       message.includes('not found in IDL') ||
@@ -1863,11 +1892,11 @@ app.delete('/:projectId/external-apis/:endpointId', authMiddleware, async (c) =>
 })
 
 // Get raw IDL
-app.get('/:projectId/idl', async (c) => {
+app.get('/:projectId/idl', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
-    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId)
+    const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
@@ -1917,6 +1946,9 @@ app.post('/tx/simulate', buildRateLimit, async (c) => {
     const result = await simulateRawTransaction(serializedTransaction, encoding, resolvedRpc)
     return c.json(result)
   } catch (err: any) {
+    if (err instanceof RpcUrlNotAllowedError) {
+      return c.json({ error: err.message, code: 'RPC_URL_NOT_ALLOWED' }, 400)
+    }
     return c.json({ error: err.message }, 500)
   }
 })

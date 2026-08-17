@@ -15,23 +15,15 @@
 
 import type { NodeContext, NodeImplementation } from '../types'
 import { registerNode } from '../node-registry'
+import { isUrlAllowlisted as matchesAllowlist, type AllowlistEntry } from '../../utils/url-allowlist'
 
-export interface AllowlistEntry {
-  host: string
-  pathPrefix?: string
-}
+export type { AllowlistEntry }
 
 export const EXTERNAL_HTTP_ALLOWLIST: AllowlistEntry[] = [{ host: 'quote-api.jup.ag', pathPrefix: '/v6/' }]
 
+/** Defaults to this node's allowlist; the matching rule lives in `utils/url-allowlist`. */
 export function isUrlAllowlisted(url: string, allowlist: AllowlistEntry[] = EXTERNAL_HTTP_ALLOWLIST): boolean {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return false
-  }
-  if (parsed.protocol !== 'https:') return false
-  return allowlist.some((entry) => parsed.hostname === entry.host && (!entry.pathPrefix || parsed.pathname.startsWith(entry.pathPrefix)))
+  return matchesAllowlist(url, allowlist)
 }
 
 export interface ExternalHttpInput {

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { authMiddleware } from '../middleware/auth'
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 import { invalidateCache } from '../middleware/cache'
 import { uploadRateLimit } from '../middleware/rate-limit'
 import { validateIDL, parseIDL, detectIDLFormat } from '../services/idl-parser'
@@ -11,6 +11,7 @@ import { setCategoryAndAliases } from '../services/search'
 import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import { deleteIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-summary'
 import { generateId } from '../utils/id'
+import { getVisibleProject } from '../services/project-visibility'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
@@ -159,8 +160,9 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       )
     }
 
-    // Cache IDL in KV
-    if (kv) {
+    // Cache IDL in KV — public projects only. A private IDL in this cache is
+    // what let other read paths serve it without a visibility check.
+    if (kv && body.isPublic !== false) {
       await kv.put(`idl:${projectId}:latest`, idlStr, { expirationTtl: 604800 }) // 7 days
       await kv.put(`idl:${projectId}:1`, idlStr, { expirationTtl: 604800 })
     }
@@ -234,11 +236,22 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
 })
 
 // Get IDL by project
-app.get('/:projectId', async (c) => {
+app.get('/:projectId', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
   const version = c.req.query('version')
 
   try {
+    const db = c.env?.DB
+
+    // Resolve visibility BEFORE the cache read. This route previously returned
+    // the cached IDL on a bare key hit and never consulted `is_public`, so a
+    // private project's IDL was readable by anyone holding its id — and the DB
+    // fallback below re-warmed that cache entry for `getProjectIDL` to serve.
+    const project = await getVisibleProject(db, projectId, c.get('userId') as string | undefined)
+    if (!project) {
+      return c.json({ error: 'IDL not found' }, 404)
+    }
+
     // Try KV cache first
     const kv = c.env?.IDLS
     const cacheKey = version ? `idl:${projectId}:${version}` : `idl:${projectId}:latest`
@@ -255,7 +268,6 @@ app.get('/:projectId', async (c) => {
     }
 
     // Fall back to database
-    const db = c.env?.DB
     let query = 'SELECT iv.*, p.name as project_name, p.program_id FROM idl_versions iv JOIN projects p ON iv.project_id = p.id WHERE iv.project_id = ?'
     const params: any[] = [projectId]
 
@@ -274,8 +286,9 @@ app.get('/:projectId', async (c) => {
 
     const idlJson = JSON.parse(result.idl_json as string)
 
-    // Update KV cache
-    if (kv) {
+    // Update KV cache — public projects only, so a private IDL never lands in a
+    // cache that other read paths consult.
+    if (kv && project.is_public) {
       await kv.put(cacheKey, result.idl_json as string, { expirationTtl: 604800 })
     }
 
@@ -294,11 +307,17 @@ app.get('/:projectId', async (c) => {
 })
 
 // List IDL versions for a project
-app.get('/:projectId/versions', async (c) => {
+app.get('/:projectId/versions', optionalAuthMiddleware, async (c) => {
   const projectId = c.req.param('projectId')
 
   try {
     const db = c.env?.DB
+
+    const project = await getVisibleProject(db, projectId, c.get('userId') as string | undefined)
+    if (!project) {
+      return c.json({ error: 'Project not found' }, 404)
+    }
+
     const results = await db
       ?.prepare(
         'SELECT id, version, created_at FROM idl_versions WHERE project_id = ? ORDER BY version DESC'
@@ -373,9 +392,10 @@ app.put('/:projectId', authMiddleware, async (c) => {
     // Update project timestamp
     await db?.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').bind(now, projectId).run()
 
-    // Update KV cache
+    // Update KV cache — public projects only (see the upload path above).
+    // `project` is the ownership row loaded further up, so `is_public` is free here.
     const kv = c.env?.IDLS
-    if (kv) {
+    if (kv && project.is_public) {
       await kv.put(`idl:${projectId}:latest`, idlStr, { expirationTtl: 604800 })
       await kv.put(`idl:${projectId}:${newVersion}`, idlStr, { expirationTtl: 604800 })
     }

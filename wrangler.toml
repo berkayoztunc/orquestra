@@ -298,6 +298,15 @@ CORS_ORIGIN = "http://localhost:5173"
 # Optional secrets for RPC failover:
 #   SOLANA_MAINNET_FALLBACK_RPC_URLS — comma-separated backup mainnet RPC URLs
 #   SOLANA_FALLBACK_RPC_URLS         — comma-separated generic backup RPC URLs
+# Caller-supplied RPC URL allowlist (SSRF guard, utils/solana-rpc.ts). These
+# apply ONLY to `rpcUrl`/`network` values sent by a caller — URLs configured
+# above are trusted and never checked against the allowlist:
+#   RPC_ALLOWLIST_ENFORCE        — '1' rejects non-allowlisted caller URLs with 400.
+#                                  Anything else logs the rejection and allows it
+#                                  through. Deploy log-only first, watch the logs
+#                                  for legitimate hosts, then set to '1'.
+#   SOLANA_RPC_ALLOWLIST_EXTRA   — comma-separated extra allowlisted RPC hostnames,
+#                                  for adding a provider without a redeploy.
 # Required secrets for the Flow Builder Agent (migration 026):
 #   TELEGRAM_BOT_TOKEN     — from BotFather
 #   TELEGRAM_CHAT_ID       — chat/group the agent posts proposals into

@@ -205,3 +205,72 @@ describe('PDA Service', () => {
     })
   })
 })
+
+// A seed on a FIELD of an argument struct — the shape jurassic_fi_token_sale ships, where
+// `initialize_launch` seeds the root PDA on `params.launch_id`. Reduced to the parts that
+// matter. Before this was handled the seed reported no type at all, so a caller could not
+// tell a u64 from a u8 — and on the live launch, launch_id at u8, u16 and u32 each derives
+// a DIFFERENT valid address. Only u64 matches the account that exists.
+const argStructIdl: any = {
+  version: '0.1.0',
+  name: 'jurassic_fi_token_sale',
+  metadata: { name: 'jurassic_fi_token_sale', version: '0.1.0', spec: '0.1.0' },
+  instructions: [
+    {
+      name: 'initialize_launch',
+      args: [{ name: 'params', type: { defined: 'InitializeLaunchParams' } }],
+      accounts: [
+        { name: 'admin', writable: true, signer: true },
+        {
+          name: 'launch',
+          writable: true,
+          pda: {
+            seeds: [
+              { kind: 'const', value: [108, 97, 117, 110, 99, 104] }, // "launch"
+              { kind: 'account', path: 'admin' },
+              { kind: 'arg', path: 'params.launch_id' },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  accounts: [{ name: 'Launch' }],
+  types: [
+    {
+      name: 'InitializeLaunchParams',
+      type: {
+        kind: 'struct',
+        fields: [
+          { name: 'launch_id', type: 'u64' },
+          { name: 'raise_cap', type: 'u64' },
+        ],
+      },
+    },
+  ],
+}
+
+describe('arg-struct field seeds', () => {
+  test('resolves the field type from the IDL types, not just top-level args', () => {
+    const pdas = listPdaAccounts(argStructIdl, 'raWrRH5R3Ym7rRFry3T8YrED6nBcUUVN2HLAdmtQLdm')
+    const launch = pdas.find((p) => p.account === 'launch')
+    expect(launch).toBeDefined()
+
+    const argSeed = launch!.seeds.find((s: any) => s.kind === 'arg')
+    expect(argSeed).toBeDefined()
+    expect(argSeed!.name).toBe('params.launch_id')
+    // the whole point: without the type a caller cannot know the width
+    expect(argSeed!.type).toBe('u64')
+  })
+
+  test('a dotted arg whose struct is not in types still reports the seed, without a type', () => {
+    const unknown = JSON.parse(JSON.stringify(argStructIdl))
+    unknown.types = []
+    const pdas = listPdaAccounts(unknown, 'raWrRH5R3Ym7rRFry3T8YrED6nBcUUVN2HLAdmtQLdm')
+    const argSeed = pdas
+      .find((p) => p.account === 'launch')!
+      .seeds.find((s: any) => s.kind === 'arg')
+    expect(argSeed!.name).toBe('params.launch_id')
+    expect(argSeed!.type).toBeUndefined()
+  })
+})

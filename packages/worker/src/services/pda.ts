@@ -5,7 +5,7 @@
  */
 
 import type { AnchorIDL, AnchorInstruction, CodamaIDL, CodamaTypeNode } from './idl-parser'
-import { getInstruction, resolveCodamaType } from './idl-parser'
+import { getDefinedTypeName, getInstruction, lookupType, resolveCodamaType } from './idl-parser'
 import { fetchAccountInfo } from '../utils/solana-rpc'
 
 // ────────────────────────────────────────────────────────
@@ -335,6 +335,23 @@ export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
         }
         if (s.kind === 'arg') {
           const name = seedName(s)
+          const dotIdx = name.indexOf('.')
+          if (dotIdx !== -1) {
+            // Dot-notation on an ARG: "params.launch_id" is the `launch_id` field of the
+            // `params` argument struct. Unlike an account field this is a CALLER value —
+            // the caller builds the struct, so it holds the field — and its type is
+            // declared in the IDL's own `types`. Without this the seed reports no type,
+            // and a caller has no way to know a u64 from a u8: the same value at the wrong
+            // width derives a different, perfectly valid address.
+            const argName = name.slice(0, dotIdx)
+            const fieldName = name.slice(dotIdx + 1)
+            const parentArg = ix.args?.find((a: any) => a.name === argName)
+            const structName = getDefinedTypeName(parentArg?.type)
+            const typeDef = structName ? lookupType(idl, structName) : undefined
+            const field = (typeDef?.type as any)?.fields?.find((f: any) => f.name === fieldName)
+            const type = field ? (typeof field.type === 'string' ? field.type : JSON.stringify(field.type)) : undefined
+            return { kind: 'arg' as const, name, type }
+          }
           const argDef = ix.args?.find((a: any) => a.name === name)
           const type = argDef ? (typeof argDef.type === 'string' ? argDef.type : JSON.stringify(argDef.type)) : undefined
           return { kind: 'arg' as const, name, type }

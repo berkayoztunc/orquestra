@@ -418,7 +418,7 @@ export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
         if (s.kind === 'account') {
           const name = seedName(s)
           return {
-            kind: (name.includes('.') ? 'account_field' : 'account') as const,
+            kind: name.includes('.') ? ('account_field' as const) : ('account' as const),
             name,
             type: resolveSeedType(idl, ix, s),
           }

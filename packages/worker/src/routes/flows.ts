@@ -142,7 +142,11 @@ app.post('/', ingestKeyMiddleware, async (c) => {
     }
 
     const { plan } = compiled
-    const result = await publishFlowVersion(c.env.DB, body.fdl, plan, { tier: body.tier, publish: body.publish })
+    const result = await publishFlowVersion(c.env.DB, body.fdl, plan, {
+      tier: body.tier,
+      publish: body.publish,
+      requireProof: true,
+    })
     cachePlan(plan)
 
     return c.json({ ok: true, ...result })

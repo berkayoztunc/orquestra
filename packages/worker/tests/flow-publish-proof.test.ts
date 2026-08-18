@@ -1,0 +1,141 @@
+import { describe, test, expect } from 'bun:test'
+import { compile } from '../src/flow-engine/compiler'
+import type { FlowDocument } from '../src/flow-engine/fdl-schema'
+import { publishFlowVersion } from '../src/services/flow-publisher'
+import '../src/flow-engine'
+
+/**
+ * `publish_flow` describes its input as a "proven FDL document", and the documented
+ * sequence is validate_flow -> simulate_flow -> publish_flow. Nothing enforced the middle
+ * step: every publish path reaches publishFlowVersion after `compile()`, which is
+ * deliberately static — no RPC, no IDL. So a document naming an instruction the target
+ * program does not declare compiles cleanly, earns a content hash, and can go live.
+ *
+ * Observed on the live surface: one document naming `swap_router_base_in` returned
+ * "Compiled OK" against Orca whirlpool and Byreal Clmm. Neither program declares it.
+ *
+ * The evidence needed already exists in this schema — simulate_flow writes a `flow_runs`
+ * row under the same version_hash — so the gate is a lookup.
+ */
+
+/** Minimal D1 fake: just the statements publishFlowVersion issues. */
+function makeDb(runs: Array<{ version_hash: string; status: string }> = []) {
+  const flows: Array<{ id: string; slug: string }> = []
+  const versions: Array<{ content_hash: string; flow_id: string; version: number }> = []
+  const db = {
+    prepare(sql: string) {
+      const bind = (...args: unknown[]) => ({
+        async first<T>(): Promise<T | null> {
+          if (sql.includes('FROM flow_runs')) {
+            const hit = runs.find((r) => r.version_hash === args[0] && r.status === 'ok')
+            return (hit ? { ok: 1 } : null) as T | null
+          }
+          if (sql.includes('SELECT id FROM flows WHERE slug')) {
+            const row = flows.find((f) => f.slug === args[0])
+            return (row ? { id: row.id } : null) as T | null
+          }
+          if (sql.includes('SELECT content_hash FROM flow_versions')) {
+            const row = versions.find((v) => v.content_hash === args[0])
+            return (row ? { content_hash: row.content_hash } : null) as T | null
+          }
+          if (sql.includes('MAX(version)')) return { max_version: versions.length } as T
+          return null as T | null
+        },
+        async run() {
+          if (sql.includes('INSERT INTO flows')) flows.push({ id: String(args[0]), slug: String(args[1]) })
+          if (sql.includes('INSERT INTO flow_versions'))
+            versions.push({ content_hash: String(args[0]), flow_id: String(args[1]), version: Number(args[2]) })
+          return { success: true }
+        },
+        async all() {
+          return { results: [] }
+        },
+      })
+      return { bind, ...bind() }
+    },
+  }
+  return db as unknown as D1Database
+}
+
+const DOC = {
+  fdl: '1.0',
+  meta: { slug: 'proof-gate-probe', name: 'Proof gate probe', intent: 'swap' },
+  inputs: { payer: { type: 'pubkey' } },
+  outputs: { address: { type: 'string' } },
+  nodes: [
+    {
+      id: 'pda',
+      type: 'resolve.pda@1',
+      in: { program: 'raWrRH5R3Ym7rRFry3T8YrED6nBcUUVN2HLAdmtQLdm', seeds: ['launch'] },
+    },
+  ],
+} as unknown as FlowDocument
+
+describe('publishing live requires a successful run, not just a compile', () => {
+  test('an unproven document is refused, and the refusal names the missing step', async () => {
+    const compiled = await compile(DOC)
+    expect(compiled.ok).toBe(true)
+    if (!compiled.ok) return
+
+    const attempt = publishFlowVersion(makeDb([]), DOC, compiled.plan, {
+      publish: true,
+      requireProof: true,
+    })
+
+    await expect(attempt).rejects.toThrow(/never run successfully/)
+    await expect(attempt).rejects.toThrow(/simulate_flow/)
+  })
+
+  test('the same document publishes once a successful run exists for that exact hash', async () => {
+    const compiled = await compile(DOC)
+    if (!compiled.ok) return
+
+    const db = makeDb([{ version_hash: compiled.plan.hash, status: 'ok' }])
+    const result = await publishFlowVersion(db, DOC, compiled.plan, { publish: true, requireProof: true })
+
+    expect(result.contentHash).toBe(compiled.plan.hash)
+  })
+
+  test('a run that FAILED is not proof', async () => {
+    const compiled = await compile(DOC)
+    if (!compiled.ok) return
+
+    const db = makeDb([{ version_hash: compiled.plan.hash, status: 'error' }])
+
+    await expect(
+      publishFlowVersion(db, DOC, compiled.plan, { publish: true, requireProof: true }),
+    ).rejects.toThrow(/never run successfully/)
+  })
+
+  test('a run of a DIFFERENT document is not proof — the hash has to match', async () => {
+    const compiled = await compile(DOC)
+    if (!compiled.ok) return
+
+    const db = makeDb([{ version_hash: 'some-other-flows-hash', status: 'ok' }])
+
+    await expect(
+      publishFlowVersion(db, DOC, compiled.plan, { publish: true, requireProof: true }),
+    ).rejects.toThrow(/never run successfully/)
+  })
+
+  test('drafts are never gated — only going live is', async () => {
+    const compiled = await compile(DOC)
+    if (!compiled.ok) return
+
+    const result = await publishFlowVersion(makeDb([]), DOC, compiled.plan, {
+      publish: false,
+      requireProof: true,
+    })
+
+    expect(result.contentHash).toBe(compiled.plan.hash)
+  })
+
+  test('internal callers are untouched — the gate is opt-in', async () => {
+    const compiled = await compile(DOC)
+    if (!compiled.ok) return
+
+    const result = await publishFlowVersion(makeDb([]), DOC, compiled.plan, { publish: true })
+
+    expect(result.contentHash).toBe(compiled.plan.hash)
+  })
+})

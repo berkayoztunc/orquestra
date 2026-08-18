@@ -361,7 +361,7 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
           return { isError: true, content: [{ type: 'text', text: lines.join('\n') }] }
         }
 
-        const result = await publishFlowVersion(env.DB, doc, compiled.plan, { tier, publish })
+        const result = await publishFlowVersion(env.DB, doc, compiled.plan, { tier, publish, requireProof: true })
         cachePlan(compiled.plan)
         const lines = [
           `**Published.**`,

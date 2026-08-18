@@ -274,3 +274,103 @@ describe('arg-struct field seeds', () => {
     expect(argSeed!.type).toBeUndefined()
   })
 })
+
+// The same defect one branch down, and it fires on EVERY Anchor 0.30+ IDL: spec 0.1.0
+// writes `accounts[]` entries carrying only `name` and `discriminator`, so reading
+// `account.type.fields` finds nothing and the struct has to come from `idl.types`.
+// jurassic_fi seeds `launch` this way in six of its eight instructions.
+const modernAccountIdl: any = {
+  version: '0.1.0',
+  name: 'jurassic_fi_token_sale',
+  metadata: { name: 'jurassic_fi_token_sale', version: '0.1.0', spec: '0.1.0' },
+  instructions: [
+    {
+      name: 'contribute',
+      args: [],
+      accounts: [
+        { name: 'contributor', signer: true },
+        {
+          name: 'launch',
+          writable: true,
+          pda: {
+            seeds: [
+              { kind: 'const', value: [108, 97, 117, 110, 99, 104] }, // "launch"
+              { kind: 'account', path: 'launch.admin', account: 'Launch' },
+              { kind: 'account', path: 'launch.launch_id', account: 'Launch' },
+              { kind: 'account', path: 'contributor' },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  // exactly what a 0.30 IDL ships: no inline `type` here
+  accounts: [{ name: 'Launch', discriminator: [1, 2, 3, 4, 5, 6, 7, 8] }],
+  types: [
+    {
+      name: 'Launch',
+      type: {
+        kind: 'struct',
+        fields: [
+          { name: 'admin', type: 'pubkey' },
+          { name: 'launch_id', type: 'u64' },
+          { name: 'salt', type: { array: ['u8', 32] } },
+        ],
+      },
+    },
+  ],
+}
+
+describe('account-field seeds on a modern IDL', () => {
+  const seedsOf = () =>
+    listPdaAccounts(modernAccountIdl, 'raWrRH5R3Ym7rRFry3T8YrED6nBcUUVN2HLAdmtQLdm').find(
+      (p) => p.account === 'launch',
+    )!.seeds
+
+  test('resolves the field type through idl.types, not the bare accounts entry', () => {
+    const byName = Object.fromEntries(
+      seedsOf()
+        .filter((s: any) => s.name)
+        .map((s: any) => [s.name, s.type]),
+    )
+    expect(byName['launch.admin']).toBe('pubkey')
+    // the one that decides the address: u64 is 8 LE bytes, u8 would be 1
+    expect(byName['launch.launch_id']).toBe('u64')
+  })
+
+  test('an account seed with no subfield is the account key itself', () => {
+    const bare = seedsOf().find((s: any) => s.name === 'contributor')
+    expect(bare!.kind).toBe('account')
+    expect(bare!.type).toBe('pubkey')
+  })
+
+  test('a composite field renders as a Rust type, not as JSON', () => {
+    // `[u8; 32]` is something a caller can act on; `{"array":["u8",32]}` is not.
+    const idl = JSON.parse(JSON.stringify(modernAccountIdl))
+    idl.instructions[0].accounts[1].pda.seeds[2] = {
+      kind: 'account',
+      path: 'launch.salt',
+      account: 'Launch',
+    }
+    const seed = listPdaAccounts(idl, 'raWrRH5R3Ym7rRFry3T8YrED6nBcUUVN2HLAdmtQLdm')
+      .find((p) => p.account === 'launch')!
+      .seeds.find((s: any) => s.name === 'launch.salt')
+    expect(seed!.type).toBe('[u8; 32]')
+  })
+
+  test('a path deeper than one level is walked, not matched whole', () => {
+    // anchor-syn appends EVERY subfield it sees, so `params.inner.id` is a real shape.
+    const idl = JSON.parse(JSON.stringify(argStructIdl))
+    idl.types.push({
+      name: 'Inner',
+      type: { kind: 'struct', fields: [{ name: 'id', type: 'u32' }] },
+    })
+    idl.types[0].type.fields.push({ name: 'inner', type: { defined: 'Inner' } })
+    idl.instructions[0].accounts[1].pda.seeds[2] = { kind: 'arg', path: 'params.inner.id' }
+
+    const seed = listPdaAccounts(idl, 'raWrRH5R3Ym7rRFry3T8YrED6nBcUUVN2HLAdmtQLdm')
+      .find((p) => p.account === 'launch')!
+      .seeds.find((s: any) => s.name === 'params.inner.id')
+    expect(seed!.type).toBe('u32')
+  })
+})

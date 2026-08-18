@@ -39,7 +39,7 @@ import { run } from '../flow-engine/interpreter'
 import { getFlowSchemaDocument } from '../flow-engine/schema-docs'
 import type { FlowDocument } from '../flow-engine/fdl-schema'
 import type { NodeContext } from '../flow-engine/types'
-import { publishFlowVersion } from '../services/flow-publisher'
+import { FlowNotProvenError, publishFlowVersion } from '../services/flow-publisher'
 import { recordFlowRun } from '../services/flow-runs'
 import { listFlows, getFlowMetadata } from '../services/flow-catalog'
 import { cachePlan, estimateFlow } from '../services/flow-estimator'
@@ -66,6 +66,14 @@ function systemErrorContent(toolName: string, err: unknown) {
   // A rejected caller-supplied `rpcUrl` is an input problem, not a server fault —
   // report it as such so the agent can correct the call instead of retrying.
   // The message carries the hostname only, never the URL (which may embed a key).
+  // Same reasoning as the RPC case below: the caller can fix this, and calling it a
+  // system fault tells an agent to retry something that will never start working.
+  if (err instanceof FlowNotProvenError) {
+    return {
+      isError: true,
+      content: [{ type: 'text' as const, text: `**Not published:** ${err.message}` }],
+    }
+  }
   if (err instanceof RpcUrlNotAllowedError) {
     return {
       isError: true,
@@ -313,11 +321,26 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
         const result = await run(compiled.plan, inputs ?? {}, nodeCtx)
         const latencyMs = Date.now() - startedAt
 
-        ctx.waitUntil(
-          recordFlowRun(env.DB, { versionHash: compiled.plan.hash, inputs: inputs ?? {}, result, latencyMs }).catch((err) =>
-            console.error('failed to record flow_runs row for simulate_flow', err),
-          ),
-        )
+        // A SUCCESSFUL run is now evidence — publish_flow reads it back — so it has to be
+        // durable BEFORE this tool returns. Deferring it past the response means an agent
+        // doing the documented simulate_flow -> publish_flow sequence can reach the
+        // publish gate before its own proof commits, and be refused for a flow it just
+        // proved. A failed run is telemetry, not evidence, and stays deferred: nothing
+        // reads it back, and it should not cost the caller latency.
+        if (result.ok) {
+          await recordFlowRun(env.DB, {
+            versionHash: compiled.plan.hash,
+            inputs: inputs ?? {},
+            result,
+            latencyMs,
+          }).catch((err) => console.error('failed to record flow_runs row for simulate_flow', err))
+        } else {
+          ctx.waitUntil(
+            recordFlowRun(env.DB, { versionHash: compiled.plan.hash, inputs: inputs ?? {}, result, latencyMs }).catch(
+              (err) => console.error('failed to record flow_runs row for simulate_flow', err),
+            ),
+          )
+        }
 
         if (!result.ok) {
           const lines = [

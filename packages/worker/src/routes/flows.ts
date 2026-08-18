@@ -7,7 +7,7 @@ import type { FlowDocument } from '../flow-engine/fdl-schema'
 import type { NodeContext } from '../flow-engine/types'
 import { resolveSolanaRpcUrl, RpcUrlNotAllowedError } from '../utils/solana-rpc'
 import { ingestKeyMiddleware } from '../middleware/auth'
-import { publishFlowVersion } from '../services/flow-publisher'
+import { FlowNotProvenError, publishFlowVersion } from '../services/flow-publisher'
 import { recordFlowRun } from '../services/flow-runs'
 import { listFlows, getFlowMetadata } from '../services/flow-catalog'
 import { cachePlan, estimateFlow } from '../services/flow-estimator'
@@ -142,11 +142,23 @@ app.post('/', ingestKeyMiddleware, async (c) => {
     }
 
     const { plan } = compiled
-    const result = await publishFlowVersion(c.env.DB, body.fdl, plan, {
-      tier: body.tier,
-      publish: body.publish,
-      requireProof: true,
-    })
+    let result
+    try {
+      result = await publishFlowVersion(c.env.DB, body.fdl, plan, {
+        tier: body.tier,
+        publish: body.publish,
+        requireProof: true,
+      })
+    } catch (err) {
+      // 409, not 500: the request is well-formed and the server is healthy — the
+      // document simply has not been proven yet, and the caller fixes that by running
+      // simulate_flow. A 5xx would tell a client to retry the one thing that cannot
+      // start working on its own.
+      if (err instanceof FlowNotProvenError) {
+        return c.json({ ok: false, error: err.message, contentHash: err.contentHash }, 409)
+      }
+      throw err
+    }
     cachePlan(plan)
 
     return c.json({ ok: true, ...result })

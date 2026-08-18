@@ -17,6 +17,28 @@ export interface PublishFlowResult {
   status: 'published' | 'draft'
 }
 
+/**
+ * A live publish was refused because the exact document has no successful run on record.
+ *
+ * Typed for the same reason `RpcUrlNotAllowedError` is: this is the CALLER's problem and
+ * it is fixable by them (run simulate_flow on this document first). Thrown as a plain
+ * Error it reaches `systemErrorContent` and renders as a server fault, which tells an
+ * agent to retry the one thing that will never start working.
+ */
+export class FlowNotProvenError extends Error {
+  readonly contentHash: string
+  constructor(slug: string, contentHash: string) {
+    super(
+      `flow "${slug}" has no successful run on record for content hash ${contentHash}. ` +
+        `Call simulate_flow on this exact document first, then publish; or publish it as ` +
+        `a draft. Compiling proves the document's structure, not that its instructions ` +
+        `exist on the target program.`,
+    )
+    this.name = 'FlowNotProvenError'
+    this.contentHash = contentHash
+  }
+}
+
 export async function publishFlowVersion(
   db: D1Database,
   doc: FlowDocument,
@@ -55,12 +77,7 @@ export async function publishFlowVersion(
       .bind(plan.hash)
       .first<{ ok: number }>()
     if (!proof) {
-      throw new Error(
-        `flow "${slug}" has never run successfully (no flow_runs row for content hash ` +
-          `${plan.hash} with status 'ok'). Call simulate_flow on this exact document first, ` +
-          `or publish it as a draft. Compiling proves the document's structure, not that ` +
-          `its instructions exist on the target program.`,
-      )
+      throw new FlowNotProvenError(slug, plan.hash)
     }
   }
 

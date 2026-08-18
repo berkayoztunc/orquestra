@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'bun:test'
 import { compile } from '../src/flow-engine/compiler'
 import type { FlowDocument } from '../src/flow-engine/fdl-schema'
-import { publishFlowVersion } from '../src/services/flow-publisher'
+import { FlowNotProvenError, publishFlowVersion } from '../src/services/flow-publisher'
 import '../src/flow-engine'
 
 /**
@@ -82,8 +82,24 @@ describe('publishing live requires a successful run, not just a compile', () => 
       requireProof: true,
     })
 
-    await expect(attempt).rejects.toThrow(/never run successfully/)
+    await expect(attempt).rejects.toThrow(FlowNotProvenError)
     await expect(attempt).rejects.toThrow(/simulate_flow/)
+  })
+
+  test('the refusal is TYPED, so the callers can render it as the caller\'s problem', async () => {
+    // Thrown as a plain Error it reaches systemErrorContent / systemErrorResponse and
+    // renders as a server fault — telling an agent to retry the one thing that will never
+    // start working on its own. Same reasoning as RpcUrlNotAllowedError.
+    const compiled = await compile(DOC)
+    if (!compiled.ok) return
+
+    const err = await publishFlowVersion(makeDb([]), DOC, compiled.plan, {
+      publish: true,
+      requireProof: true,
+    }).catch((e) => e)
+
+    expect(err).toBeInstanceOf(FlowNotProvenError)
+    expect(err.contentHash).toBe(compiled.plan.hash)
   })
 
   test('the same document publishes once a successful run exists for that exact hash', async () => {
@@ -104,7 +120,7 @@ describe('publishing live requires a successful run, not just a compile', () => 
 
     await expect(
       publishFlowVersion(db, DOC, compiled.plan, { publish: true, requireProof: true }),
-    ).rejects.toThrow(/never run successfully/)
+    ).rejects.toThrow(FlowNotProvenError)
   })
 
   test('a run of a DIFFERENT document is not proof — the hash has to match', async () => {
@@ -115,7 +131,7 @@ describe('publishing live requires a successful run, not just a compile', () => 
 
     await expect(
       publishFlowVersion(db, DOC, compiled.plan, { publish: true, requireProof: true }),
-    ).rejects.toThrow(/never run successfully/)
+    ).rejects.toThrow(FlowNotProvenError)
   })
 
   test('drafts are never gated — only going live is', async () => {

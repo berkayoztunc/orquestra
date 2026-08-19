@@ -2,6 +2,7 @@ import { describe, test, expect } from 'bun:test'
 import { compile } from '../src/flow-engine/compiler'
 import type { FlowDocument } from '../src/flow-engine/fdl-schema'
 import { FlowNotProvenError, publishFlowVersion } from '../src/services/flow-publisher'
+import { simulateSuccessContent } from '../src/routes/flow-mcp'
 import '../src/flow-engine'
 
 /**
@@ -153,5 +154,43 @@ describe('publishing live requires a successful run, not just a compile', () => 
     const result = await publishFlowVersion(makeDb([]), DOC, compiled.plan, { publish: true })
 
     expect(result.contentHash).toBe(compiled.plan.hash)
+  })
+})
+
+/**
+ * The other half of the gate, on the MCP side. The service refuses an unproven publish;
+ * these cover what simulate_flow tells a client when the run SUCCEEDED but its proof row
+ * did not make it to the database.
+ *
+ * A warning in the response text is not enough. An MCP client branches on `isError`, so a
+ * protocol-level success sends it straight on to publish_flow — which then refuses the
+ * document for the proof that was never written. The call must fail loudly at the step
+ * where the failure happened, not silently at the next one.
+ */
+describe('simulate_flow response when the proof write fails', () => {
+  const OUTPUTS = { swap: { signature: '5x…' } }
+
+  test('a recorded proof is a plain success', () => {
+    const res = simulateSuccessContent(OUTPUTS, true)
+
+    expect(res.isError).toBeUndefined()
+    expect(res.content[0].text).toContain('**Run succeeded.**')
+    expect(res.content[0].text).not.toContain('Proof was NOT recorded')
+  })
+
+  test('a failed proof write is isError, not just a warning line', () => {
+    const res = simulateSuccessContent(OUTPUTS, false)
+
+    // The flag is the load-bearing assertion: without it a client proceeds to
+    // publish_flow and hits a refusal it could not have predicted from this response.
+    expect(res.isError).toBe(true)
+    expect(res.content[0].text).toContain('Proof was NOT recorded')
+  })
+
+  test('the run that did happen is still reported — the outputs are not discarded', () => {
+    const res = simulateSuccessContent(OUTPUTS, false)
+
+    expect(res.content[0].text).toContain('**Run succeeded.**')
+    expect(res.content[0].text).toContain('5x…')
   })
 })

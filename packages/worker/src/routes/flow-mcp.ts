@@ -62,6 +62,30 @@ registerAllNodes()
  * errors, run errors, node ids) is safe to expose in full because it only
  * ever describes the flow's own structure, never server internals.
  */
+/**
+ * The answer `simulate_flow` gives for a run that SUCCEEDED, which depends on whether its
+ * proof was durably written.
+ *
+ * Exported so the invariant is unit-testable without the MCP transport, following the
+ * pattern in tests/mcp.test.ts. The invariant: a failed proof write must set `isError`.
+ * A caveat in the text does not gate a machine — an MCP client checks the flag, and a
+ * protocol-level success sends it on to publish_flow, which then refuses the document for
+ * the proof that was never stored.
+ */
+export function simulateSuccessContent(nodeOutputs: unknown, proofRecorded: boolean) {
+  const lines = ['**Run succeeded.**', '', 'Node outputs:', '```json', JSON.stringify(nodeOutputs, null, 2), '```']
+  if (proofRecorded) {
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
+  }
+  lines.push(
+    '',
+    '**Proof was NOT recorded.** The run succeeded, but writing its `flow_runs` row ' +
+      'failed, so `publish_flow` would refuse this document as unproven. Re-run ' +
+      'simulate_flow before publishing — the outputs above are still valid.',
+  )
+  return { isError: true, content: [{ type: 'text' as const, text: lines.join('\n') }] }
+}
+
 function systemErrorContent(toolName: string, err: unknown) {
   // A rejected caller-supplied `rpcUrl` is an input problem, not a server fault —
   // report it as such so the agent can correct the call instead of retrying.
@@ -368,16 +392,7 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
           return { isError: true, content: [{ type: 'text', text: lines.join('\n') }] }
         }
 
-        const lines = ['**Run succeeded.**', '', 'Node outputs:', '```json', JSON.stringify(result.nodeOutputs, null, 2), '```']
-        if (!proofRecorded) {
-          lines.push(
-            '',
-            '**Proof was NOT recorded.** The run succeeded, but writing its `flow_runs` row ' +
-              'failed, so `publish_flow` will refuse this document as unproven. Re-run ' +
-              'simulate_flow before publishing.',
-          )
-        }
-        return { content: [{ type: 'text', text: lines.join('\n') }] }
+        return simulateSuccessContent(result.nodeOutputs, proofRecorded)
       } catch (err) {
         return systemErrorContent('simulate_flow', err)
       }

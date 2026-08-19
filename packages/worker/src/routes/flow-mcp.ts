@@ -327,13 +327,25 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
         // publish gate before its own proof commits, and be refused for a flow it just
         // proved. A failed run is telemetry, not evidence, and stays deferred: nothing
         // reads it back, and it should not cost the caller latency.
+        //
+        // AND IF THAT WRITE FAILS, THE CALLER HAS TO HEAR IT. Swallowing the error here
+        // and still answering "Run succeeded." tells them two contradictory things: the
+        // run worked, and then publish_flow refuses the very same document as unproven.
+        // The run genuinely did succeed — that is a fact about the chain — so discarding
+        // it would be wrong too. Both facts are reported.
+        let proofRecorded = true
         if (result.ok) {
-          await recordFlowRun(env.DB, {
-            versionHash: compiled.plan.hash,
-            inputs: inputs ?? {},
-            result,
-            latencyMs,
-          }).catch((err) => console.error('failed to record flow_runs row for simulate_flow', err))
+          try {
+            await recordFlowRun(env.DB, {
+              versionHash: compiled.plan.hash,
+              inputs: inputs ?? {},
+              result,
+              latencyMs,
+            })
+          } catch (err) {
+            proofRecorded = false
+            console.error('failed to record flow_runs row for simulate_flow', err)
+          }
         } else {
           ctx.waitUntil(
             recordFlowRun(env.DB, { versionHash: compiled.plan.hash, inputs: inputs ?? {}, result, latencyMs }).catch(
@@ -357,6 +369,14 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
         }
 
         const lines = ['**Run succeeded.**', '', 'Node outputs:', '```json', JSON.stringify(result.nodeOutputs, null, 2), '```']
+        if (!proofRecorded) {
+          lines.push(
+            '',
+            '**Proof was NOT recorded.** The run succeeded, but writing its `flow_runs` row ' +
+              'failed, so `publish_flow` will refuse this document as unproven. Re-run ' +
+              'simulate_flow before publishing.',
+          )
+        }
         return { content: [{ type: 'text', text: lines.join('\n') }] }
       } catch (err) {
         return systemErrorContent('simulate_flow', err)

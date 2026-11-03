@@ -13,6 +13,7 @@ export interface SyncEnv {
   CACHE: KVNamespace
   // Use `any` to avoid Ai type conflicts between @cloudflare/workers-types versions
   AI?: any
+  AI_BACKGROUND_DISABLED?: string
   HELIUS_API_KEY?: string
   SOLANA_RPC_URL: string
   SOLANA_MAINNET_RPC_URL?: string
@@ -398,7 +399,7 @@ async function processOneCandidate(
     const idlHash = await hashIdl(onChain.idlJson)
 
     // AI categorization + name/description generation
-    const canUseAi = ai && onChain.idl && (aiCallCount + aiUsedRef.value) < MAX_AI_PER_RUN
+    const canUseAi = (ai || heliusApiKey) && onChain.idl && (aiCallCount + aiUsedRef.value) < MAX_AI_PER_RUN
     if (canUseAi) {
       aiUsedRef.value++
       try {
@@ -420,7 +421,7 @@ async function processOneCandidate(
           description: projectDescription,
         })
 
-        if (upserted.created) {
+        if (upserted.created && catResult.source !== 'none') {
           await setCategoryAndAliases(db, upserted.projectId, catResult.category, catResult.tags, catResult.aliases, {
             source: catResult.source,
             website: catResult.website,
@@ -637,7 +638,7 @@ export async function syncProjectBatch(
     const sr = r.value
     if (sr.status === 'updated') {
       updated++
-      if (sr.isFirstVersion && env.AI && aiCallCount < 50 && sr.idl) {
+      if (sr.isFirstVersion && (env.AI || env.HELIUS_API_KEY) && aiCallCount < 50 && sr.idl) {
         try {
           const instructions = extractInstructionNames(sr.idl)
           const accounts = extractAccountNames(sr.idl)
@@ -647,15 +648,17 @@ export async function syncProjectBatch(
             instructions,
             accounts,
           })
-          await setCategoryAndAliases(env.DB, sr.projectId, cat.category, cat.tags, cat.aliases, {
-            source: cat.source,
-            website: cat.website,
-            iconUrl: cat.iconUrl,
-            twitter: cat.twitter,
-            discord: cat.discord,
-          })
+          if (cat.source !== 'none') {
+            await setCategoryAndAliases(env.DB, sr.projectId, cat.category, cat.tags, cat.aliases, {
+              source: cat.source,
+              website: cat.website,
+              iconUrl: cat.iconUrl,
+              twitter: cat.twitter,
+              discord: cat.discord,
+            })
+            categorized++
+          }
           aiCallCount++
-          categorized++
         } catch { /* non-fatal */ }
       }
     } else if (sr.status === 'unchanged') {

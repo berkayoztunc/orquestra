@@ -18,6 +18,19 @@ import { PublicKey, TransactionInstruction, TransactionMessage, VersionedTransac
 // module in a parallel workstream. Only the type is consumed here; composeTransaction() below
 // is additive and does not touch the legacy single-instruction buildTransaction() path above.
 import type { FlowInstruction } from '../flow-engine/types'
+import {
+  type TxVersion,
+  type TxV1Config,
+  type GenericInstruction,
+  validateTxOptions,
+  resolveWireEncoding,
+  finalizeV1Transaction,
+  fitsInOneV1Transaction,
+  buildUnsignedV1Transaction,
+  TxOptionError,
+  LEGACY_MAX_TX_BYTES,
+  V1_MAX_TX_BYTES,
+} from './tx-v1'
 
 export type RiskLevel = 'low' | 'medium' | 'high'
 
@@ -64,6 +77,17 @@ export interface BuildTransactionRequest {
    * accounts in the right order for whatever remaining_accounts logic the program expects.
    */
   remainingAccounts?: RemainingAccount[]
+  /**
+   * Opt-in transaction format. Omitted → 'legacy' (unchanged behavior).
+   *  - 'legacy': Solana legacy message (default)
+   *  - 'v0': versioned message, no lookup tables (still the 1232-byte packet limit)
+   *  - 'v1': Transaction v1 (SIMD-0385) — 4096 bytes, 64 inline accounts, no lookup tables;
+   *    resource limits live in the message config instead of ComputeBudget instructions.
+   *    Defaults `encoding` to 'base64'.
+   */
+  txVersion?: TxVersion
+  /** v1 only: priority fee (total lamports), compute-unit / loaded-accounts limits, heap size. Unset limits are measured via simulation. */
+  txConfig?: TxV1Config
 }
 
 export interface BuildTransactionResponse {
@@ -85,10 +109,11 @@ export interface BuildTransactionResponse {
   lastValidBlockHeight?: number
   blockhashSource: 'client' | 'rpc'
   /**
-   * Wire format: legacy Solana message (not versioned / v0).
-   * Consumers that only call VersionedTransaction.deserialize should try legacy Transaction.from after failure.
+   * Wire format of `serializedTransaction`. 'legacy' unless the request opted in via `txVersion`.
+   * legacy: use Transaction.from(bytes); v0/v1: VersionedTransaction.deserialize / @solana/kit's getTransactionDecoder
+   * (v1 starts with byte 0x81 — web3.js 1.x cannot decode it).
    */
-  wireFormat: 'legacy'
+  wireFormat: TxVersion
   /** Set when `simulate: true` was requested. Null err means simulation succeeded at RPC preflight. */
   simulationError: unknown | null
   simulationLogs: string[] | null
@@ -656,27 +681,9 @@ async function buildCodamaTx(
     lastValidBlockHeight = latest.lastValidBlockHeight
   }
 
-  // Build tx
-  const txData = {
-    feePayer: request.feePayer,
-    recentBlockhash: blockhash,
-    instructions: [{
-      programId,
-      keys: accountInfos.map((acc) => ({ pubkey: acc.pubkey, isSigner: acc.isSigner, isWritable: acc.isWritable })),
-      data: arrayToBase58(instructionData),
-    }],
-  }
-  const txRawBytes = new TextEncoder().encode(JSON.stringify(txData))
-  const encoding = request.encoding === 'base64' ? 'base64' : 'base58'
-
-  const msgBytes = buildSolanaMessage(request.feePayer, accountInfos, programId, instructionData, blockhash)
-  const sigCountBytes = encodeCompactU16(1)
-  const wireBytes = new Uint8Array(sigCountBytes.length + 64 + msgBytes.length)
-  wireBytes.set(sigCountBytes, 0)
-  wireBytes.set(msgBytes, sigCountBytes.length + 64)
-
-  const txBase58 = encoding === 'base64' ? uint8ArrayToBase64(txRawBytes) : base58Encode(txRawBytes)
-  const serializedTransaction = encoding === 'base64' ? uint8ArrayToBase64(wireBytes) : base58Encode(wireBytes)
+  // Serialize in the requested transaction format (legacy unless the caller opted in via txVersion).
+  const wire = await assembleBuildWire({ request, programId, accountInfos, instructionData, blockhash, lastValidBlockHeight, rpcUrl })
+  const { wireBytes, serializedTransaction, encoding, txBase58 } = wire
 
   let simulationError: unknown | null = null
   let simulationLogs: string[] | null = null
@@ -701,18 +708,138 @@ async function buildCodamaTx(
     message: `Transaction for ${idl.program.name}.${instructionName}`,
     accounts: accountInfos,
     instruction: { name: instructionName, programId, data: arrayToHex(instructionData), accounts: accountInfos },
-    estimatedFee: 5000,
+    estimatedFee: wire.estimatedFee,
     network: meta.cluster,
     rpcUrlHost: meta.rpcUrlHost,
     recentBlockhash: blockhash,
     lastValidBlockHeight,
     blockhashSource,
-    wireFormat: 'legacy',
+    wireFormat: wire.wireFormat,
     simulationError,
     simulationLogs,
     riskLevel: codamaRisk.level,
-    riskReasons: codamaRisk.reasons,
+    riskReasons: [...codamaRisk.reasons, ...wire.notes],
     decodedError: null, // Codama IDLs don't surface Anchor-style errors[]
+  }
+}
+
+interface AssembledBuildWire {
+  /** JSON summary of the instruction set (the response's `transaction` field), encoded like `serializedTransaction`. */
+  txBase58: string
+  serializedTransaction: string
+  encoding: 'base58' | 'base64'
+  wireBytes: Uint8Array
+  wireFormat: TxVersion
+  estimatedFee: number
+  /** Extra risk/diagnostic notes (e.g. how v1 limits were chosen). Empty for legacy. */
+  notes: string[]
+}
+
+/**
+ * Serializes the single built instruction in the requested transaction format.
+ * 'legacy' (the default when `txVersion` is omitted) is the original code path, unchanged.
+ * 'v0' / 'v1' are opt-in — see BuildTransactionRequest.txVersion.
+ */
+async function assembleBuildWire(a: {
+  request: BuildTransactionRequest
+  programId: string
+  accountInfos: AccountInfo[]
+  instructionData: Uint8Array
+  blockhash: string
+  lastValidBlockHeight?: number
+  rpcUrl: string
+}): Promise<AssembledBuildWire> {
+  const { request, programId, accountInfos, instructionData, blockhash } = a
+  // Kill-switch checks happen at the route/tool layer (they have env); this re-validates structure.
+  const opts = validateTxOptions({ txVersion: request.txVersion, txConfig: request.txConfig })
+  const version: TxVersion = opts.txVersion ?? 'legacy'
+
+  // Build serialized transaction data (simplified format for API response)
+  const txData = {
+    feePayer: request.feePayer,
+    recentBlockhash: blockhash,
+    instructions: [{
+      programId,
+      keys: accountInfos.map((acc) => ({ pubkey: acc.pubkey, isSigner: acc.isSigner, isWritable: acc.isWritable })),
+      data: arrayToBase58(instructionData),
+    }],
+  }
+  const txRawBytes = new TextEncoder().encode(JSON.stringify(txData))
+
+  if (version === 'legacy') {
+    const encoding = request.encoding === 'base64' ? 'base64' : 'base58'
+
+    // Build real Solana wire-format transaction (compatible with Transaction.from())
+    const msgBytes = buildSolanaMessage(request.feePayer, accountInfos, programId, instructionData, blockhash)
+    const sigCountBytes = encodeCompactU16(1)
+    const wireBytes = new Uint8Array(sigCountBytes.length + 64 + msgBytes.length)
+    wireBytes.set(sigCountBytes, 0)
+    // bytes [sigCountBytes.length .. sigCountBytes.length+63] stay zero (empty signature slot)
+    wireBytes.set(msgBytes, sigCountBytes.length + 64)
+
+    return {
+      txBase58: encoding === 'base64' ? uint8ArrayToBase64(txRawBytes) : base58Encode(txRawBytes),
+      serializedTransaction: encoding === 'base64' ? uint8ArrayToBase64(wireBytes) : base58Encode(wireBytes),
+      encoding,
+      wireBytes,
+      wireFormat: 'legacy',
+      estimatedFee: 5000, // base fee in lamports
+      notes: [],
+    }
+  }
+
+  // Same account handling as the legacy message builder: placeholder entries without a pubkey are skipped.
+  const keys = accountInfos.filter((acc) => acc.pubkey).map((acc) => ({
+    pubkey: acc.pubkey,
+    isSigner: acc.isSigner,
+    isWritable: acc.isWritable,
+  }))
+
+  let wireBytes: Uint8Array
+  let estimatedFee = 5000
+  let notes: string[] = []
+
+  if (version === 'v0') {
+    const message = new TransactionMessage({
+      payerKey: new PublicKey(request.feePayer),
+      recentBlockhash: blockhash,
+      instructions: [
+        new TransactionInstruction({
+          programId: new PublicKey(programId),
+          keys: keys.map((k) => ({ pubkey: new PublicKey(k.pubkey), isSigner: k.isSigner, isWritable: k.isWritable })),
+          data: Buffer.from(instructionData),
+        }),
+      ],
+    }).compileToV0Message([])
+    wireBytes = new VersionedTransaction(message).serialize()
+    if (wireBytes.length > LEGACY_MAX_TX_BYTES) {
+      throw new Error(`This v0 transaction is ${wireBytes.length} bytes, over the ${LEGACY_MAX_TX_BYTES}-byte packet limit — use txVersion "v1" (4096 bytes)`)
+    }
+  } else {
+    const generic: GenericInstruction = { programId, keys, data: instructionData }
+    const finalized = await finalizeV1Transaction({
+      feePayer: request.feePayer,
+      instructions: [generic],
+      blockhash,
+      lastValidBlockHeight: a.lastValidBlockHeight,
+      config: opts.txConfig,
+      // Measures compute / loaded-accounts usage so the (otherwise zero) v1 limits are set correctly.
+      simulate: async (b64) => simulateTransactionRpc(a.rpcUrl, Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))),
+    })
+    wireBytes = finalized.bytes
+    notes = finalized.notes
+    estimatedFee = 5000 * finalized.signerCount + Number(finalized.config.priorityFeeLamports ?? 0)
+  }
+
+  const encoding = resolveWireEncoding(request.encoding, version, wireBytes.length)
+  return {
+    txBase58: encoding === 'base64' ? uint8ArrayToBase64(txRawBytes) : base58Encode(txRawBytes),
+    serializedTransaction: encoding === 'base64' ? uint8ArrayToBase64(wireBytes) : base58Encode(wireBytes),
+    encoding,
+    wireBytes,
+    wireFormat: version,
+    estimatedFee,
+    notes,
   }
 }
 
@@ -804,34 +931,9 @@ export async function buildTransaction(
     lastValidBlockHeight = latest.lastValidBlockHeight
   }
 
-  // Build serialized transaction data (simplified format for API response)
-  const txData = {
-    feePayer: request.feePayer,
-    recentBlockhash: blockhash,
-    instructions: [{
-      programId,
-      keys: accountInfos.map((acc) => ({
-        pubkey: acc.pubkey,
-        isSigner: acc.isSigner,
-        isWritable: acc.isWritable,
-      })),
-      data: arrayToBase58(instructionData),
-    }],
-  }
-
-  const txRawBytes = new TextEncoder().encode(JSON.stringify(txData))
-  const encoding = request.encoding === 'base64' ? 'base64' : 'base58'
-
-  // Build real Solana wire-format transaction (compatible with Transaction.from())
-  const msgBytes = buildSolanaMessage(request.feePayer, accountInfos, programId, instructionData, blockhash)
-  const sigCountBytes = encodeCompactU16(1)
-  const wireBytes = new Uint8Array(sigCountBytes.length + 64 + msgBytes.length)
-  wireBytes.set(sigCountBytes, 0)
-  // bytes [sigCountBytes.length .. sigCountBytes.length+63] stay zero (empty signature slot)
-  wireBytes.set(msgBytes, sigCountBytes.length + 64)
-
-  const txBase58 = encoding === 'base64' ? uint8ArrayToBase64(txRawBytes) : base58Encode(txRawBytes)
-  const serializedTransaction = encoding === 'base64' ? uint8ArrayToBase64(wireBytes) : base58Encode(wireBytes)
+  // Serialize in the requested transaction format (legacy unless the caller opted in via txVersion).
+  const wire = await assembleBuildWire({ request, programId, accountInfos, instructionData, blockhash, lastValidBlockHeight, rpcUrl })
+  const { wireBytes, serializedTransaction, encoding, txBase58 } = wire
 
   let simulationError: unknown | null = null
   let simulationLogs: string[] | null = null
@@ -863,17 +965,17 @@ export async function buildTransaction(
       data: arrayToHex(instructionData),
       accounts: accountInfos,
     },
-    estimatedFee: 5000, // base fee in lamports
+    estimatedFee: wire.estimatedFee,
     network: meta.cluster,
     rpcUrlHost: meta.rpcUrlHost,
     recentBlockhash: blockhash,
     lastValidBlockHeight,
     blockhashSource,
-    wireFormat: 'legacy',
+    wireFormat: wire.wireFormat,
     simulationError,
     simulationLogs,
     riskLevel: anchorRisk.level,
-    riskReasons: anchorRisk.reasons,
+    riskReasons: [...anchorRisk.reasons, ...wire.notes],
     decodedError,
   }
 }
@@ -1029,11 +1131,25 @@ export interface ComposeTransactionRequest {
   lookupTableAddresses?: string[]
   /** @deprecated Use `lookupTableAddresses` — a boolean can't create or reference a table by itself. Kept for backward compatibility: true with no `lookupTableAddresses` still just notes the limitation in `risk.reasons`. */
   useALT?: boolean
+  /**
+   * Opt-in transaction format. Omitted → 'v0' (unchanged behavior).
+   *  - 'v0': versioned message, lookup tables supported, 1232-byte packets (default)
+   *  - 'legacy': legacy message; lookup tables are not allowed
+   *  - 'v1': Transaction v1 (SIMD-0385): 4096-byte packets, max 64 inline accounts, NO lookup tables
+   *    (`lookupTableAddresses` are skipped with a note). Limits are measured via simulation unless given in `txConfig`.
+   */
+  txVersion?: TxVersion
+  /** v1 only — see TxV1Config. Rejected for any other txVersion. */
+  txConfig?: TxV1Config
+  /** Server kill switch (TX_V1_DISABLED) forwarded from the runtime context; makes txVersion 'v1' an error. */
+  txV1Disabled?: boolean
 }
 
 export interface ComposedTransaction {
-  /** base64-encoded, v0 (VersionedTransaction) wire format, unsigned. */
+  /** base64-encoded unsigned wire transaction in `wireFormat` (v0 unless the request opted into another version). */
   unsignedTransaction: string
+  /** Format of `unsignedTransaction`. */
+  wireFormat: TxVersion
   /** How many of the request's instructions landed in this transaction. */
   instructionCount: number
   /**
@@ -1110,6 +1226,7 @@ export function packInstructionsIntoBatches(
   payerKey: PublicKey,
   blockhash: string,
   lookupTables: AddressLookupTableAccount[] = [],
+  format: 'v0' | 'legacy' = 'v0',
 ): TransactionInstruction[][] {
   if (instructions.length === 0) {
     throw new Error('packInstructionsIntoBatches requires at least one instruction')
@@ -1117,7 +1234,8 @@ export function packInstructionsIntoBatches(
 
   const fitsInOneTransaction = (batch: TransactionInstruction[]): boolean => {
     try {
-      const message = new TransactionMessage({ payerKey, recentBlockhash: blockhash, instructions: batch }).compileToV0Message(lookupTables)
+      const base = new TransactionMessage({ payerKey, recentBlockhash: blockhash, instructions: batch })
+      const message = format === 'legacy' ? base.compileToLegacyMessage() : base.compileToV0Message(lookupTables)
       return new VersionedTransaction(message).serialize().length <= 1232
     } catch {
       return false
@@ -1146,6 +1264,41 @@ export function packInstructionsIntoBatches(
   if (current.length > 0) batches.push(current)
 
   return batches
+}
+
+/**
+ * v1 counterpart of packInstructionsIntoBatches: greedily packs instructions, in order, into the
+ * fewest transactions that each fit one v1 packet (4096 bytes, <= 64 accounts, no lookup tables).
+ * Returns the number of instructions per transaction. Sized with the worst-case config so adding the
+ * resource limits later can never push a transaction over the limit.
+ */
+export async function packInstructionsIntoV1Batches(
+  instructions: GenericInstruction[],
+  feePayer: string,
+  blockhash: string,
+): Promise<number[]> {
+  if (instructions.length === 0) throw new Error('packInstructionsIntoV1Batches requires at least one instruction')
+  const fits = (batch: GenericInstruction[]) => fitsInOneV1Transaction({ feePayer, instructions: batch, blockhash })
+
+  const sizes: number[] = []
+  let start = 0
+  let count = 0
+  for (let i = 0; i < instructions.length; i++) {
+    if (await fits(instructions.slice(start, i + 1))) {
+      count++
+      continue
+    }
+    if (count === 0 || !(await fits([instructions[i]!]))) {
+      // Re-run the real builder so the caller gets the precise reason (account cap vs size vs instruction count).
+      await buildUnsignedV1Transaction({ feePayer, instructions: [instructions[i]!], blockhash })
+      throw new TxOptionError(`instruction[${i}] cannot fit in a single v1 transaction and cannot be split across transactions`)
+    }
+    sizes.push(count)
+    start = i
+    count = 1
+  }
+  if (count > 0) sizes.push(count)
+  return sizes
 }
 
 /**
@@ -1189,15 +1342,32 @@ export async function composeTransaction(request: ComposeTransactionRequest): Pr
 
   const risk = assessRiskLevelFlow(request.instructions, request.feePayer)
 
+  const opts = validateTxOptions({
+    txVersion: request.txVersion,
+    txConfig: request.txConfig,
+    env: { TX_V1_DISABLED: request.txV1Disabled ? '1' : '0' },
+  })
+  const version: TxVersion = opts.txVersion ?? 'v0'
+  const packetLimit = version === 'v1' ? V1_MAX_TX_BYTES : LEGACY_MAX_TX_BYTES
+
   let lookupTables: AddressLookupTableAccount[] = []
   if (request.lookupTableAddresses && request.lookupTableAddresses.length > 0) {
-    const { tables, missing } = await fetchLookupTables(request.lookupTableAddresses, request.rpcUrl)
-    lookupTables = tables
-    if (tables.length > 0) {
-      risk.reasons.push(`using ${tables.length} address lookup table(s): ${tables.map((t) => t.key.toBase58()).join(', ')}`)
+    if (version === 'legacy') {
+      throw new TxOptionError('Legacy transactions cannot use address lookup tables — use txVersion "v0" or remove lookupTableAddresses')
     }
-    if (missing.length > 0) {
-      risk.reasons.push(`${missing.length} requested lookup table address(es) did not resolve to a real ALT and were skipped: ${missing.join(', ')}`)
+    if (version === 'v1') {
+      // v1 has no ALT support: every account is inline. Skipping (not failing) keeps flows that
+      // declare tables for v0 usable under a run-level v1 override; the 64-account cap still applies.
+      risk.reasons.push(`txVersion "v1" does not support address lookup tables — ignoring ${request.lookupTableAddresses.length} lookup table address(es); accounts are inline (max 64)`)
+    } else {
+      const { tables, missing } = await fetchLookupTables(request.lookupTableAddresses, request.rpcUrl)
+      lookupTables = tables
+      if (tables.length > 0) {
+        risk.reasons.push(`using ${tables.length} address lookup table(s): ${tables.map((t) => t.key.toBase58()).join(', ')}`)
+      }
+      if (missing.length > 0) {
+        risk.reasons.push(`${missing.length} requested lookup table address(es) did not resolve to a real ALT and were skipped: ${missing.join(', ')}`)
+      }
     }
   } else if (request.useALT) {
     risk.reasons.push('useALT was set but no lookupTableAddresses were provided — nothing to reference (this option cannot create a new table)')
@@ -1206,12 +1376,21 @@ export async function composeTransaction(request: ComposeTransactionRequest): Pr
   // Reuse the same warm-isolate blockhash cache as buildTransaction/fetchLatestBlockhash —
   // no separate cache or Connection object needed for a fresh (unsigned) message. One
   // blockhash is shared across every split transaction (they're meant to land together).
-  const { blockhash } = await fetchLatestBlockhash(request.rpcUrl)
+  const { blockhash, lastValidBlockHeight } = await fetchLatestBlockhash(request.rpcUrl)
 
-  const batches = packInstructionsIntoBatches(txInstructions, payerKey, blockhash, lookupTables)
-  if (batches.length > 1) {
+  // Instruction groups, one per resulting transaction.
+  const genericInstructions: GenericInstruction[] = request.instructions.map((ix) => ({
+    programId: ix.programId,
+    keys: ix.keys.map((k) => ({ pubkey: k.pubkey, isSigner: k.isSigner, isWritable: k.isWritable })),
+    data: Uint8Array.from(Buffer.from(ix.data, 'base64')),
+  }))
+  const batchSizes: number[] =
+    version === 'v1'
+      ? await packInstructionsIntoV1Batches(genericInstructions, request.feePayer, blockhash)
+      : packInstructionsIntoBatches(txInstructions, payerKey, blockhash, lookupTables, version === 'legacy' ? 'legacy' : 'v0').map((b) => b.length)
+  if (batchSizes.length > 1) {
     risk.reasons.push(
-      `${request.instructions.length} instructions did not fit one 1232-byte packet — split into ${batches.length} transactions that must be submitted in order`,
+      `${request.instructions.length} instructions did not fit one ${packetLimit}-byte packet — split into ${batchSizes.length} transactions that must be submitted in order`,
     )
   }
 
@@ -1223,12 +1402,31 @@ export async function composeTransaction(request: ComposeTransactionRequest): Pr
   // that this preflight can't see forward. The risk reason above already flags a multi-tx
   // split so callers know to treat simulation results on transaction 2+ with that caveat.
   const transactions: ComposedTransaction[] = []
-  for (const batch of batches) {
-    const message = new TransactionMessage({ payerKey, recentBlockhash: blockhash, instructions: batch }).compileToV0Message(lookupTables)
-    const versionedTx = new VersionedTransaction(message)
-    const unsignedTransaction = uint8ArrayToBase64(versionedTx.serialize())
+  let offset = 0
+  for (const size of batchSizes) {
+    let unsignedTransaction: string
 
-    const entry: ComposedTransaction = { unsignedTransaction, instructionCount: batch.length }
+    if (version === 'v1') {
+      const finalized = await finalizeV1Transaction({
+        feePayer: request.feePayer,
+        instructions: genericInstructions.slice(offset, offset + size),
+        blockhash,
+        lastValidBlockHeight,
+        config: opts.txConfig,
+        // Measures real usage so the (otherwise zero) v1 limits are set correctly.
+        simulate: async (b64) => simulateTransactionRpc(request.rpcUrl, Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))),
+      })
+      unsignedTransaction = finalized.base64
+      for (const note of finalized.notes) risk.reasons.push(note)
+    } else {
+      const batch = txInstructions.slice(offset, offset + size)
+      const base = new TransactionMessage({ payerKey, recentBlockhash: blockhash, instructions: batch })
+      const message = version === 'legacy' ? base.compileToLegacyMessage() : base.compileToV0Message(lookupTables)
+      unsignedTransaction = uint8ArrayToBase64(new VersionedTransaction(message).serialize())
+    }
+    offset += size
+
+    const entry: ComposedTransaction = { unsignedTransaction, wireFormat: version, instructionCount: size }
     if (request.simulate !== false) {
       entry.simulation = await simulateRawTransaction(unsignedTransaction, 'base64', request.rpcUrl)
     }
@@ -1363,7 +1561,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 async function simulateTransactionRpc(
   rpcUrl: string,
   wireBytes: Uint8Array,
-): Promise<{ err: unknown | null; logs: string[] }> {
+): Promise<{ err: unknown | null; logs: string[]; unitsConsumed?: number | null; loadedAccountsDataSize?: number | null }> {
   const base64 = uint8ArrayToBase64(wireBytes)
   try {
     const response = await rpcFetch(
@@ -1384,14 +1582,19 @@ async function simulateTransactionRpc(
       RPC_TIMEOUTS.simulate,
     )
     const data = (await response.json()) as {
-      result?: { value?: { err: unknown; logs?: string[] } }
+      result?: { value?: { err: unknown; logs?: string[]; unitsConsumed?: number; loadedAccountsDataSize?: number } }
       error?: { message?: string }
     }
     const value = data.result?.value
     if (!value) {
       return { err: data.error?.message ?? 'simulateTransaction RPC error', logs: [] }
     }
-    return { err: value.err ?? null, logs: value.logs ?? [] }
+    return {
+      err: value.err ?? null,
+      logs: value.logs ?? [],
+      unitsConsumed: value.unitsConsumed ?? null,
+      loadedAccountsDataSize: value.loadedAccountsDataSize ?? null,
+    }
   } catch (err) {
     return { err: (err as Error).message, logs: [] }
   }

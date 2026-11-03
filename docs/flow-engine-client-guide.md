@@ -105,9 +105,13 @@ Inputs:
   `get_flow_metadata`), e.g. `{ "wallet": "...", "amount": "1000" }`.
 - `network` — optional, `mainnet-beta` | `devnet` | `testnet`. Defaults to `mainnet-beta`.
 - `rpcUrl` — optional full RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
+- `txVersion` — optional run-level transaction format: `legacy` | `v0` | `v1`. Omit to keep the flow's own setting (default **v0**).
+  Precedence: `txVersion` on the flow's compose node > this run-level value > v0. `v1` = 4096-byte packets, max 64 inline accounts,
+  **no lookup tables** (a flow's `lookupTableAddresses` are ignored with a note in `risk.reasons`), limits measured automatically.
+  REST: `POST /flows/:slug/estimate` accepts `txVersion` in the body.
 
 Actually **runs** a published flow: resolves accounts, builds the real instruction(s) from the live
-IDL, composes and simulates. Returns the unsigned transaction(s) (base64 v0) — this is the tool that
+IDL, composes and simulates. Returns the unsigned transaction(s) (base64; v0 unless you opt into another `txVersion`) — this is the tool that
 produces the transaction you're actually looking for. No payment, no signing performed here; hand the
 result to a wallet/signer.
 
@@ -136,6 +140,7 @@ Inputs:
 - `inputs` — test values for the flow's declared `inputs`, e.g. `{ "wallet": "...", "amount": "1000" }`.
 - `network` — optional, `mainnet-beta` | `devnet` | `testnet`. Defaults to `mainnet-beta`.
 - `rpcUrl` — optional full RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
+- `txVersion` — optional run-level transaction format override, same semantics as in `estimate_flow`.
 
 Compiles **and actually runs** the flow: real IDL lookups, real PDA/ATA resolution against live chain
 state, real instruction building, real transaction composition and simulation. Nothing is published, no

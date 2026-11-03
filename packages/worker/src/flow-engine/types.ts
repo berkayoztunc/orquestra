@@ -34,6 +34,13 @@ export interface NodeContext {
   /** IDL registry KV namespace (project IDLs) — used by orquestra.* IDL-reflection nodes. */
   idls: KVNamespace
   rpcUrl: string
+  /**
+   * Run-level transaction format override (opt-in). `solana.compose_transaction` uses
+   * node input `txVersion` first, then this, then its default (v0). Unset = default behavior.
+   */
+  txVersion?: 'legacy' | 'v0' | 'v1'
+  /** TX_V1_DISABLED kill switch, forwarded so nodes can refuse txVersion "v1" without a redeploy. */
+  txV1Disabled?: boolean
 }
 
 /**

@@ -5,6 +5,7 @@ import { identifyProgram, extractInstructionNames, extractAccountNames } from '.
 import { setCategoryAndAliases } from './search'
 import { writeIdlSummaryCache } from './idl-summary'
 import { generateId } from '../utils/id'
+import { aiBackgroundDisabled } from '../utils/ai-flags'
 
 export interface ProjectAnalysisPipelineEnv {
   DB: any
@@ -13,6 +14,7 @@ export interface ProjectAnalysisPipelineEnv {
   IDLS?: any
   API_BASE_URL: string
   HELIUS_API_KEY?: string
+  AI_BACKGROUND_DISABLED?: string
 }
 
 export interface PreloadedProject {
@@ -143,6 +145,13 @@ export async function runProjectAnalysisPipeline(
       return text
     },
   )
+
+  // Kill switch: skip the AI analysis + categorization stages (docs/summary
+  // caches above are not AI and still refresh). Never insert a placeholder
+  // ai_analyses row — verified-analysis only picks up projects with none.
+  if (aiBackgroundDisabled(env)) {
+    return { projectId: project.id, analysisId: '', category: 'skipped', tags: [], skipped: true }
+  }
 
   let analysisId = ''
   let shortDescription: string | undefined

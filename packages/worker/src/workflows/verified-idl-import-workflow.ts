@@ -17,6 +17,7 @@ const RPC_THROTTLE_MS = 350 // delay between each program's on-chain RPC fetch â
 type Env = {
   DB: any
   AI: any
+  AI_BACKGROUND_DISABLED?: string
   HELIUS_API_KEY?: string
   IDLS: any
   CACHE: any
@@ -185,7 +186,7 @@ export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
               }
 
               let category = 'unknown'
-              if (this.env.AI && onChain.idl) {
+              if ((this.env.AI || this.env.HELIUS_API_KEY) && onChain.idl) {
                 try {
                   const cat = await identifyProgram(this.env, {
                     name: rawName,
@@ -193,14 +194,16 @@ export class VerifiedIdlImportWorkflow extends WorkflowEntrypoint<Env, Params> {
                     instructions: extractInstructionNames(onChain.idl),
                     accounts: extractAccountNames(onChain.idl),
                   })
-                  await setCategoryAndAliases(this.env.DB, projectId, cat.category, cat.tags, cat.aliases, {
-                    source: cat.source,
-                    website: cat.website,
-                    iconUrl: cat.iconUrl,
-                    twitter: cat.twitter,
-                    discord: cat.discord,
-                  })
-                  category = cat.category
+                  if (cat.source !== 'none') {
+                    await setCategoryAndAliases(this.env.DB, projectId, cat.category, cat.tags, cat.aliases, {
+                      source: cat.source,
+                      website: cat.website,
+                      iconUrl: cat.iconUrl,
+                      twitter: cat.twitter,
+                      discord: cat.discord,
+                    })
+                    category = cat.category
+                  }
                 } catch { /* categorization optional */ }
               }
 

@@ -6,6 +6,7 @@ import { identifyProgram, extractInstructionNames, extractAccountNames } from '.
 import { setCategoryAndAliases } from '../services/search'
 import { writeIdlSummaryCache } from '../services/idl-summary'
 import { generateId } from '../utils/id'
+import { aiBackgroundDisabled } from '../utils/ai-flags'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -72,6 +73,7 @@ type Env = {
     IDLS: any
     CACHE: any
     AI: Ai
+    AI_BACKGROUND_DISABLED?: string
     API_BASE_URL: string
     INGEST_API_KEY: string
     HELIUS_API_KEY?: string
@@ -201,7 +203,7 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       // Auto-detect and seed category if known program
       await autoSeedCategory(db, projectId, programName)
 
-      if (aiCategorizationResult) {
+      if (aiCategorizationResult && aiCategorizationResult.source !== 'none') {
         try {
           await setCategoryAndAliases(
             db,
@@ -223,7 +225,7 @@ app.post('/idl', ingestKeyMiddleware, async (c) => {
       }
 
       // Fire AI categorization in the background (non-blocking)
-      if (c.env?.AI && !aiCategorizationResult) {
+      if (c.env?.AI && !aiBackgroundDisabled(c.env) && !aiCategorizationResult) {
         c.executionCtx.waitUntil(
           (async () => {
             try {

@@ -1,9 +1,18 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from 'cloudflare:workers'
 import { sendWorkflowReport } from '../services/telegram'
+import { hibernateEvery } from '../utils/workflow-helpers'
 
 const COMPASS_BASE = 'https://solanacompass.com/analytics/api/program-metrics'
 const PER_PAGE = 500
 const TAG = '[program-metrics-workflow]'
+/**
+ * Statements per D1 batch() call — one subrequest per batch instead of one per row.
+ * 40, not more: D1 batch() caps total bound variables (~430) and each row binds 9
+ * (same limit services/program-metrics.ts already sizes its BATCH_SIZE for).
+ */
+const D1_BATCH_SIZE = 40
+/** Hibernate every N pages so the next pages get a fresh Worker invocation (subrequests accumulate across consecutive steps). */
+const PAGES_PER_BREATHER = 15
 
 type Env = {
   DB: any
@@ -50,10 +59,49 @@ export class ProgramMetricsWorkflow extends WorkflowEntrypoint<Env, Params> {
 
     const fetchedAt = new Date().toISOString()
 
-    // Step 1: fetch page 1 to discover totalPages (API caps per_page at 500)
-    const { totalPages, firstPagePrograms } = await step.do(
-      'discover pages',
-      { timeout: '30 seconds', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
+    // Upserts one page of programs. Rows go through D1 batch() (one subrequest per
+    // D1_BATCH_SIZE rows) — a 500-row page written one .run() at a time costs 500
+    // subrequests, and Workflows packs consecutive fast steps into one invocation, so
+    // two pages would already exceed the 1000-subrequest limit.
+    const insertPage = async (programs: CompassProgram[], pageLabel: string): Promise<number> => {
+      const stmt = this.env.DB.prepare(UPSERT_SQL)
+      const bound = programs.map((p) => {
+        const m = p.metrics ?? {}
+        return stmt.bind(
+          p.program,
+          Math.round(m.totalTransactions ?? 0),
+          Math.round(m.uniqueUsers ?? 0),
+          Number(m.totalFees ?? 0),
+          Math.round(m.totalCompute ?? 0),
+          p.name ?? null,
+          p.labels?.length ? JSON.stringify(p.labels) : null,
+          fetchedAt,
+          fetchedAt,
+        )
+      })
+
+      let inserted = 0
+      for (let i = 0; i < bound.length; i += D1_BATCH_SIZE) {
+        const chunk = bound.slice(i, i + D1_BATCH_SIZE)
+        try {
+          await this.env.DB.batch(chunk)
+          inserted += chunk.length
+        } catch (dbErr) {
+          console.error(`${TAG} DB batch insert failed (${pageLabel}, rows ${i}-${i + chunk.length - 1}):`, dbErr)
+          throw dbErr
+        }
+      }
+      console.log(`${TAG} ${pageLabel}: inserted ${inserted}/${programs.length} rows`)
+      return inserted
+    }
+
+    // Step 1: fetch + insert page 1, and discover totalPages (API caps per_page at 500).
+    // Fetch, parse, and insert happen inside a single step so only small scalars
+    // (not the full programs array) cross the step-output boundary — Workflows
+    // caps a step's return value at 1MiB, and 500 programs' worth of metrics exceeds that.
+    const { totalPages, imported: page1Imported } = await step.do(
+      'discover pages and import page 1',
+      { timeout: '3 minutes', retries: { limit: 3, delay: 5000, backoff: 'exponential' } },
       async () => {
         const url = `${COMPASS_BASE}?range=7d&sortBy=tx_count&sortDir=desc&page=1&per_page=${PER_PAGE}`
         console.log(`${TAG} fetching page 1 (per_page=${PER_PAGE})`)
@@ -64,43 +112,12 @@ export class ProgramMetricsWorkflow extends WorkflowEntrypoint<Env, Params> {
         const totalPrograms = Number(json.totalPrograms ?? json.total_programs ?? 0)
         const programs: CompassProgram[] = json.programs ?? []
         console.log(`${TAG} page 1: ${programs.length} programs, totalPages=${totalPages}, totalPrograms=${totalPrograms}`)
-        return { totalPages, firstPagePrograms: programs }
+        const imported = await insertPage(programs, `page 1/${totalPages}`)
+        return { totalPages, imported }
       },
     )
 
-    // Insert page 1 data immediately
-    const insertPage = async (programs: CompassProgram[], pageLabel: string): Promise<number> => {
-      const stmt = this.env.DB.prepare(UPSERT_SQL)
-      let inserted = 0
-      for (const p of programs) {
-        const m = p.metrics ?? {}
-        try {
-          await stmt.bind(
-            p.program,
-            Math.round(m.totalTransactions ?? 0),
-            Math.round(m.uniqueUsers ?? 0),
-            Number(m.totalFees ?? 0),
-            Math.round(m.totalCompute ?? 0),
-            p.name ?? null,
-            p.labels?.length ? JSON.stringify(p.labels) : null,
-            fetchedAt,
-            fetchedAt,
-          ).run()
-          inserted++
-        } catch (dbErr) {
-          console.error(`${TAG} DB insert failed (${pageLabel}) for ${p.program}:`, dbErr)
-          throw dbErr
-        }
-      }
-      console.log(`${TAG} ${pageLabel}: inserted ${inserted}/${programs.length} rows`)
-      return inserted
-    }
-
-    let imported = await step.do(
-      `insert page 1 of ${totalPages}`,
-      { timeout: '3 minutes', retries: { limit: 2, delay: 10000, backoff: 'exponential' } },
-      () => insertPage(firstPagePrograms, `page 1/${totalPages}`),
-    )
+    let imported = page1Imported
 
     // Steps for pages 2..N
     for (let page = 2; page <= totalPages; page++) {
@@ -125,6 +142,8 @@ export class ProgramMetricsWorkflow extends WorkflowEntrypoint<Env, Params> {
       imported += count
       console.log(`${TAG} progress: ${imported} total rows (page ${page}/${totalPages} done)`)
       if (count === 0) break
+
+      await hibernateEvery(step, page, PAGES_PER_BREATHER, `page ${page}`, { guard: page < totalPages })
     }
 
     console.log(`${TAG} workflow complete — ${imported} rows across ${totalPages} pages`)

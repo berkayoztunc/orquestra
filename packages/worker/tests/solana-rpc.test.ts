@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test'
-import { resolveSolanaRpcUrl, rpcUrlHost, RpcUrlNotAllowedError } from '../src/utils/solana-rpc'
+import { describe, test, expect, afterEach } from 'bun:test'
+import { resolveSolanaRpcUrl, rpcUrlHost, RpcUrlNotAllowedError, getTransaction, MAX_SUPPORTED_TRANSACTION_VERSION } from '../src/utils/solana-rpc'
 
 describe('resolveSolanaRpcUrl', () => {
   const env = {
@@ -128,5 +128,25 @@ describe('resolveSolanaRpcUrl SSRF allowlist', () => {
 describe('rpcUrlHost', () => {
   test('extracts hostname', () => {
     expect(rpcUrlHost('https://api.devnet.solana.com')).toBe('api.devnet.solana.com')
+  })
+})
+
+describe('getTransaction (Transaction v1 support)', () => {
+  const realFetch = globalThis.fetch
+  afterEach(() => { globalThis.fetch = realFetch })
+
+  test('asks the RPC for versions up to 1 as a JSON integer', async () => {
+    let sent: any
+    globalThis.fetch = (async (_url: any, init: any) => {
+      sent = JSON.parse(init.body)
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: null }), { status: 200 })
+    }) as any
+
+    await getTransaction('https://api.mainnet-beta.solana.com', 'sig')
+
+    expect(MAX_SUPPORTED_TRANSACTION_VERSION).toBe(1)
+    expect(sent.method).toBe('getTransaction')
+    expect(sent.params[1].maxSupportedTransactionVersion).toBe(1)
+    expect(typeof sent.params[1].maxSupportedTransactionVersion).toBe('number')
   })
 })

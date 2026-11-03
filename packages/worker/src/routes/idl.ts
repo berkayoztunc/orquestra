@@ -12,6 +12,7 @@ import { generateAndStoreAIAnalysis } from '../services/ai-analysis'
 import { deleteIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-summary'
 import { generateId } from '../utils/id'
 import { getVisibleProject } from '../services/project-visibility'
+import { aiBackgroundDisabled } from '../utils/ai-flags'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
@@ -31,6 +32,7 @@ type Env = {
     IDLS: any  // KV namespace
     CACHE: any // KV namespace
     AI: Ai
+    AI_BACKGROUND_DISABLED?: string
     API_BASE_URL: string
     AI_ANALYSIS_MODEL?: string
     HELIUS_API_KEY?: string
@@ -129,7 +131,7 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
     await autoSeedCategory(db, projectId, body.name)
 
     // Fire AI categorization in the background (non-blocking)
-    if (c.env?.AI) {
+    if (c.env?.AI && !aiBackgroundDisabled(c.env)) {
       c.executionCtx.waitUntil(
         (async () => {
           try {
@@ -188,7 +190,7 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       console.error('[idl] Failed to cache IDL summary:', err)
     }
 
-    if (c.env?.AI && db) {
+    if (c.env?.AI && db && !aiBackgroundDisabled(c.env)) {
       c.executionCtx.waitUntil(
         generateAndStoreAIAnalysis({
           db,
@@ -421,7 +423,7 @@ app.put('/:projectId', authMiddleware, async (c) => {
       console.error('[idl] Failed to cache IDL summary:', err)
     }
 
-    if (c.env?.AI && db) {
+    if (c.env?.AI && db && !aiBackgroundDisabled(c.env)) {
       c.executionCtx.waitUntil(
         generateAndStoreAIAnalysis({
           db,

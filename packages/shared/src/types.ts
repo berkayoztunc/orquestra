@@ -194,8 +194,18 @@ export interface TransactionBuildRequest {
   args: Record<string, any>
   feePayer?: string
   recentBlockhash?: string
-  /** Encoding for serializedTransaction in the response. Defaults to 'base58'. Use 'base64' for the modern Solana standard. */
+  /** Encoding for serializedTransaction in the response. Defaults to 'base58' ('base64' when txVersion is 'v1'). */
   encoding?: 'base58' | 'base64'
+  /** OPTIONAL transaction format. Omitted → 'legacy' (unchanged). 'v1' = Transaction v1 (SIMD-0385): 4096 bytes, no lookup tables. */
+  txVersion?: 'legacy' | 'v0' | 'v1'
+  /** OPTIONAL, v1 only. Unset compute/loaded-accounts limits are measured automatically. */
+  txConfig?: {
+    /** TOTAL priority fee in lamports (not micro-lamports per CU). */
+    priorityFeeLamports?: number | string
+    computeUnitLimit?: number
+    loadedAccountsDataSizeLimit?: number
+    heapSize?: number
+  }
 }
 
 export interface TransactionBuildResponse {
@@ -211,7 +221,7 @@ export interface TransactionBuildResponse {
   recentBlockhash?: string
   lastValidBlockHeight?: number
   blockhashSource?: 'client' | 'rpc'
-  wireFormat?: 'legacy'
+  wireFormat?: 'legacy' | 'v0' | 'v1'
   simulationError?: unknown | null
   simulationLogs?: string[] | null
 }

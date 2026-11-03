@@ -21,6 +21,15 @@ CORS_ORIGIN = "http://localhost:5173"
 # the SOLANA_*_RPC_URL values are trusted and never checked.
 RPC_ALLOWLIST_ENFORCE = "1"
 
+# Kill switch for BACKGROUND Workers AI usage (neuron billing, utils/ai-flags.ts).
+# '1' stops bulk analysis, categorization fallback and upload-triggered analysis.
+# tx-agent, flow builder and manual /ai endpoints are unaffected. Helius lookups still run.
+AI_BACKGROUND_DISABLED = "1"
+
+# Kill switch for Transaction v1 (services/tx-v1.ts). '1' makes an explicit `txVersion: "v1"` request fail with
+# a clear 400/tool error without a redeploy. v1 is opt-in anyway — callers that omit txVersion are unaffected.
+TX_V1_DISABLED = "0"
+
 # Routes for production
 [route]
 pattern = "api.orquestra.dev/*"
@@ -287,6 +296,15 @@ CORS_ORIGIN = "https://orquestra.dev"
 # the SOLANA_*_RPC_URL values are trusted and never checked.
 RPC_ALLOWLIST_ENFORCE = "1"
 
+# Kill switch for BACKGROUND Workers AI usage (neuron billing, utils/ai-flags.ts).
+# '1' stops bulk analysis, categorization fallback and upload-triggered analysis.
+# tx-agent, flow builder and manual /ai endpoints are unaffected. Helius lookups still run.
+AI_BACKGROUND_DISABLED = "1"
+
+# Kill switch for Transaction v1 (services/tx-v1.ts). '1' makes an explicit `txVersion: "v1"` request fail with
+# a clear 400/tool error without a redeploy. v1 is opt-in anyway — callers that omit txVersion are unaffected.
+TX_V1_DISABLED = "0"
+
 # Environment Variables - Development
 [env.development.vars]
 ENVIRONMENT = "development"
@@ -302,6 +320,15 @@ CORS_ORIGIN = "http://localhost:5173"
 # SOLANA_RPC_ALLOWLIST with a 400. Applies ONLY to URLs sent by a caller —
 # the SOLANA_*_RPC_URL values are trusted and never checked.
 RPC_ALLOWLIST_ENFORCE = "1"
+
+# Kill switch for BACKGROUND Workers AI usage (neuron billing, utils/ai-flags.ts).
+# '1' stops bulk analysis, categorization fallback and upload-triggered analysis.
+# tx-agent, flow builder and manual /ai endpoints are unaffected. Helius lookups still run.
+AI_BACKGROUND_DISABLED = "0"
+
+# Kill switch for Transaction v1 (services/tx-v1.ts). '1' makes an explicit `txVersion: "v1"` request fail with
+# a clear 400/tool error without a redeploy. v1 is opt-in anyway — callers that omit txVersion are unaffected.
+TX_V1_DISABLED = "0"
 
 # Secrets (set via: wrangler secret put <NAME>)
 # Required secrets for production:

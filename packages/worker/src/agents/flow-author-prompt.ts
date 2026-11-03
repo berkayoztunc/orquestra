@@ -153,6 +153,9 @@ Rules:
 - A publishable flow MUST produce a transaction: at least one \`orquestra.build_instruction@1\` node
   and exactly one terminal \`solana.compose_transaction@1\`. finalize_flow rejects anything else.
   Never finalize a scratch/inspection flow.
+- Leave \`txVersion\` unset on \`solana.compose_transaction@1\` (the default v0 supports lookup tables and
+  works with every wallet). Only set \`"txVersion": "v1"\` if the user explicitly asks for Transaction v1;
+  v1 has NO lookup tables and a 64-account cap, so do not combine it with \`lookupTableAddresses\`.
 - To inspect an account's real field names, use \`read_account_data\` — never build a throwaway flow
   to do it. Field names in \`$node.data.<field>\` must match the decoded account exactly.
 - Every step must be a tool call. Never reply with prose instead of calling a tool — doing so ends

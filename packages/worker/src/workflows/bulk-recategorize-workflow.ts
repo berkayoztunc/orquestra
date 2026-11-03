@@ -22,6 +22,7 @@ const BACKFILL_BATCH_SIZE = 100
 type Env = {
   DB: any
   AI: any
+  AI_BACKGROUND_DISABLED?: string
   HELIUS_API_KEY?: string
   TELEGRAM_BOT_TOKEN?: string
   TELEGRAM_CHAT_ID?: string
@@ -158,14 +159,16 @@ export class BulkRecategorizeWorkflow extends WorkflowEntrypoint<Env, Params> {
                   instructions,
                   accounts,
                 })
-                await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases, {
-                  source: cat.source,
-                  website: cat.website,
-                  iconUrl: cat.iconUrl,
-                  twitter: cat.twitter,
-                  discord: cat.discord,
-                })
-                batchOk++
+                if (cat.source !== 'none') {
+                  await setCategoryAndAliases(this.env.DB, p.id, cat.category, cat.tags, cat.aliases, {
+                    source: cat.source,
+                    website: cat.website,
+                    iconUrl: cat.iconUrl,
+                    twitter: cat.twitter,
+                    discord: cat.discord,
+                  })
+                  batchOk++
+                }
               } catch (err) {
                 console.error(`${TAG} failed to process ${p.id}:`, err)
                 batchErr++

@@ -132,7 +132,9 @@ Inputs:
 - `network` - optional `mainnet-beta`, `devnet`, or `testnet`
 - `rpcUrl` - optional RPC URL override. Must be an https URL on an allowlisted RPC provider (`api.*.solana.com`, `helius-rpc.com`, `quiknode.pro`, `rpcpool.com`); anything else is rejected with 400.
 - `simulate` - optional boolean
-- `encoding` - optional `base58` or `base64`
+- `encoding` - optional `base58` or `base64` (defaults to `base64` when `txVersion` is `v1`)
+- `txVersion` - optional `legacy` | `v0` | `v1`. Omitted = legacy (unchanged). `v1` = Transaction v1: 4096 bytes, max 64 inline accounts, no lookup tables, limits measured automatically. The signer/wallet must support v1.
+- `txConfig` - optional, `v1` only: `{ priorityFeeLamports?, computeUnitLimit?, loadedAccountsDataSizeLimit?, heapSize? }` (rejected for other versions)
 
 Returns:
 
@@ -160,6 +162,7 @@ Inputs:
 - `feePayer`
 - `network`
 - `rpcUrl`
+- `txVersion` / `txConfig` - optional, same as `build_instruction`
 
 Returns:
 

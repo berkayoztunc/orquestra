@@ -55,6 +55,10 @@ Wire TX:   <base64_encoded_wire_tx>
 
 > Solana wire-format transaction serialized as base64.
 > Submit to RPC with `encoding: "base64"` in the request body.
+>
+> Default format is **legacy**. Only pass `txVersion` when the user asks for it: `"v0"`, or `"v1"` (Transaction v1 — 4096-byte limit,
+> max 64 inline accounts, no lookup tables, starts with byte `0x81`). v1 defaults to base64, measures compute limits automatically
+> (override via `txConfig`), and requires a signer/wallet that supports v1 — confirm that before building one.
 
 **RPC submission header (for manual use)**
 ```http

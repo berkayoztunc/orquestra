@@ -173,6 +173,12 @@ export function resolveSolanaRpcUrl(opts: {
 // Fetch with timeout + failover
 // ────────────────────────────────────────────────────────
 
+/**
+ * Highest transaction version we ask the RPC to return from getTransaction/getBlock.
+ * Legacy, v0 and v1 (SIMD-0385) are all covered by 1. Must be a JSON integer.
+ */
+export const MAX_SUPPORTED_TRANSACTION_VERSION = 1
+
 export const RPC_TIMEOUTS = {
   /** getLatestBlockhash and other light lookups */
   blockhash: 5_000,
@@ -484,7 +490,9 @@ export async function getTransaction(
     jsonrpc: '2.0',
     id: 1,
     method: 'getTransaction',
-    params: [signature, { encoding: 'json', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }],
+    // Must be the JSON integer 1: since Transaction v1 (SIMD-0385) went live, 0 (or omitted)
+    // makes the RPC reject v1 transactions outright. Legacy and v0 are still returned.
+    params: [signature, { encoding: 'json', maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION, commitment: 'confirmed' }],
   })
 
   const response = await rpcFetch(rpcUrls, body, RPC_TIMEOUTS.transaction)

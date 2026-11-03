@@ -118,6 +118,29 @@ Notes:
 - If `recentBlockhash` is omitted, the worker fetches one from the selected RPC.
 - `encoding` defaults to `base58`; `base64` is recommended for modern Solana RPC usage.
 - `simulate: true` runs unsigned preflight and may return decoded Anchor errors.
+- `txVersion` / `txConfig` are optional — see *Transaction format* below.
+
+### Transaction format (`txVersion`) — optional
+
+Omit `txVersion` and nothing changes: this endpoint returns a **legacy** transaction. Opt in per request:
+
+| `txVersion` | Format | Limits |
+|---|---|---|
+| *(omitted)* / `"legacy"` | legacy message (default) | 1232 bytes |
+| `"v0"` | versioned message, no lookup tables | 1232 bytes |
+| `"v1"` | Transaction v1 ([SIMD-0385](https://github.com/solana-foundation/solana-improvement-documents/blob/main/proposals/0385-transaction-v1.md)) | 4096 bytes, max 64 inline accounts, **no address lookup tables** |
+
+For `v1`:
+
+- `encoding` defaults to `base64`; `base58` is rejected when the transaction is over 1232 bytes.
+- Compute-unit and loaded-accounts limits live in the message config, not in ComputeBudget instructions, and an unset v1 limit is
+  zero on-chain. Orquestra therefore measures them with one preflight simulation (+10%), or falls back to protocol maxima; how they were
+  chosen is listed in `riskReasons`. Override with `txConfig`: `{ "priorityFeeLamports": 5000, "computeUnitLimit": 20000, "loadedAccountsDataSizeLimit": 65536, "heapSize": 65536 }`
+  (`priorityFeeLamports` is a **total** in lamports, not micro-lamports per CU).
+- `txConfig` without `txVersion: "v1"` is rejected (never silently ignored). Invalid combinations return 400.
+- The response `wireFormat` tells you what was produced. A v1 transaction starts with byte `0x81`; `@solana/web3.js` 1.x cannot decode it
+  (use `@solana/kit` 8+). The signer/wallet must support v1 — check before using it.
+- Operators can disable v1 without a redeploy with `TX_V1_DISABLED=1`.
 
 ### Program Account Query Request
 

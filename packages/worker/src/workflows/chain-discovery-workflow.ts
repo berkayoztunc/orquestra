@@ -158,10 +158,22 @@ export class ChainDiscoveryWorkflow extends WorkflowEntrypoint<Env, Params> {
             const results = await Promise.allSettled(
               batch.map((s: SignatureInfo) => getTransaction(rpcUrls, s.signature)),
             )
+            let rejected = 0
+            let firstError: unknown
             for (const r of results) {
-              if (r.status !== 'fulfilled' || !r.value) continue
+              if (r.status !== 'fulfilled') {
+                rejected++
+                firstError ??= r.reason
+                continue
+              }
+              if (!r.value) continue
               const programId = extractDeployedProgramId(r.value, LOADER)
               if (programId) found.push(programId)
+            }
+            // Never drop failed fetches silently — a systematic failure (e.g. an RPC
+            // rejecting a transaction version) would otherwise hide missed deployments.
+            if (rejected > 0) {
+              console.warn(`[chain-discovery] ${rejected}/${batch.length} getTransaction calls failed in batch ${batchNum}; first error: ${String(firstError)}`)
             }
             return found
           },

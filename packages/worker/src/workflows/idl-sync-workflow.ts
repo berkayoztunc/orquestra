@@ -6,6 +6,7 @@ import { generateId } from '../utils/id'
 import { hibernateEvery } from '../utils/workflow-helpers'
 import { finalizeSyncRunFailed } from '../services/sync-runs'
 import { sendWorkflowReport } from '../services/telegram'
+import { backgroundAi } from '../utils/ai-flags'
 
 const TAG = '[idl-sync-workflow]'
 const BATCH_SIZE = 20 // matches CONCURRENCY in idl-sync.ts
@@ -22,6 +23,7 @@ type Env = {
   IDLS: any
   CACHE: any
   AI?: any
+  AI_BACKGROUND_DISABLED?: string
   HELIUS_API_KEY?: string
   IDL_SYNC_WORKFLOW: any
   SOLANA_RPC_URL: string
@@ -183,7 +185,7 @@ export class IdlSyncWorkflow extends WorkflowEntrypoint<Env, Params> {
         const result = await processCandidates(
           this.env.DB,
           rpcUrls,
-          this.env.AI,
+          backgroundAi(this.env),
           Date.now(), // fresh wallStart — step timeout handles the limit
           0,
           CANDIDATES_PER_RUN,

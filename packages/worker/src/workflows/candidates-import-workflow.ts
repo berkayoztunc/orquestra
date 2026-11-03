@@ -6,6 +6,7 @@ import { generateId } from '../utils/id'
 import { hibernateEvery } from '../utils/workflow-helpers'
 import { finalizeSyncRunFailed } from '../services/sync-runs'
 import { sendWorkflowReport } from '../services/telegram'
+import { backgroundAi } from '../utils/ai-flags'
 
 const TAG = '[candidates-import-workflow]'
 
@@ -97,7 +98,7 @@ export class CandidatesImportWorkflow extends WorkflowEntrypoint<Env, Candidates
             const r = await processCandidates(
               this.env.DB,
               rpcUrls,
-              this.env.AI,
+              backgroundAi(this.env),
               Date.now(), // fresh wall clock per step — the step timeout is the limit
               0,
               CHUNK,

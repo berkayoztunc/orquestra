@@ -67,6 +67,8 @@ type Env = {
     RESPONSE_CACHE_DISABLED?: string
     AI: Ai
     AI_ANALYSIS_MODEL?: string
+    /** '1' = stop background Workers AI usage (analysis, categorization). See utils/ai-flags.ts. */
+    AI_BACKGROUND_DISABLED?: string
     PROGRAM_METRICS_WORKFLOW: any
     AI_ANALYSIS_WORKFLOW: any
     IDL_SYNC_WORKFLOW: any

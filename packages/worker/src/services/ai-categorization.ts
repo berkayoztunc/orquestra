@@ -5,6 +5,7 @@
  */
 
 import { lookupProgramIdentity, mapHeliusCategory } from './helius-identity'
+import { aiBackgroundDisabled } from '../utils/ai-flags'
 
 // Fixed taxonomy — must stay in sync with KNOWN_PROGRAMS categories
 // in program-auto-detect.ts and with CATEGORY_LABELS in the frontend.
@@ -43,7 +44,7 @@ export interface CategorizationResult {
   /** One or two sentence description of what the program does. AI-generated; empty string on failure. */
   short_description: string
   /** Where this categorization came from — verified Helius data, or an AI guess. */
-  source?: 'helius' | 'ai'
+  source?: 'helius' | 'ai' | 'none'
   website?: string
   iconUrl?: string
   twitter?: string
@@ -183,7 +184,7 @@ function fallback(name?: string): CategorizationResult {
  * key, or a network error).
  */
 export async function identifyProgram(
-  env: { AI?: any; HELIUS_API_KEY?: string },
+  env: { AI?: any; HELIUS_API_KEY?: string; AI_BACKGROUND_DISABLED?: string },
   input: CategorizationInput,
 ): Promise<CategorizationResult> {
   const identity = await lookupProgramIdentity(input.programId, env)
@@ -200,6 +201,12 @@ export async function identifyProgram(
       twitter: identity.twitter,
       discord: identity.discord,
     }
+  }
+  // AI off (kill switch → callers pass AI undefined) and Helius missed: report
+  // 'none' so callers skip writing a category. Writing a fallback 'other' row
+  // here would be permanent and hide the program from later re-categorization.
+  if (!env.AI || aiBackgroundDisabled(env)) {
+    return { ...fallback(input.name), source: 'none' }
   }
   const aiResult = await categorizeProgramWithAI(env.AI, input)
   return { ...aiResult, source: 'ai' }

@@ -41,6 +41,14 @@ const U32_MAX = 0xffff_ffff
 /** +10% safety margin on measured usage (integer math — avoids float drift like 200000 * 1.1 = 220000.00000000003). */
 const withMargin = (n: number): number => Math.ceil((n * 11) / 10)
 
+/**
+ * The cost model reserves loaded-accounts data in 32 KiB pages, so rounding the limit UP to a page
+ * boundary is free and gives real headroom if an account grows between simulation and landing
+ * (a bare +10% on e.g. 213 bytes would leave ~22 bytes of slack).
+ */
+const LOADED_DATA_PAGE = 32 * 1024
+const roundUpToPage = (n: number): number => Math.ceil(n / LOADED_DATA_PAGE) * LOADED_DATA_PAGE
+
 export interface TxV1Config {
   /** TOTAL priority fee in lamports (not a per-CU price). Omit for 0. */
   priorityFeeLamports?: number | string | bigint
@@ -155,6 +163,18 @@ export function validateTxOptions(opts: {
     throw new TxOptionError('txVersion "v1" is temporarily disabled on this server (TX_V1_DISABLED) — omit txVersion or use "v0"')
   }
   return { txVersion, txConfig: hasConfig ? normalizeTxConfig(opts.txConfig) : undefined }
+}
+
+/** One-line, version-specific decode/submit hint for tool and API output. */
+export function describeWireFormat(format: TxVersion): string {
+  switch (format) {
+    case 'legacy':
+      return 'legacy — decode with Transaction.from(bytes) (bs58.decode first for base58)'
+    case 'v0':
+      return 'v0 — decode with VersionedTransaction.deserialize(bytes)'
+    case 'v1':
+      return 'v1 (Transaction v1, SIMD-0385) — starts with byte 0x81, 4096-byte limit; web3.js 1.x cannot decode it (use @solana/kit getTransactionDecoder); submit with encoding base64; the signer/wallet must support v1'
+  }
 }
 
 // ─── Encoding helpers ─────────────────────────────────────────────────────────
@@ -387,8 +407,8 @@ export async function finalizeV1Transaction(args: {
     if (needLoaded) {
       const size = measured && measured.err === null ? measured.loadedAccountsDataSize : null
       if (typeof size === 'number' && size > 0) {
-        config.loadedAccountsDataSizeLimit = Math.min(MAX_LOADED_ACCOUNTS_DATA_SIZE, withMargin(size))
-        notes.push(`v1 loadedAccountsDataSizeLimit=${config.loadedAccountsDataSizeLimit} (measured ${size} + 10% margin)`)
+        config.loadedAccountsDataSizeLimit = Math.min(MAX_LOADED_ACCOUNTS_DATA_SIZE, roundUpToPage(withMargin(size)))
+        notes.push(`v1 loadedAccountsDataSizeLimit=${config.loadedAccountsDataSizeLimit} (measured ${size} + 10% margin, rounded up to a 32 KiB page)`)
       } else {
         config.loadedAccountsDataSizeLimit = MAX_LOADED_ACCOUNTS_DATA_SIZE
         notes.push('v1 loadedAccountsDataSizeLimit set to the protocol maximum (64 MiB) — could not be measured; pass txConfig.loadedAccountsDataSizeLimit to tighten')

@@ -11,6 +11,7 @@ import { publishFlowVersion } from '../services/flow-publisher'
 import { recordFlowRun } from '../services/flow-runs'
 import { listFlows, getFlowMetadata } from '../services/flow-catalog'
 import { cachePlan, estimateFlow } from '../services/flow-estimator'
+import { TxOptionError, validateTxOptions, isTxV1Disabled } from '../services/tx-v1'
 
 registerAllNodes()
 
@@ -27,6 +28,7 @@ type Env = {
     SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
     SOLANA_DEVNET_RPC_URL?: string
     SOLANA_TESTNET_RPC_URL?: string
+    TX_V1_DISABLED?: string
   }
 }
 
@@ -48,7 +50,7 @@ const app = new Hono<Env>()
 function systemErrorResponse(c: Context<Env>, route: string, err: unknown) {
   // A caller-supplied RPC URL that failed the allowlist is the caller's problem,
   // not a system fault — and it must not be reported as a retryable 500.
-  if (err instanceof RpcUrlNotAllowedError) {
+  if (err instanceof RpcUrlNotAllowedError || err instanceof TxOptionError) {
     return c.json({ ok: false, kind: 'invalid_input', reason: err.message }, 400)
   }
 
@@ -160,7 +162,7 @@ app.post('/', ingestKeyMiddleware, async (c) => {
 app.post('/:slug/estimate', async (c) => {
   const slug = c.req.param('slug')
   try {
-    type EstimateBody = { inputs?: Record<string, unknown>; network?: string; rpcUrlOverride?: string }
+    type EstimateBody = { inputs?: Record<string, unknown>; network?: string; rpcUrlOverride?: string; txVersion?: string }
     const body = await c.req.json<EstimateBody>().catch((): EstimateBody => ({ inputs: {} }))
 
     const { rpcUrl } = resolveSolanaRpcUrl({
@@ -168,7 +170,12 @@ app.post('/:slug/estimate', async (c) => {
       rpcUrlOverride: body.rpcUrlOverride,
       env: c.env,
     })
-    const ctx: NodeContext = { db: c.env.DB, cache: c.env.CACHE, idls: c.env.IDLS, rpcUrl }
+    // Opt-in run-level transaction format; invalid values / kill switch → 400 (invalid_input).
+    const tx = validateTxOptions({ txVersion: body.txVersion, env: c.env })
+    const ctx: NodeContext = {
+      db: c.env.DB, cache: c.env.CACHE, idls: c.env.IDLS, rpcUrl,
+      txVersion: tx.txVersion, txV1Disabled: isTxV1Disabled(c.env),
+    }
 
     const outcome = await estimateFlow(c.env.DB, ctx, slug, body.inputs ?? {})
     if (!outcome.ok) {

@@ -26,6 +26,10 @@ RPC_ALLOWLIST_ENFORCE = "1"
 # tx-agent, flow builder and manual /ai endpoints are unaffected. Helius lookups still run.
 AI_BACKGROUND_DISABLED = "1"
 
+# Kill switch for Transaction v1 (services/tx-v1.ts). '1' makes an explicit `txVersion: "v1"` request fail with
+# a clear 400/tool error without a redeploy. v1 is opt-in anyway — callers that omit txVersion are unaffected.
+TX_V1_DISABLED = "0"
+
 # Routes for production
 [route]
 pattern = "api.orquestra.dev/*"
@@ -297,6 +301,10 @@ RPC_ALLOWLIST_ENFORCE = "1"
 # tx-agent, flow builder and manual /ai endpoints are unaffected. Helius lookups still run.
 AI_BACKGROUND_DISABLED = "1"
 
+# Kill switch for Transaction v1 (services/tx-v1.ts). '1' makes an explicit `txVersion: "v1"` request fail with
+# a clear 400/tool error without a redeploy. v1 is opt-in anyway — callers that omit txVersion are unaffected.
+TX_V1_DISABLED = "0"
+
 # Environment Variables - Development
 [env.development.vars]
 ENVIRONMENT = "development"
@@ -317,6 +325,10 @@ RPC_ALLOWLIST_ENFORCE = "1"
 # '1' stops bulk analysis, categorization fallback and upload-triggered analysis.
 # tx-agent, flow builder and manual /ai endpoints are unaffected. Helius lookups still run.
 AI_BACKGROUND_DISABLED = "0"
+
+# Kill switch for Transaction v1 (services/tx-v1.ts). '1' makes an explicit `txVersion: "v1"` request fail with
+# a clear 400/tool error without a redeploy. v1 is opt-in anyway — callers that omit txVersion are unaffected.
+TX_V1_DISABLED = "0"
 
 # Secrets (set via: wrangler secret put <NAME>)
 # Required secrets for production:

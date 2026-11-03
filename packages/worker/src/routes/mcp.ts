@@ -45,6 +45,7 @@ import { searchProjects } from '../services/search'
 import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
 import { fetchIDL } from '../services/idl-fetch'
 import { PROGRAM_ACCOUNTS_SELECTOR_ERROR, hasProgramAccountsSelector } from '../services/validation'
+import { validateTxOptions, describeWireFormat } from '../services/tx-v1'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
 
@@ -58,6 +59,8 @@ type Bindings = {
   SOLANA_DEVNET_RPC_URL?: string
   SOLANA_TESTNET_RPC_URL?: string
   BLOCKHASH_CACHE_DISABLED?: string
+  /** '1' makes txVersion "v1" an error (kill switch, see services/tx-v1.ts). */
+  TX_V1_DISABLED?: string
 }
 
 // ── Helper: fetch IDL from KV with D1 fallback ───────────────────────────────
@@ -92,6 +95,27 @@ const listInstructionsSchema = {
 const projectIdOnlySchema = {
   projectId: z.string().describe('The orquestra project ID'),
 }
+
+const txVersionSchema = z
+  .enum(['legacy', 'v0', 'v1'])
+  .optional()
+  .describe(
+    'OPTIONAL transaction format. Omit for the default (legacy). "v0" = versioned message (1232-byte limit). ' +
+      '"v1" = Transaction v1 (SIMD-0385): 4096-byte limit, max 64 inline accounts, no address lookup tables; ' +
+      'compute/loaded-accounts limits are measured via simulation unless set in `txConfig`; encoding defaults to base64. ' +
+      'The signer/wallet must support v1.',
+  )
+
+const txConfigSchema = z
+  .object({
+    priorityFeeLamports: z.union([z.number().int().nonnegative(), z.string()]).optional().describe('TOTAL priority fee in lamports (not micro-lamports per CU).'),
+    computeUnitLimit: z.number().int().min(0).max(1_400_000).optional(),
+    loadedAccountsDataSizeLimit: z.number().int().min(0).optional(),
+    heapSize: z.number().int().optional().describe('Multiple of 1024 between 32768 and 262144.'),
+  })
+  .strict()
+  .optional()
+  .describe('OPTIONAL, only with txVersion "v1": message-config fields. Unset limits are measured automatically. Rejected for any other txVersion.')
 
 const buildInstructionSchema = {
   projectId: z.string().describe('The orquestra project ID'),
@@ -133,8 +157,10 @@ const buildInstructionSchema = {
     .enum(['base58', 'base64'])
     .optional()
     .describe(
-      'Encoding for the serializedTransaction in the response. Defaults to base58. Use base64 for the modern Solana standard (recommended for sendTransaction with encoding: base64).',
+      'Encoding for the serializedTransaction in the response. Defaults to base58 (base64 when txVersion is "v1"). Use base64 for the modern Solana standard (recommended for sendTransaction with encoding: base64). base58 is rejected for transactions over 1232 bytes.',
     ),
+  txVersion: txVersionSchema,
+  txConfig: txConfigSchema,
 }
 
 const simulateInstructionSchema = {
@@ -151,6 +177,8 @@ const simulateInstructionSchema = {
     .string()
     .optional()
     .describe('Optional full RPC URL override (e.g. Helius). Takes precedence over `network`. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
+  txVersion: txVersionSchema,
+  txConfig: txConfigSchema,
 }
 
 const derivePdaSchema = {
@@ -511,11 +539,13 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
 
   server.tool(
     'build_instruction',
-      'Build a serialized Solana transaction for a specific instruction. Returns a base58 transaction string by default (pass `encoding: "base64"` for the modern Solana standard). The result can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
+      'Build a serialized Solana transaction for a specific instruction. Returns a base58 legacy transaction string by default (pass `encoding: "base64"` for the modern Solana standard; pass the optional `txVersion` "v0" or "v1" for a versioned / Transaction v1 message). The result can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
     buildInstructionSchema,
-    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate, encoding }) => {
+    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate, encoding, txVersion, txConfig }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.build_instruction, projectId })
+        // Opt-in only: invalid combinations / the TX_V1_DISABLED kill switch fail fast with a clear message.
+        const tx = validateTxOptions({ txVersion, txConfig, env })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -540,6 +570,8 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             recentBlockhash,
             simulate,
             encoding,
+            txVersion: tx.txVersion,
+            txConfig: tx.txConfig,
           },
           data.programId,
           resolvedRpc,
@@ -557,7 +589,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           ...(result.lastValidBlockHeight != null
             ? [`**lastValidBlockHeight:** ${result.lastValidBlockHeight}`]
             : []),
-          `**Wire format:** \`${result.wireFormat}\` (use legacy Transaction.from(bs58.decode(...)) or equivalent; not v0 VersionedTransaction unless you convert)`,
+          `**Wire format:** \`${result.wireFormat}\` (${describeWireFormat(result.wireFormat)})`,
           '',
           `Message: ${result.message}`,
           `Estimated fee: ${result.estimatedFee} lamports`,
@@ -600,9 +632,10 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
     'simulate_instruction',
     'Preflight an instruction against the Solana RPC without signing. Builds the transaction internally (same as build_instruction), runs simulateTransaction with sigVerify=false, and returns success/failure, compute units, raw logs, and a decoded Anchor error (when the on-chain log matches the IDL `errors[]` table). Use this BEFORE asking the user to sign — it catches missing seeds, bad account states, and program-side guards without any wallet involvement.',
     simulateInstructionSchema,
-    async ({ projectId, instruction, accounts, args, feePayer, network, rpcUrl }) => {
+    async ({ projectId, instruction, accounts, args, feePayer, network, rpcUrl, txVersion, txConfig }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_instruction, projectId })
+        const tx = validateTxOptions({ txVersion, txConfig, env })
         const data = await fetchIDL(projectId, env)
         if (!data) {
           return {
@@ -624,6 +657,8 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             accounts,
             args: args as Record<string, any>,
             feePayer,
+            txVersion: tx.txVersion,
+            txConfig: tx.txConfig,
           },
           data.programId,
           resolvedRpc,
@@ -636,6 +671,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           `Result: ${sim.success ? '✅ success' : '❌ failure'}`,
           ...(sim.computeUnits != null ? [`Compute units consumed: \`${sim.computeUnits}\``] : []),
           `Cluster: \`${sim.build.network}\` — \`${sim.build.rpcUrlHost}\``,
+          `Wire format: \`${sim.build.wireFormat}\``,
           `Risk level: \`${sim.build.riskLevel}\` — ${sim.build.riskReasons.join('; ')}`,
           '',
         ]

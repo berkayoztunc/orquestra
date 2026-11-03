@@ -149,11 +149,11 @@ describe('finalizeV1Transaction (resource limits are never left unset)', () => {
     })
     expect(calls).toHaveLength(1)
     expect(out.config.computeUnitLimit).toBe(11_000)
-    expect(out.config.loadedAccountsDataSizeLimit).toBe(220_000)
+    expect(out.config.loadedAccountsDataSizeLimit).toBe(229_376) // 220_000 (+10%) rounded up to a 32 KiB page
     const { msg } = await decode(out.bytes)
     const values = msg.configValues.map((v: any) => Number(v.value))
     expect(values).toContain(11_000)
-    expect(values).toContain(220_000)
+    expect(values).toContain(229_376)
   })
 
   test('falls back to protocol maxima when simulation fails or is unavailable', async () => {

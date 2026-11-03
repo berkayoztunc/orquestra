@@ -155,9 +155,10 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
   {
     key: 'solana.compose_transaction@1',
     summary:
-      'Composes a list of instructions into ONE OR MORE unsigned v0 transactions (each ' +
-      'base64, simulated by default). Almost always returns exactly one — it only splits into ' +
-      'more when the instructions do not fit a single 1232-byte packet, in which case ' +
+      'Composes a list of instructions into ONE OR MORE unsigned transactions (v0 by default; ' +
+      'optional `txVersion` opts into \'legacy\' or \'v1\'; each base64, simulated by default). ' +
+      'Almost always returns exactly one — it only splits into ' +
+      'more when the instructions do not fit a single packet (1232 bytes; 4096 for v1), in which case ' +
       '`transactions` has length > 1 and MUST be submitted in array order (later transactions ' +
       'can depend on state written by earlier ones). This is always the LAST node in a flow. ' +
       'Use the `?` optional-ref idiom in `instructions` to drop instructions that were not ' +
@@ -173,9 +174,13 @@ export const NODE_CATALOG: NodeCatalogEntry[] = [
       'Address Lookup Tables — reduces per-account bytes in the compiled message, can avoid or reduce a ' +
       'multi-transaction split; an address that is not a real ALT is skipped with a note in ' +
       'risk.reasons, not a hard failure; creating a NEW table is not supported here, it requires its ' +
-      'own on-chain transaction(s) to land first) }',
+      'own on-chain transaction(s) to land first), txVersion?: \'legacy\' | \'v0\' | \'v1\' (OPTIONAL, ' +
+      'default v0 — Transaction v1 = 4096-byte packets, max 64 inline accounts, NO lookup tables ' +
+      '(lookupTableAddresses are ignored), resource limits measured automatically), txConfig?: ' +
+      '{ priorityFeeLamports?, computeUnitLimit?, loadedAccountsDataSizeLimit?, heapSize? } (v1 only; ' +
+      'rejected for any other txVersion) }',
     output:
-      '{ transactions: { unsignedTransaction: string (base64 v0 wire tx), instructionCount: number, ' +
+      '{ transactions: { unsignedTransaction: string (base64 wire tx), wireFormat: \'legacy\'|\'v0\'|\'v1\', instructionCount: number, ' +
       'simulation?: { success, computeUnits, logs, err } }[], risk: { level, reasons: string[] } }',
     example: {
       feePayer: '$inputs.wallet',

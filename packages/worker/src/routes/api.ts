@@ -18,6 +18,7 @@ import { getInstructionSummary, getPublicIdlSummary, readIdlSummaryCache, writeI
 import { generateId } from '../utils/id'
 import { getVisibleProject } from '../services/project-visibility'
 import { deleteProjectIdlCache } from '../services/idl-cache'
+import { validateTxOptions, TxOptionError } from '../services/tx-v1'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -951,13 +952,20 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMid
       rpcUrl?: string
       /** Run simulateTransaction on the same RPC after building (no wallet). */
       simulate?: boolean
-      /** Encoding for serializedTransaction in the response. Defaults to 'base58'. Use 'base64' for the modern Solana standard. */
+      /** Encoding for serializedTransaction in the response. Defaults to 'base58' ('base64' for v1). Use 'base64' for the modern Solana standard. */
       encoding?: 'base58' | 'base64'
+      /** OPTIONAL transaction format: 'legacy' (default) | 'v0' | 'v1' (Transaction v1, SIMD-0385). */
+      txVersion?: string
+      /** OPTIONAL, v1 only: { priorityFeeLamports?, computeUnitLimit?, loadedAccountsDataSizeLimit?, heapSize? }. */
+      txConfig?: Record<string, unknown>
     }>()
 
     if (!body.accounts || !body.args || !body.feePayer) {
       return c.json({ error: 'Missing required fields: accounts, args, feePayer' }, 400)
     }
+
+    // Opt-in only: omitted → unchanged legacy behavior. Bad combos / kill switch → 400.
+    const tx = validateTxOptions({ txVersion: body.txVersion, txConfig: body.txConfig, env: c.env as any })
 
     const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
@@ -992,6 +1000,8 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMid
         recentBlockhash: body.recentBlockhash,
         simulate: body.simulate,
         encoding: body.encoding,
+        txVersion: tx.txVersion,
+        txConfig: tx.txConfig,
       },
       data.programId,
       rpcUrl,
@@ -1002,6 +1012,9 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMid
   } catch (err) {
     if (err instanceof RpcUrlNotAllowedError) {
       return c.json({ error: err.message, code: 'RPC_URL_NOT_ALLOWED' }, 400)
+    }
+    if (err instanceof TxOptionError) {
+      return c.json({ error: err.message, code: err.code }, 400)
     }
     return c.json({ error: 'Failed to build transaction', details: (err as Error).message }, 500)
   }

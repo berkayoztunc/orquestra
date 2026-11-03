@@ -46,6 +46,7 @@ import { cachePlan, estimateFlow } from '../services/flow-estimator'
 import { verifyIngestKey } from '../middleware/auth'
 import { resolveSolanaRpcUrl, RpcUrlNotAllowedError } from '../utils/solana-rpc'
 import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
+import { TxOptionError, validateTxOptions, isTxV1Disabled } from '../services/tx-v1'
 
 registerAllNodes()
 
@@ -66,7 +67,7 @@ function systemErrorContent(toolName: string, err: unknown) {
   // A rejected caller-supplied `rpcUrl` is an input problem, not a server fault —
   // report it as such so the agent can correct the call instead of retrying.
   // The message carries the hostname only, never the URL (which may embed a key).
-  if (err instanceof RpcUrlNotAllowedError) {
+  if (err instanceof RpcUrlNotAllowedError || err instanceof TxOptionError) {
     return {
       isError: true,
       content: [{ type: 'text' as const, text: `**Invalid input:** ${err.message}` }],
@@ -98,9 +99,20 @@ type Bindings = {
   SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
   SOLANA_DEVNET_RPC_URL?: string
   SOLANA_TESTNET_RPC_URL?: string
+  /** '1' makes txVersion "v1" an error (kill switch, see services/tx-v1.ts). */
+  TX_V1_DISABLED?: string
 }
 
 // ── Tool schemas ────────────────────────────────────────────────────────────
+
+const txVersionSchema = z
+  .enum(['legacy', 'v0', 'v1'])
+  .optional()
+  .describe(
+    'OPTIONAL run-level transaction format for the flow\'s compose step. Omit to keep the flow\'s own setting (default v0). ' +
+      '"v1" = Transaction v1: 4096-byte packets, max 64 inline accounts, no address lookup tables; resource limits are measured ' +
+      'automatically. A txVersion set inside the flow\'s compose node takes precedence over this.',
+  )
 
 const listFlowsSchema = {
   query: z.string().optional().describe('Free-text search over slug, name, intent, protocol, and program addresses. Omit to list everything.'),
@@ -118,6 +130,7 @@ const estimateFlowSchema = {
   inputs: z.record(z.string(), z.any()).default({}).describe('Values for the flow\'s declared `inputs` (see get_flow_metadata) — e.g. { "wallet": "...", "amount": "1000" }.'),
   network: z.enum(['mainnet-beta', 'devnet', 'testnet']).optional().describe('Solana cluster. Defaults to mainnet-beta.'),
   rpcUrl: z.string().optional().describe('Optional full RPC URL override. Takes precedence over network. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
+  txVersion: txVersionSchema,
 }
 
 const validateFlowSchema = {
@@ -137,6 +150,7 @@ const simulateFlowSchema = {
     .optional()
     .describe('Solana cluster for resolver/simulation RPC calls. Defaults to mainnet-beta.'),
   rpcUrl: z.string().optional().describe('Optional full RPC URL override. Takes precedence over network. Must be an https URL on an allowlisted RPC provider (api.*.solana.com, helius-rpc.com, quiknode.pro, rpcpool.com).'),
+  txVersion: txVersionSchema,
 }
 
 const publishFlowSchema = {
@@ -201,17 +215,18 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
   server.tool(
     'estimate_flow',
     'RUN a published flow found via list_flows — resolves accounts, builds the real instruction(s), ' +
-      'composes and simulates. Returns the unsigned transaction(s) (base64 v0) ready to hand to a ' +
+      'composes and simulates. Returns the unsigned transaction(s) (base64, v0 by default; pass `txVersion` to opt into v1/legacy) ready to hand to a ' +
       'wallet/signer. No payment, no signing performed here. This is the tool that actually produces ' +
       'the transaction an agent is looking for — use it once you have picked a flow and know its ' +
       '`inputs` (from get_flow_metadata).',
     estimateFlowSchema,
-    async ({ slug, inputs, network, rpcUrl }) => {
+    async ({ slug, inputs, network, rpcUrl, txVersion }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.estimate_flow })
 
         const { rpcUrl: resolvedRpc } = resolveSolanaRpcUrl({ network: network ?? 'mainnet-beta', rpcUrlOverride: rpcUrl, env })
-        const nodeCtx: NodeContext = { db: env.DB, cache: env.CACHE, idls: env.IDLS, rpcUrl: resolvedRpc }
+        const tx = validateTxOptions({ txVersion, env })
+        const nodeCtx: NodeContext = { db: env.DB, cache: env.CACHE, idls: env.IDLS, rpcUrl: resolvedRpc, txVersion: tx.txVersion, txV1Disabled: isTxV1Disabled(env) }
 
         const outcome = await estimateFlow(env.DB, nodeCtx, slug, inputs ?? {})
         if (!outcome.ok) {
@@ -298,7 +313,7 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
       'instruction(s) from the live IDL, composes and simulates the transaction. Nothing is published, no ' +
       'payment involved. Use this to prove a flow actually works before publish_flow.',
     simulateFlowSchema,
-    async ({ fdl, inputs, network, rpcUrl }) => {
+    async ({ fdl, inputs, network, rpcUrl, txVersion }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_flow })
         const compiled = await compile(fdl as unknown as FlowDocument)
@@ -308,7 +323,8 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
         }
 
         const { rpcUrl: resolvedRpc } = resolveSolanaRpcUrl({ network: network ?? 'mainnet-beta', rpcUrlOverride: rpcUrl, env })
-        const nodeCtx: NodeContext = { db: env.DB, cache: env.CACHE, idls: env.IDLS, rpcUrl: resolvedRpc }
+        const tx = validateTxOptions({ txVersion, env })
+        const nodeCtx: NodeContext = { db: env.DB, cache: env.CACHE, idls: env.IDLS, rpcUrl: resolvedRpc, txVersion: tx.txVersion, txV1Disabled: isTxV1Disabled(env) }
         const startedAt = Date.now()
         const result = await run(compiled.plan, inputs ?? {}, nodeCtx)
         const latencyMs = Date.now() - startedAt

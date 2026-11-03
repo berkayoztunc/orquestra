@@ -21,6 +21,13 @@ interface Project {
   icon_url?: string | null
   categoryTags?: string[]
   isVerifiedIdentity?: boolean
+  /** Where the IDL came from. `notice` is set for manually uploaded IDLs (no on-chain IDL exists). */
+  provenance?: {
+    origin: 'onchain' | 'manual'
+    idlSource: 'anchor' | 'pmp' | 'manual'
+    verifiedOnChain: boolean
+    notice: string | null
+  }
   is_verified?: number | boolean | null
   verified_at?: string | null
   has_ai_docs?: number | null

@@ -9,12 +9,15 @@ import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import type { AnchorIDL } from './idl-parser'
 import { MemoCache } from '../utils/memo-cache'
 import { getVisibleProject } from './project-visibility'
+import { latestIdlSource } from './idl-provenance'
 
 export type FetchedIDL = {
   idl: AnchorIDL
   programId: string
   projectName: string
   cpiMd: string | null
+  /** `idl_source` of the latest version: 'anchor' | 'pmp' (on-chain) | 'manual' (uploaded, unverified). */
+  idlSource: string | null
 }
 
 export type IdlFetchEnv = {
@@ -53,6 +56,7 @@ async function fetchIDLUncached(projectId: string, env: IdlFetchEnv): Promise<Fe
         programId: parsed.programId ?? '',
         projectName: parsed.projectName ?? projectId,
         cpiMd: null,
+        idlSource: await latestIdlSource(env.DB, projectId),
       }
     } catch {
       // fall through to DB
@@ -61,7 +65,7 @@ async function fetchIDLUncached(projectId: string, env: IdlFetchEnv): Promise<Fe
 
   // 3. Fall back to D1
   const row = await env.DB?.prepare(
-    `SELECT p.name, p.program_id, v.idl_json, v.cpi_md
+    `SELECT p.name, p.program_id, v.idl_json, v.cpi_md, v.idl_source
      FROM projects p
      JOIN idl_versions v ON v.project_id = p.id
      WHERE p.id = ?
@@ -79,6 +83,7 @@ async function fetchIDLUncached(projectId: string, env: IdlFetchEnv): Promise<Fe
       programId: row.program_id as string,
       projectName: row.name as string,
       cpiMd: (row.cpi_md as string | null) ?? null,
+      idlSource: (row.idl_source as string | null) ?? null,
     }
   } catch {
     return null

@@ -5,7 +5,14 @@
  */
 
 import type { AnchorIDL, AnchorInstruction, CodamaIDL, CodamaTypeNode } from './idl-parser'
-import { getInstruction, resolveCodamaType } from './idl-parser'
+import {
+  getDefinedTypeName,
+  getInstruction,
+  lookupType,
+  normalizeField,
+  resolveCodamaType,
+  resolveType,
+} from './idl-parser'
 import { fetchAccountInfo } from '../utils/solana-rpc'
 
 // ────────────────────────────────────────────────────────
@@ -279,7 +286,7 @@ async function fetchAccountFieldBytes(
     )
   }
 
-  const fields: Array<{ name: string; type: any }> = accountDef.type?.fields ?? []
+  const fields: Array<{ name: string; type: any }> = accountStructFields(idl, accountDef.name)
   let offset = 8 // skip 8-byte discriminator
 
   for (const field of fields) {
@@ -320,6 +327,78 @@ export interface PdaAccountInfo {
   customProgram: string | null
 }
 
+/** The struct fields of an IDL account, across both IDL generations.
+ *
+ * Anchor IDL spec 0.1.0 (0.30+) writes `accounts[]` entries carrying ONLY `name` and
+ * `discriminator` — the struct itself lives in `idl.types`. Reading `account.type.fields`
+ * therefore yields nothing on any modern IDL. `resolveAccountFields` in idl-parser already
+ * has this fallback; these two call sites did not.
+ */
+function accountStructFields(idl: AnchorIDL, accountName: string): any[] {
+  const account = idl.accounts?.find((a) => a.name.toLowerCase() === accountName.toLowerCase())
+  const inline = (account as any)?.type?.fields
+  if (Array.isArray(inline) && inline.length) return inline
+  const typeDef = lookupType(idl, account?.name ?? accountName)
+  const fields = (typeDef?.type as any)?.fields
+  return Array.isArray(fields) ? fields : []
+}
+
+/**
+ * The declared type of ONE seed, for `arg` and `account` seeds alike.
+ *
+ * The IDL records a seed's PATH and never its width, and Anchor encodes a numeric seed
+ * little-endian at its DECLARED width — so a caller who cannot see the type cannot derive
+ * the address. Resolving it is the whole job of this function, and it exists once so that
+ * `listPdaAccounts` (which advertises the type) and `derivePda` (which encodes with it)
+ * can never disagree.
+ *
+ * Dotted paths are walked component by component: Anchor emits every subfield it sees
+ * (`anchor-syn` `IdlSeed::path()`), so `params.inner.id` is a real shape, not a two-part
+ * one. Anything that cannot be resolved returns `undefined` rather than a guess.
+ */
+export function resolveSeedType(
+  idl: AnchorIDL,
+  ix: AnchorInstruction,
+  seed: RawSeed,
+): string | undefined {
+  const [head, ...fieldPath] = seedName(seed).split('.')
+
+  let current: any
+  if (seed.kind === 'arg') {
+    current = ix.args?.find((a: any) => a.name === head)?.type
+    if (current === undefined) return undefined
+  } else {
+    // An `account` seed with no subfield is the account's own 32-byte key — Anchor strips
+    // a lone `key`/`key()` subfield, so the bare form always means the pubkey.
+    if (fieldPath.length === 0) return 'pubkey'
+    // With a subfield, the head is an INSTRUCTION account name. Anchor names the struct
+    // explicitly on the seed (`IdlSeedAccount.account`); fall back to matching by name.
+    const structName =
+      (seed as any).account ??
+      idl.accounts?.find((a) => a.name.toLowerCase() === head.toLowerCase())?.name
+    if (!structName) return undefined
+    const first = fieldPath.shift() as string
+    const match = accountStructFields(idl, structName)
+      .map((f: any, i: number) => normalizeField(f, i))
+      .find((f) => f.name === first)
+    if (!match) return undefined
+    current = match.type
+  }
+
+  for (const field of fieldPath) {
+    const structName = getDefinedTypeName(current)
+    const fields = (lookupType(idl, structName ?? '')?.type as any)?.fields
+    if (!Array.isArray(fields)) return undefined
+    const match = fields
+      .map((f: any, i: number) => normalizeField(f, i))
+      .find((f) => f.name === field)
+    if (!match) return undefined
+    current = match.type
+  }
+
+  return current === undefined ? undefined : resolveType(current)
+}
+
 /** Scan the IDL and return every account that has PDA seed metadata. */
 export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
   const results: PdaAccountInfo[] = []
@@ -334,28 +413,15 @@ export function listPdaAccounts(idl: AnchorIDL): PdaAccountInfo[] {
           return { kind: 'const' as const, description }
         }
         if (s.kind === 'arg') {
-          const name = seedName(s)
-          const argDef = ix.args?.find((a: any) => a.name === name)
-          const type = argDef ? (typeof argDef.type === 'string' ? argDef.type : JSON.stringify(argDef.type)) : undefined
-          return { kind: 'arg' as const, name, type }
+          return { kind: 'arg' as const, name: seedName(s), type: resolveSeedType(idl, ix, s) }
         }
         if (s.kind === 'account') {
           const name = seedName(s)
-          const dotIdx = name.indexOf('.')
-          if (dotIdx !== -1) {
-            // Dot-notation: "board.round_id" means read `round_id` field from `board` account on-chain.
-            // Try to resolve the field type from the IDL account definition for richer metadata.
-            const parentAccountName = name.slice(0, dotIdx)
-            const fieldName = name.slice(dotIdx + 1)
-            const idlAccount = idl.accounts?.find(
-              (a) => a.name.toLowerCase() === parentAccountName.toLowerCase(),
-            )
-            const field = idlAccount?.type?.fields?.find((f: any) => f.name === fieldName)
-            const type = field ? (typeof field.type === 'string' ? field.type : JSON.stringify(field.type)) : undefined
-            return { kind: 'account_field' as const, name, type }
+          return {
+            kind: name.includes('.') ? ('account_field' as const) : ('account' as const),
+            name,
+            type: resolveSeedType(idl, ix, s),
           }
-          const type = (s as any).type
-          return { kind: 'account' as const, name, type }
         }
         if (s.kind === 'account_field') {
           const name = seedName(s)
@@ -444,8 +510,10 @@ export async function derivePda(
       if (val === undefined || val === null || val === '') {
         throw new Error(`Missing seed value for arg "${name}"`)
       }
-      const argDef = ix.args?.find((a: any) => a.name === name)
-      const bytes = encodeSeedValue(val, argDef?.type)
+      // The SAME resolver the listing uses. Looking the arg up by its whole dotted name
+      // here found nothing, so a seed the listing correctly advertises as `u64` was
+      // encoded as UTF-8 text — a different, perfectly valid, silently wrong address.
+      const bytes = encodeSeedValue(val, resolveSeedType(idl, ix, s))
       seedBuffers.push(bytes)
       seedInfo.push({ kind: 'arg', name, value: val, hex: toHex(bytes) })
       continue

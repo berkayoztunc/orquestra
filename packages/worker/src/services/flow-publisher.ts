@@ -17,16 +17,69 @@ export interface PublishFlowResult {
   status: 'published' | 'draft'
 }
 
+/**
+ * A live publish was refused because the exact document has no successful run on record.
+ *
+ * Typed for the same reason `RpcUrlNotAllowedError` is: this is the CALLER's problem and
+ * it is fixable by them (run simulate_flow on this document first). Thrown as a plain
+ * Error it reaches `systemErrorContent` and renders as a server fault, which tells an
+ * agent to retry the one thing that will never start working.
+ */
+export class FlowNotProvenError extends Error {
+  readonly contentHash: string
+  constructor(slug: string, contentHash: string) {
+    super(
+      `flow "${slug}" has no successful run on record for content hash ${contentHash}. ` +
+        `Call simulate_flow on this exact document first, then publish; or publish it as ` +
+        `a draft. Compiling proves the document's structure, not that its instructions ` +
+        `exist on the target program.`,
+    )
+    this.name = 'FlowNotProvenError'
+    this.contentHash = contentHash
+  }
+}
+
 export async function publishFlowVersion(
   db: D1Database,
   doc: FlowDocument,
   plan: FlowPlan,
-  opts: { tier?: string; publish?: boolean; programId?: string } = {},
+  opts: { tier?: string; publish?: boolean; programId?: string; requireProof?: boolean } = {},
 ): Promise<PublishFlowResult> {
   const slug = plan.meta.slug
   const tier = opts.tier ?? 'instruction'
   const publish = opts.publish ?? true
   const now = new Date().toISOString()
+
+  // A LIVE flow must have been RUN at least once, not merely compiled.
+  //
+  // `publish_flow` describes its input as a "proven FDL document" and the documented
+  // sequence is validate_flow -> simulate_flow -> publish_flow, but nothing enforced the
+  // middle step: every caller reaches here after `compile()`, which is deliberately
+  // static (no RPC, no IDL). A document naming an instruction the target program does not
+  // have compiles cleanly, gets a content hash, and can go live.
+  //
+  // Observed: a flow naming `swap_router_base_in` compiled OK against Orca whirlpool and
+  // Byreal Clmm, neither of which declares that instruction.
+  //
+  // The evidence already exists in this schema — `simulate_flow` writes a `flow_runs` row
+  // keyed by the same `version_hash` this function is about to publish — so the check is a
+  // lookup, not new machinery.
+  //
+  // OPT-IN ON PURPOSE. It is off unless a caller asks for it, and only the two EXTERNAL
+  // entry points do: the `publish_flow` MCP tool and `POST /flows`. The in-process
+  // flow-builder workflow already simulates before publishing and is left exactly as it
+  // was, as are the existing tests — a drive-by change should not redefine what every
+  // internal caller means by "publish". Drafts are never gated: this applies only to
+  // `publish: true`.
+  if (publish && opts.requireProof) {
+    const proof = await db
+      .prepare(`SELECT 1 AS ok FROM flow_runs WHERE version_hash = ? AND status = 'ok' LIMIT 1`)
+      .bind(plan.hash)
+      .first<{ ok: number }>()
+    if (!proof) {
+      throw new FlowNotProvenError(slug, plan.hash)
+    }
+  }
 
   const existingFlow = await db.prepare('SELECT id FROM flows WHERE slug = ?').bind(slug).first<{ id: string }>()
   let flowId: string

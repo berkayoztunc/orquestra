@@ -39,7 +39,7 @@ import { run } from '../flow-engine/interpreter'
 import { getFlowSchemaDocument } from '../flow-engine/schema-docs'
 import type { FlowDocument } from '../flow-engine/fdl-schema'
 import type { NodeContext } from '../flow-engine/types'
-import { publishFlowVersion } from '../services/flow-publisher'
+import { FlowNotProvenError, publishFlowVersion } from '../services/flow-publisher'
 import { recordFlowRun } from '../services/flow-runs'
 import { listFlows, getFlowMetadata } from '../services/flow-catalog'
 import { cachePlan, estimateFlow } from '../services/flow-estimator'
@@ -62,10 +62,42 @@ registerAllNodes()
  * errors, run errors, node ids) is safe to expose in full because it only
  * ever describes the flow's own structure, never server internals.
  */
+/**
+ * The answer `simulate_flow` gives for a run that SUCCEEDED, which depends on whether its
+ * proof was durably written.
+ *
+ * Exported so the invariant is unit-testable without the MCP transport, following the
+ * pattern in tests/mcp.test.ts. The invariant: a failed proof write must set `isError`.
+ * A caveat in the text does not gate a machine — an MCP client checks the flag, and a
+ * protocol-level success sends it on to publish_flow, which then refuses the document for
+ * the proof that was never stored.
+ */
+export function simulateSuccessContent(nodeOutputs: unknown, proofRecorded: boolean) {
+  const lines = ['**Run succeeded.**', '', 'Node outputs:', '```json', JSON.stringify(nodeOutputs, null, 2), '```']
+  if (proofRecorded) {
+    return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
+  }
+  lines.push(
+    '',
+    '**Proof was NOT recorded.** The run succeeded, but writing its `flow_runs` row ' +
+      'failed, so `publish_flow` would refuse this document as unproven. Re-run ' +
+      'simulate_flow before publishing — the outputs above are still valid.',
+  )
+  return { isError: true, content: [{ type: 'text' as const, text: lines.join('\n') }] }
+}
+
 function systemErrorContent(toolName: string, err: unknown) {
   // A rejected caller-supplied `rpcUrl` is an input problem, not a server fault —
   // report it as such so the agent can correct the call instead of retrying.
   // The message carries the hostname only, never the URL (which may embed a key).
+  // Same reasoning as the RPC case below: the caller can fix this, and calling it a
+  // system fault tells an agent to retry something that will never start working.
+  if (err instanceof FlowNotProvenError) {
+    return {
+      isError: true,
+      content: [{ type: 'text' as const, text: `**Not published:** ${err.message}` }],
+    }
+  }
   if (err instanceof RpcUrlNotAllowedError) {
     return {
       isError: true,
@@ -313,11 +345,38 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
         const result = await run(compiled.plan, inputs ?? {}, nodeCtx)
         const latencyMs = Date.now() - startedAt
 
-        ctx.waitUntil(
-          recordFlowRun(env.DB, { versionHash: compiled.plan.hash, inputs: inputs ?? {}, result, latencyMs }).catch((err) =>
-            console.error('failed to record flow_runs row for simulate_flow', err),
-          ),
-        )
+        // A SUCCESSFUL run is now evidence — publish_flow reads it back — so it has to be
+        // durable BEFORE this tool returns. Deferring it past the response means an agent
+        // doing the documented simulate_flow -> publish_flow sequence can reach the
+        // publish gate before its own proof commits, and be refused for a flow it just
+        // proved. A failed run is telemetry, not evidence, and stays deferred: nothing
+        // reads it back, and it should not cost the caller latency.
+        //
+        // AND IF THAT WRITE FAILS, THE CALLER HAS TO HEAR IT. Swallowing the error here
+        // and still answering "Run succeeded." tells them two contradictory things: the
+        // run worked, and then publish_flow refuses the very same document as unproven.
+        // The run genuinely did succeed — that is a fact about the chain — so discarding
+        // it would be wrong too. Both facts are reported.
+        let proofRecorded = true
+        if (result.ok) {
+          try {
+            await recordFlowRun(env.DB, {
+              versionHash: compiled.plan.hash,
+              inputs: inputs ?? {},
+              result,
+              latencyMs,
+            })
+          } catch (err) {
+            proofRecorded = false
+            console.error('failed to record flow_runs row for simulate_flow', err)
+          }
+        } else {
+          ctx.waitUntil(
+            recordFlowRun(env.DB, { versionHash: compiled.plan.hash, inputs: inputs ?? {}, result, latencyMs }).catch(
+              (err) => console.error('failed to record flow_runs row for simulate_flow', err),
+            ),
+          )
+        }
 
         if (!result.ok) {
           const lines = [
@@ -333,8 +392,7 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
           return { isError: true, content: [{ type: 'text', text: lines.join('\n') }] }
         }
 
-        const lines = ['**Run succeeded.**', '', 'Node outputs:', '```json', JSON.stringify(result.nodeOutputs, null, 2), '```']
-        return { content: [{ type: 'text', text: lines.join('\n') }] }
+        return simulateSuccessContent(result.nodeOutputs, proofRecorded)
       } catch (err) {
         return systemErrorContent('simulate_flow', err)
       }
@@ -361,7 +419,7 @@ function createFlowServer(env: Bindings, ctx: ExecutionContext): McpServer {
           return { isError: true, content: [{ type: 'text', text: lines.join('\n') }] }
         }
 
-        const result = await publishFlowVersion(env.DB, doc, compiled.plan, { tier, publish })
+        const result = await publishFlowVersion(env.DB, doc, compiled.plan, { tier, publish, requireProof: true })
         cachePlan(compiled.plan)
         const lines = [
           `**Published.**`,

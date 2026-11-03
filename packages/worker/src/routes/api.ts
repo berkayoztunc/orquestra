@@ -19,6 +19,7 @@ import { generateId } from '../utils/id'
 import { getVisibleProject } from '../services/project-visibility'
 import { deleteProjectIdlCache } from '../services/idl-cache'
 import { validateTxOptions, TxOptionError } from '../services/tx-v1'
+import { idlProvenance, provenanceBanner, latestIdlSource } from '../services/idl-provenance'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -410,7 +411,7 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
       const [latestIdlResult, socialsResult, categoryResult] = await Promise.all([
         db
           ?.prepare(
-            'SELECT id, version, created_at FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
+            'SELECT id, version, created_at, idl_source FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
           )
           .bind(project.id)
           .first(),
@@ -441,6 +442,8 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
           ...project,
           latestVersion: latestIdlResult?.version || 0,
           latestVersionDate: latestIdlResult?.created_at,
+          // Where the IDL came from; `notice` is non-null for manually uploaded (unverified) IDLs.
+          provenance: idlProvenance((latestIdlResult as any)?.idl_source),
           socials: {
             website: (socialsResult as any)?.website || categoryResult?.website || null,
             twitter: (socialsResult as any)?.twitter || categoryResult?.twitter || null,
@@ -559,7 +562,7 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
         .bind(projectId),
       db
         .prepare(
-          'SELECT id, version, created_at FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
+          'SELECT id, version, created_at, idl_source FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1'
         )
         .bind(projectId),
       db
@@ -569,7 +572,7 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
         .prepare('SELECT category, tags, icon_url, website, twitter, discord, source FROM program_categories WHERE project_id = ?')
         .bind(projectId),
     ])
-    const latestIdlResult = latestIdlRes?.results?.[0] as { version?: number; created_at?: string } | undefined
+    const latestIdlResult = latestIdlRes?.results?.[0] as { version?: number; created_at?: string; idl_source?: string | null } | undefined
     const socialsResult = socialsRes?.results?.[0]
     const categoryResult = categoryRes?.results?.[0] as
       | { category?: string; tags?: string; icon_url?: string | null; website?: string | null; twitter?: string | null; discord?: string | null; source?: string }
@@ -601,6 +604,7 @@ app.get('/projects/:projectId', optionalAuthMiddleware, async (c) => {
         ...project,
         latestVersion: latestIdlResult?.version || 0,
         latestVersionDate: latestIdlResult?.created_at,
+        provenance: idlProvenance((latestIdlResult as any)?.idl_source),
         // Owner-edited project_socials wins per-field; Helius-verified data
         // (program_categories, from services/helius-identity.ts) fills in
         // whatever the owner hasn't set themselves.
@@ -902,6 +906,7 @@ app.get('/:projectId/instructions', async (c) => {
       programName: summary.programName,
       programId: summary.programId,
       instructions: summary.instructions,
+      provenance: idlProvenance(await latestIdlSource(c.env?.DB, projectId)),
     })
   } catch (err) {
     return c.json({ error: 'Failed to list instructions' }, 500)
@@ -928,6 +933,7 @@ app.get('/:projectId/instructions/:name', async (c) => {
       projectId,
       programId: summary.programId,
       instruction,
+      provenance: idlProvenance(await latestIdlSource(c.env?.DB, projectId)),
     })
   } catch (err) {
     return c.json({ error: 'Failed to get instruction' }, 500)
@@ -1008,7 +1014,8 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMid
       { cluster, rpcUrlHost: rpcUrlHost(rpcUrl) },
     )
 
-    return c.json(result)
+    // `provenance.notice` is non-null when this IDL was uploaded manually (no on-chain IDL) — surface it to the signer.
+    return c.json({ ...result, provenance: idlProvenance(await latestIdlSource(c.env?.DB, projectId)) })
   } catch (err) {
     if (err instanceof RpcUrlNotAllowedError) {
       return c.json({ error: err.message, code: 'RPC_URL_NOT_ALLOWED' }, 400)
@@ -1386,13 +1393,19 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
       return c.json({ error: 'Project not found or not public' }, 404)
     }
 
+    // Disclosure for manually uploaded IDLs — applied at serve time on every path below, so cached
+    // docs and owner-written `custom_docs` cannot drop it.
+    const idlSource = await latestIdlSource(db, projectId)
+    const banner = provenanceBanner(idlSource)
+    const provenance = idlProvenance(idlSource)
+
     // If owner has custom docs, serve those
     if (project.custom_docs) {
       const customDocs = project.custom_docs as string
       if (format === 'md' || format === 'markdown') {
-        return c.text(customDocs)
+        return c.text(banner + customDocs)
       }
-      return c.json({ projectId, docs: customDocs, isCustom: true })
+      return c.json({ projectId, docs: banner + customDocs, isCustom: true, provenance })
     }
 
     if (!refresh && project.is_public) {
@@ -1403,11 +1416,12 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
       })
       if (summary?.docs) {
         if (format === 'md' || format === 'markdown') {
-          return c.text(summary.docs.full)
+          return c.text(banner + summary.docs.full)
         }
         return c.json({
           projectId,
-          docs: summary.docs.full,
+          docs: banner + summary.docs.full,
+          provenance,
           isCustom: false,
           source: 'summary-cache',
           sections: {
@@ -1428,9 +1442,9 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
       const cached = await c.env.CACHE.get(`docs:${projectId}`)
       if (cached) {
         if (format === 'md' || format === 'markdown') {
-          return c.text(cached)
+          return c.text(banner + cached)
         }
-        return c.json({ projectId, docs: cached, isCustom: false, source: 'cache' })
+        return c.json({ projectId, docs: banner + cached, provenance, isCustom: false, source: 'cache' })
       }
     }
 
@@ -1475,12 +1489,13 @@ app.get('/:projectId/docs', optionalAuthMiddleware, async (c) => {
     }
 
     if (format === 'md' || format === 'markdown') {
-      return c.text(docs.full)
+      return c.text(banner + docs.full)
     }
 
     return c.json({
       projectId,
-      docs: docs.full,
+      docs: banner + docs.full,
+      provenance,
       isCustom: false,
       sections: {
         overview: docs.overview,
@@ -1918,6 +1933,7 @@ app.get('/:projectId/idl', optionalAuthMiddleware, async (c) => {
       projectId,
       programId: data.programId,
       idl: data.idl,
+      provenance: idlProvenance(await latestIdlSource(c.env?.DB, projectId)),
     })
   } catch (err) {
     return c.json({ error: 'Failed to get IDL' }, 500)

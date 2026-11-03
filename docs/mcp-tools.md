@@ -105,6 +105,11 @@ Inputs:
 
 Returns matching project IDs, names, program IDs, descriptions, and authors.
 
+> **Manually uploaded IDLs.** If a project's IDL was uploaded by its owner and no on-chain IDL exists for the program,
+> `list_instructions`, `build_instruction`, `simulate_instruction` and `read_llms_txt` start their output with a
+> "Manually uploaded IDL — no on-chain IDL" warning. Treat such an IDL's accounts and arguments as unverified and check
+> them before signing.
+
 ### `list_instructions`
 
 List all instructions for a project.

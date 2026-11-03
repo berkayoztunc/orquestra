@@ -73,6 +73,27 @@ Upload limits:
 
 - IDL JSON: 10 MB
 - Optional `CPI.md`: 5 MB
+- `programId` must be a valid base58 Solana address (32 bytes)
+
+### On-chain IDL check and provenance
+
+Program IDs are first-come-first-served, so an uploaded IDL is only the uploader's claim about a program. On
+`POST /api/idl/upload` and `PUT /api/idl/:projectId` Orquestra therefore looks for the program's own IDL on
+Solana mainnet-beta (Program Metadata Program, then the legacy Anchor IDL account):
+
+| On-chain result | What happens |
+| --- | --- |
+| IDL found | The **on-chain IDL is stored instead of the uploaded file** (`idl_source` = `anchor`/`pmp`). `warnings` says so and lists any instruction differences. |
+| No IDL (or an unreadable IDL account) | The upload is accepted and stored as **`manual`**. The response `warnings` and `provenance.notice` say that *no on-chain IDL exists and this is a manual upload*. |
+| RPC unreachable | `503` with `code: "ONCHAIN_IDL_CHECK_FAILED"` — nothing is stored; retry. |
+
+A `provenance` object (`origin`, `idlSource`, `verifiedOnChain`, `notice`) is returned by the upload/update responses,
+`GET /api/projects/:id`, `GET /api/projects/by-program/:programId`, `GET /api/:projectId/idl`,
+`GET /api/:projectId/instructions[/:name]`, `GET /api/:projectId/docs` and the build endpoint. For manual IDLs `notice`
+is non-null and `llms.txt` / `docs` / MCP tool output start with a **"Manually uploaded IDL — no on-chain IDL"** banner
+(applied when served, so owner-written `custom_docs` cannot remove it). The project page shows the same notice.
+
+Migration `029_idl_manual_provenance.sql` relabels manual uploads made before this change (which were recorded as `anchor`).
 
 ## Generated Program API
 

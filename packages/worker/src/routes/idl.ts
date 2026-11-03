@@ -13,6 +13,10 @@ import { deleteIdlSummaryCache, writeIdlSummaryCache } from '../services/idl-sum
 import { generateId } from '../utils/id'
 import { getVisibleProject } from '../services/project-visibility'
 import { aiBackgroundDisabled } from '../utils/ai-flags'
+import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
+import { resolveIdlAgainstChain } from '../services/onchain-idl-check'
+import { idlProvenance } from '../services/idl-provenance'
+import { PublicKey } from '@solana/web3.js'
 
 const MAX_IDL_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_CPI_SIZE = 5 * 1024 * 1024 // 5MB
@@ -36,6 +40,20 @@ type Env = {
     API_BASE_URL: string
     AI_ANALYSIS_MODEL?: string
     HELIUS_API_KEY?: string
+    SOLANA_RPC_URL?: string
+    SOLANA_MAINNET_RPC_URL?: string
+    SOLANA_FALLBACK_RPC_URLS?: string
+    SOLANA_MAINNET_FALLBACK_RPC_URLS?: string
+  }
+}
+
+/** A Solana program ID is a canonical base58 string of exactly 32 bytes. */
+function isValidProgramId(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length < 32 || value.length > 44) return false
+  try {
+    return new PublicKey(value).toBase58() === value
+  } catch {
+    return false
   }
 }
 
@@ -59,9 +77,12 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
     if (!body.name || !body.programId || !body.idl) {
       return c.json({ error: 'Missing required fields: name, programId, idl' }, 400)
     }
+    if (!isValidProgramId(body.programId)) {
+      return c.json({ error: 'programId must be a valid base58 Solana program address (32 bytes)' }, 400)
+    }
 
     // Validate IDL size
-    const idlStr = JSON.stringify(body.idl)
+    let idlStr = JSON.stringify(body.idl)
     if (idlStr.length > MAX_IDL_SIZE) {
       return c.json({ error: `IDL exceeds maximum size of ${MAX_IDL_SIZE / 1024 / 1024}MB` }, 400)
     }
@@ -81,7 +102,7 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       }, 400)
     }
 
-    const parsed = parseIDL(body.idl)
+    let parsed = parseIDL(body.idl)
     const db = c.env?.DB
     const kv = c.env?.IDLS
     const projectId = generateId()
@@ -101,6 +122,17 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       }, 409)
     }
 
+    // Program IDs are first-come-first-served, so an uploaded IDL is only the uploader's claim.
+    // The chain's own IDL (if any) wins; otherwise this is stored as a MANUAL IDL and flagged as such.
+    const resolved = await resolveIdlAgainstChain(body.programId, body.idl, buildMainnetRpcUrlList(c.env))
+    if (!resolved.ok) {
+      return c.json({ error: resolved.message, code: 'ONCHAIN_IDL_CHECK_FAILED' }, 503)
+    }
+    const { idlSource, warnings: provenanceWarnings, onChain } = resolved.value
+    body.idl = resolved.value.idl
+    idlStr = resolved.value.idlJson
+    parsed = parseIDL(body.idl)
+
     // Create project
     await db
       ?.prepare(
@@ -114,9 +146,9 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
     const idlStandard = detectIDLFormat(body.idl)
     await db
       ?.prepare(
-        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at, idl_standard) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at, idl_standard, idl_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, 1, now, idlStandard)
+      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, 1, now, idlStandard, idlSource)
       .run()
 
     // Create default socials entry
@@ -230,6 +262,11 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
       validation: {
         warnings: validation.warnings,
       },
+      // How this IDL relates to the chain. `provenance.notice` is non-null for manual uploads
+      // and MUST be shown to whoever uses the IDL; `warnings` explains what happened to this upload.
+      provenance: idlProvenance(idlSource),
+      onChainIdl: onChain,
+      warnings: provenanceWarnings,
     }, 201)
   } catch (err) {
     console.error('IDL upload error:', err)
@@ -369,8 +406,15 @@ app.put('/:projectId', authMiddleware, async (c) => {
       return c.json({ error: 'Invalid IDL', details: validation.errors }, 400)
     }
 
+    // Same rule as upload: the chain's IDL wins; otherwise this version is a MANUAL IDL.
+    const resolved = await resolveIdlAgainstChain(project.program_id as string, body.idl, buildMainnetRpcUrlList(c.env))
+    if (!resolved.ok) {
+      return c.json({ error: resolved.message, code: 'ONCHAIN_IDL_CHECK_FAILED' }, 503)
+    }
+    const { idlSource, warnings: provenanceWarnings, onChain } = resolved.value
+    body.idl = resolved.value.idl
     const parsed = parseIDL(body.idl)
-    const idlStr = JSON.stringify(body.idl)
+    const idlStr = resolved.value.idlJson
 
     // Get next version number
     const lastVersion = await db
@@ -386,9 +430,9 @@ app.put('/:projectId', authMiddleware, async (c) => {
     const idlStandard2 = detectIDLFormat(body.idl)
     await db
       ?.prepare(
-        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at, idl_standard) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO idl_versions (id, project_id, idl_json, cpi_md, version, created_at, idl_standard, idl_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
-      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, newVersion, now, idlStandard2)
+      .bind(idlVersionId, projectId, idlStr, body.cpiMd || null, newVersion, now, idlStandard2, idlSource)
       .run()
 
     // Update project timestamp
@@ -448,7 +492,9 @@ app.put('/:projectId', authMiddleware, async (c) => {
       version: newVersion,
       programName: parsed.programName,
       instructionCount: parsed.instructionCount,
-      warnings: validation.warnings,
+      warnings: [...validation.warnings, ...provenanceWarnings],
+      provenance: idlProvenance(idlSource),
+      onChainIdl: onChain,
     })
   } catch (err) {
     return c.json({ error: 'Failed to update IDL', details: (err as Error).message }, 500)

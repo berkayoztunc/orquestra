@@ -647,6 +647,16 @@ export default function ProjectDetail(): JSX.Element {
                     {selectedProject.description}
                   </p>
                 )}
+
+                {selectedProject.provenance?.notice && (
+                  <div
+                    role="note"
+                    className="mt-4 max-w-3xl border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-xs leading-5 text-yellow-300"
+                  >
+                    <span className="font-semibold">Manually uploaded IDL — no on-chain IDL.</span>{' '}
+                    {selectedProject.provenance.notice}
+                  </div>
+                )}
               </div>
             </div>
 

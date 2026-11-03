@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { generateDocumentation } from '../services/doc-generator'
 import type { AnchorIDL } from '../services/idl-parser'
+import { provenanceBanner } from '../services/idl-provenance'
 
 type Env = {
   Variables: Record<string, unknown>
@@ -89,8 +90,9 @@ app.get('/project/:projectId/llms.txt', async (c) => {
     }
 
     // One D1 round trip for all per-project reads (extra rows on 403/404 are harmless)
-    const [projectRes, aiAnalysisRes, knownAddressesRes, externalApisRes] = await db.batch([
+    const [projectRes, idlSourceRes, aiAnalysisRes, knownAddressesRes, externalApisRes] = await db.batch([
       db.prepare('SELECT name, program_id, is_public, custom_docs FROM projects WHERE id = ?').bind(projectId),
+      db.prepare('SELECT idl_source FROM idl_versions WHERE project_id = ? ORDER BY version DESC LIMIT 1').bind(projectId),
       db
         .prepare('SELECT detailed_analysis_json FROM ai_analyses WHERE project_id = ? ORDER BY generated_at DESC LIMIT 1')
         .bind(projectId),
@@ -218,7 +220,9 @@ app.get('/project/:projectId/llms.txt', async (c) => {
       }
     }
 
-    const llmsText = [
+    // Disclosure first, applied at serve time so cached docs / `custom_docs` cannot drop it.
+    const idlSource = (idlSourceRes?.results?.[0] as { idl_source?: string | null } | undefined)?.idl_source ?? null
+    const llmsText = provenanceBanner(idlSource) + [
       '# Orquestra llms.txt',
       `Project: ${projectName}`,
       `Project ID: ${projectId}`,

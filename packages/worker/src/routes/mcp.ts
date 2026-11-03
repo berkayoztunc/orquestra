@@ -46,6 +46,7 @@ import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
 import { fetchIDL } from '../services/idl-fetch'
 import { PROGRAM_ACCOUNTS_SELECTOR_ERROR, hasProgramAccountsSelector } from '../services/validation'
 import { validateTxOptions, describeWireFormat } from '../services/tx-v1'
+import { provenanceBanner, latestIdlSource } from '../services/idl-provenance'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
 
@@ -488,7 +489,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
               lines.push('')
             }
           }
-          return { content: [{ type: 'text', text: lines.join('\n') }] }
+          return { content: [{ type: 'text', text: provenanceBanner(data.idlSource) + lines.join('\n') }] }
         }
 
         // ── Anchor branch ──────────────────────────────────────────────────
@@ -528,7 +529,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           }
         }
 
-        return { content: [{ type: 'text', text: lines.join('\n') }] }
+        return { content: [{ type: 'text', text: provenanceBanner(data.idlSource) + lines.join('\n') }] }
       } catch (err: any) {
         return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
       }
@@ -619,7 +620,8 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           ),
         ]
 
-        return { content: [{ type: 'text', text: output.join('\n') }] }
+        // Manually uploaded IDL (no on-chain IDL): say so up front, right where the agent is about to sign.
+        return { content: [{ type: 'text', text: provenanceBanner(data.idlSource) + output.join('\n') }] }
       } catch (err: any) {
         return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
       }
@@ -692,7 +694,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           lines.push('', 'Next: call `build_instruction` with the same args, then sign and send.')
         }
 
-        return { content: [{ type: 'text', text: lines.join('\n') }] }
+        return { content: [{ type: 'text', text: provenanceBanner(data.idlSource) + lines.join('\n') }] }
       } catch (err: any) {
         return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
       }
@@ -899,7 +901,8 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
           }
         }
 
-        return { content: [{ type: 'text', text: docsText }] }
+        // Applied at serve time so cached docs and owner-written `custom_docs` cannot drop the disclosure.
+        return { content: [{ type: 'text', text: provenanceBanner(await latestIdlSource(db, projectId)) + docsText }] }
       } catch (err: any) {
         return { isError: true, content: [{ type: 'text', text: `Error: ${err.message}` }] }
       }

@@ -68,6 +68,10 @@ function makeDb(options: { allowIdlLookup?: boolean; idlLookups?: { count: numbe
               if (sql.includes('FROM projects')) {
                 return { id: 'proj_test', program_id: PROGRAM_ID, is_public: 1 }
               }
+              // Provenance lookup (idl_source only) — does not read the raw IDL, so it is allowed everywhere.
+              if (sql.includes('SELECT idl_source FROM idl_versions')) {
+                return { idl_source: 'anchor' }
+              }
               if (sql.includes('FROM idl_versions')) {
                 if (!options.allowIdlLookup) {
                   throw new Error('Unexpected IDL lookup')
@@ -139,6 +143,8 @@ describe('IDL summary cache', () => {
       programName: 'counter_program',
       programId: PROGRAM_ID,
       instructions: summary.instructions,
+      // additive: where the IDL came from (this stub's project has an on-chain-sourced IDL)
+      provenance: { origin: 'onchain', idlSource: 'anchor', verifiedOnChain: true, notice: null },
     })
   })
 

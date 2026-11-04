@@ -1,18 +1,10 @@
--- Migration 029: label manually uploaded IDLs as 'manual' (no on-chain IDL behind them).
+-- 029: IDL provenance backfill (no-op by design).
 --
--- `idl_versions.idl_source` was added in 015 with DEFAULT 'anchor', and the user upload / update
--- routes never set it — so every manual upload was recorded as if it had been read from chain.
--- New uploads are now resolved against the chain and stored as 'manual' when no on-chain IDL exists
--- (routes/idl.ts, services/onchain-idl-check.ts). This backfills rows written before that change.
+-- `idl_versions.idl_source = 'manual'` marks an IDL uploaded by a user with no verified
+-- on-chain IDL behind it. New uploads are labeled by the upload routes.
 --
--- Heuristic (the old routes left no explicit marker):
---   * the project is owned by a real user ('system' owns on-chain auto-imported projects), and
---   * the version has no idl_hash — the chain-sync and CLI-ingest writers always set it, the
---     manual upload / PUT routes never did.
--- Idempotent: re-running changes nothing further.
-
-UPDATE idl_versions
-   SET idl_source = 'manual'
- WHERE idl_hash IS NULL
-   AND (idl_source IS NULL OR idl_source = 'anchor')
-   AND project_id IN (SELECT id FROM projects WHERE user_id <> 'system');
+-- Existing rows were backfilled once, directly on production, by checking each candidate
+-- program on mainnet (only programs with NO on-chain IDL were set to 'manual'). A purely
+-- SQL heuristic (idl_hash IS NULL) would mislabel programs that do have an on-chain IDL, so
+-- it is intentionally not repeated here and this migration changes no data.
+SELECT 1;

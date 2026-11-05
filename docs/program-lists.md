@@ -80,6 +80,8 @@ Copy the scope key (`sk_…`) from the list on [My Lists](/lists), then send it 
 
 Now ask your agent something like: "Use orquestra to list the programs available to me." It will see only the programs in your list.
 
+A scope key never widens what an agent can find. Programs whose IDL was uploaded manually (no on-chain IDL) are hidden from `search_programs` by default, and that applies inside a scoped list too: a manually uploaded program in your list is not returned, and `build_instruction` / `simulate_instruction` refuse it, unless the call passes `secure: false`. Only set `secure: false` when you trust the uploader. See [Manual-IDL programs](/docs/mcp#manual-idl-programs-secure).
+
 Behavior with a scope key:
 
 | Call | Result |
@@ -87,6 +89,7 @@ Behavior with a scope key:
 | `search_programs` with a text `query` | Matches are limited to programs in your list. |
 | `search_programs` with an exact `programId` | Returns the program only if it is in your list. |
 | `search_programs` with no query | Returns everything in your list, sorted by weekly active users. |
+| Program in your list with a manually uploaded IDL | Hidden unless `secure: false` is passed. |
 | Invalid or regenerated key | Error: "Invalid scope key. Please check your X-Scope-Key header." |
 | No `X-Scope-Key` header | Normal behavior: all public programs are searchable. |
 
@@ -138,5 +141,5 @@ curl -X POST https://api.orquestra.dev/api/lists/{listId}/items \
 
 - **"Invalid scope key"**: the key was regenerated, the list was deleted, or the header has a typo. Copy the current key from My Lists.
 - **Search returns nothing**: the list is empty, or the program is not in it. Add it, or remove the header to search everything.
-- **A program is missing even though it is in the list**: only public programs are returned to agents.
+- **A program is missing even though it is in the list**: only public programs are returned to agents, and programs with a manually uploaded IDL (no on-chain IDL) are hidden unless `secure: false` is passed.
 - **The agent still uses a program outside the list**: the scope key only filters search. Tell the agent which programs it may use.

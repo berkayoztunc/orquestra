@@ -38,7 +38,7 @@ Public discovery endpoints are open. Build and protected project flows use eithe
 | GET | `/api/projects` | List and search public projects. |
 | GET | `/api/projects/by-program/{programId}` | Resolve a project from its Solana program id. |
 | GET | `/api/{projectId}/instructions` | List available instructions and their arguments. |
-| **POST** | `/api/{projectId}/instructions/{instructionName}/build` | Build an unsigned base58 transaction payload. |
+| **POST** | `/api/{projectId}/instructions/{instructionName}/build` | Build an unsigned transaction payload. Legacy by default; opt in to `v0` or `v1` with `txVersion`. |
 | GET | `/api/{projectId}/pda` | Discover PDA-derivable accounts and seed schemas. |
 | GET | `/api/{projectId}/pda/fetch/{address}` | Fetch on-chain account data and decode it against the project IDL. Accepts `?network=`. |
 | **POST** | `/api/{projectId}/program-accounts/query` | Query program-owned accounts with `dataSize` and `memcmp` filters. Accepts `?network=`. |
@@ -69,21 +69,46 @@ curl -X POST https://api.orquestra.dev/api/{projectId}/instructions/{instruction
   }'
 ```
 
-## Adding a program (on-chain first)
+## Transaction format (`txVersion`)
 
-1. `POST /api/idl/check-program` with `{ "programId": "..." }` asks the chain once. It returns `found`, `absent` or `unreadable`.
-2. If `found`, call `POST /api/idl/upload` with just `programId` (no `idl`). The program's own on-chain IDL is imported and marked verified. Manual upload is not offered.
-3. If there is no on-chain IDL, publish it as the program's upgrade authority, then check again:
+`txVersion` is optional. Omit it and the build endpoint returns a **legacy** transaction, exactly as before.
 
-```bash
-npx @solana-program/program-metadata@latest write idl <PROGRAM_ID> ./idl.json
-# or, from an Anchor project:
-anchor idl init -f target/idl/<program>.json <PROGRAM_ID> --provider.cluster mainnet
-```
+| `txVersion` | Format | Limits |
+| --- | --- | --- |
+| omitted / `legacy` | Legacy message (default) | 1232 bytes |
+| `v0` | Versioned message, no lookup tables | 1232 bytes |
+| `v1` | Solana Transaction v1 (SIMD-0385) | 4096 bytes, max 64 inline accounts, no address lookup tables |
 
-4. Only if that is impossible, upload the IDL file manually (`idl` in the body). It is stored as `manual` (unverified and hidden by default).
+For `v1`:
 
-Manual uploads are rejected with `409 NAME_TOO_SIMILAR` when the project name or the IDL's own name matches or closely resembles another public project's name.
+- `encoding` defaults to `base64`. `base58` is rejected when the transaction is over 1232 bytes.
+- Compute-unit and loaded-accounts limits live in the message config, not in ComputeBudget instructions. Orquestra measures them with one preflight simulation (+10%), or falls back to protocol maxima. Override with `txConfig`: `{ "priorityFeeLamports": 5000, "computeUnitLimit": 20000, "loadedAccountsDataSizeLimit": 65536, "heapSize": 65536 }`. `priorityFeeLamports` is a total in lamports.
+- `txConfig` without `txVersion: "v1"` is rejected with a 400.
+- The response `wireFormat` says what was produced. A v1 transaction starts with byte `0x81`; `@solana/web3.js` 1.x cannot decode it (use `@solana/kit` 8+). Make sure your signer or wallet supports v1.
+
+## IDL provenance
+
+Every IDL served by Orquestra carries a `provenance` object (`origin`, `idlSource`, `verifiedOnChain`, `notice`) on project detail, by-program, `/idl`, `/instructions`, `/docs` and build responses.
+
+- `origin: "onchain"` — the IDL was read from the program's on-chain IDL account (`anchor` or `pmp`).
+- `origin: "manual"` — **no on-chain IDL exists**; the project owner uploaded the IDL manually. It is not verified against the chain, so check instruction names, accounts and arguments before signing. `notice` explains this, and the same warning is added to `llms.txt`, docs and MCP tool output.
+
+When a program has an on-chain IDL, an upload or update is replaced by the on-chain IDL, and the response `warnings` list any differences. If the chain cannot be reached, uploads fail with `503 ONCHAIN_IDL_CHECK_FAILED` instead of guessing.
+
+## Manual-IDL projects (secure)
+
+Projects whose IDL was **uploaded manually** (no on-chain IDL) are unverified and may be malicious, so they are excluded by default. Pass `secure=false` to opt in explicitly. `secure` defaults to `true`; only an explicit `false` changes it.
+
+| Surface | Default | With `secure=false` |
+| --- | --- | --- |
+| `GET /api/projects` (browse and search) | Not listed | Listed, with a `provenance` notice |
+| `GET /api/projects/by-program/{programId}` | `404` (`MANUAL_IDL_HIDDEN`); the owner still sees it | Returned |
+| `POST /api/{projectId}/instructions/{name}/build` | `403` (`MANUAL_IDL_BLOCKED`); the owner may still build | Builds, response carries `provenance` |
+| MCP `search_programs`, `build_instruction`, `simulate_instruction` | Hidden / refused | Allowed, with the manual-IDL warning |
+
+`GET /api/projects?uploaded=user` returns only manually uploaded projects (it implies `secure=false`); the Explorer's "Uploaded by user" filter uses it.
+
+Use `?secure=false` on GET routes, and `?secure=false` or `"secure": false` in the build body. Only do this when the user explicitly asked for that program and trusts its uploader: a manual IDL is just the uploader's claim about what a program does, and anyone can upload one for a program ID they do not control. Reading a project directly by ID still works and always carries the warning.
 
 ## Which integration should I use?
 

@@ -77,6 +77,12 @@ instruction actually needs. A trailing `?` on a reference (e.g. `"$dstAta.create
 this instruction only if it turned out to be needed" — the idiom for skipping an ATA-create when the
 account already exists.
 
+## Transaction version
+
+`solana.compose_transaction@1` produces a **v0** transaction by default. Leave `txVersion` unset unless you have a reason. To opt in, set `txVersion` (`legacy`, `v0` or `v1`) and optionally `txConfig` on the node, or pass `txVersion` to `estimate_flow` / `simulate_flow` for a run-level default. Precedence: node input, then run-level, then `v0`.
+
+`v1` allows 4096 bytes and 64 inline accounts but no address lookup tables. Lookup tables are skipped with a note, and a flow needing more than 64 accounts fails with a message to use `v0`. `txConfig` without `v1` is rejected.
+
 ## Reading errors
 
 Every tool response is designed to be actionable without a human in the loop:

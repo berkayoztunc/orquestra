@@ -1,3 +1,4 @@
+import { NOT_MANUAL_IDL_SQL } from '../services/idl-provenance'
 import { Context, Hono } from 'hono'
 
 type Env = {
@@ -278,7 +279,7 @@ app.get('/api/discovery/sitemap', async (c) => {
   const db = c.env.DB
 
   const results = await db
-    .prepare('SELECT program_id, updated_at FROM projects WHERE is_public = 1 ORDER BY updated_at DESC')
+    .prepare(`SELECT p.program_id, p.updated_at FROM projects p WHERE p.is_public = 1 AND ${NOT_MANUAL_IDL_SQL} ORDER BY p.updated_at DESC`)
     .all()
 
   return c.json(

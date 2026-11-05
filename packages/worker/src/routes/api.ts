@@ -19,7 +19,7 @@ import { generateId } from '../utils/id'
 import { getVisibleProject } from '../services/project-visibility'
 import { deleteProjectIdlCache } from '../services/idl-cache'
 import { validateTxOptions, TxOptionError } from '../services/tx-v1'
-import { idlProvenance, provenanceBanner, latestIdlSource } from '../services/idl-provenance'
+import { idlProvenance, provenanceBanner, latestIdlSource, NOT_MANUAL_IDL_SQL, parseSecure, SECURE_FALSE_HINT } from '../services/idl-provenance'
 
 function getCurrentTimestamp(): string {
   return new Date().toISOString()
@@ -277,7 +277,11 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
   const sort = c.req.query('sort') || 'active'
   const verifiedOnly = c.req.query('verified') === '1'
   const hasAiDocs = c.req.query('has_ai_docs') === '1'
-  const filters = { verified: verifiedOnly, has_ai_docs: hasAiDocs }
+  // Manually uploaded IDLs (no on-chain IDL) are hidden unless the caller passes secure=false.
+  const hideManual = parseSecure(c.req.query('secure'))
+  // uploaded=user → ONLY manually uploaded (no on-chain IDL) projects; implies they are shown.
+  const onlyManual = c.req.query('uploaded') === 'user'
+  const filters = { verified: verifiedOnly, has_ai_docs: hasAiDocs, includeManual: !hideManual, onlyManual }
 
   try {
     const db = c.env.DB
@@ -315,6 +319,8 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
       }
       if (verifiedOnly) whereParts.push('p.is_verified = 1')
       if (hasAiDocs) whereParts.push('aa.short_description IS NOT NULL')
+      if (onlyManual) whereParts.push(`NOT (${NOT_MANUAL_IDL_SQL})`)
+      else if (hideManual) whereParts.push(NOT_MANUAL_IDL_SQL)
 
       const whereClause = `WHERE ${whereParts.join(' AND ')}`
 
@@ -405,6 +411,11 @@ app.get('/projects/by-program/:programId', optionalAuthMiddleware, async (c) => 
       // Check access
       if (!project.is_public && project.user_id !== userId) {
         return c.json({ error: 'Access denied' }, 403)
+      }
+
+      // Manual-IDL projects are not discoverable by program ID unless secure=false (or the caller owns it).
+      if (parseSecure(c.req.query('secure')) && project.user_id !== userId && (await latestIdlSource(db, project.id as string)) === 'manual') {
+        return c.json({ error: SECURE_FALSE_HINT, code: 'MANUAL_IDL_HIDDEN' }, 404)
       }
 
       // Enrich with version, socials, category/icon, owner info (same as GET /projects/:projectId)
@@ -952,6 +963,8 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMid
       args: Record<string, any>
       feePayer: string
       recentBlockhash?: string
+      /** Default true. Set false to allow building from a manually uploaded (no on-chain IDL) project. */
+      secure?: boolean | string
       /** Cluster name, or full https RPC URL (same rules as MCP build_instruction). */
       network?: string
       /** Overrides cluster-derived RPC when set (e.g. Helius URL with API key). */
@@ -976,6 +989,19 @@ app.post('/:projectId/instructions/:name/build', buildRateLimit, optionalAuthMid
     const data = await getProjectIDL(c.env?.DB, c.env?.IDLS, projectId, c.get('userId') as string | undefined)
     if (!data) {
       return c.json({ error: 'Project not found or not public' }, 404)
+    }
+
+    // Manually uploaded IDLs (no on-chain IDL) can't be used to build transactions unless the
+    // caller opts in with `secure: false` (body) / ?secure=false, or owns the project.
+    if (parseSecure(body.secure ?? c.req.query('secure'))) {
+      const callerId = c.get('userId') as string | undefined
+      const manual = (await latestIdlSource(c.env?.DB, projectId)) === 'manual'
+      const ownerRow = manual && callerId
+        ? await c.env?.DB?.prepare('SELECT 1 AS x FROM projects WHERE id = ? AND user_id = ?').bind(projectId, callerId).first()
+        : null
+      if (manual && !ownerRow) {
+        return c.json({ error: SECURE_FALSE_HINT, code: 'MANUAL_IDL_BLOCKED' }, 403)
+      }
     }
 
     const ix = getInstruction(data.idl, instructionName)

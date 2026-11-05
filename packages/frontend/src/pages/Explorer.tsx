@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, X, ShieldCheck, BookOpen } from 'lucide-react'
+import { Search, X, ShieldCheck, BookOpen, AlertTriangle, Upload } from 'lucide-react'
 import { useProjectsStore } from '../store/projects'
 import ProjectCard from '../components/ProjectCard'
 
@@ -17,21 +17,25 @@ export default function Explorer(): JSX.Element {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortValue>('active')
   const [verified, setVerified] = useState(false)
+  const [includeManual, setIncludeManual] = useState(false)
+  const [uploadedByUser, setUploadedByUser] = useState(false)
   const [hasAiDocs, setHasAiDocs] = useState(false)
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   const reload = useCallback(
-    (overrides?: { search?: string; sort?: SortValue; verified?: boolean; has_ai_docs?: boolean; page?: number }) => {
+    (overrides?: { search?: string; sort?: SortValue; verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean; uploadedByUser?: boolean; page?: number }) => {
       loadPublicProjects({
         page: 1,
         search,
         sort,
         verified,
         has_ai_docs: hasAiDocs,
+        includeManual,
+        uploadedByUser,
         ...overrides,
       })
     },
-    [search, sort, verified, hasAiDocs, loadPublicProjects],
+    [search, sort, verified, hasAiDocs, includeManual, uploadedByUser, loadPublicProjects],
   )
 
   // Initial load
@@ -64,10 +68,10 @@ export default function Explorer(): JSX.Element {
   }
 
   const handlePage = (page: number) => {
-    loadPublicProjects({ page, search, sort, verified, has_ai_docs: hasAiDocs })
+    loadPublicProjects({ page, search, sort, verified, has_ai_docs: hasAiDocs, includeManual, uploadedByUser })
   }
 
-  const activeFilters = (verified ? 1 : 0) + (hasAiDocs ? 1 : 0)
+  const activeFilters = (verified ? 1 : 0) + (hasAiDocs ? 1 : 0) + (uploadedByUser ? 1 : 0)
 
   return (
     <div className="space-y-6 px-6 py-10 sm:px-8 sm:py-12">
@@ -149,13 +153,50 @@ export default function Explorer(): JSX.Element {
           Has AI Docs
         </button>
 
+        {/* Only programs whose IDL was uploaded by a user (no on-chain IDL) */}
+        <button
+          onClick={() => {
+            const next = !uploadedByUser
+            setUploadedByUser(next)
+            reload({ uploadedByUser: next, page: 1 })
+          }}
+          title="Show only programs whose IDL was uploaded by a user (no on-chain IDL). Unverified."
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border transition-colors ${
+            uploadedByUser
+              ? 'border-yellow-600 bg-yellow-950/30 text-yellow-300'
+              : 'border-border-low text-sand-1000 hover:border-border-medium hover:text-sand-1600'
+          }`}
+        >
+          <Upload className="w-3.5 h-3.5" />
+          Uploaded by user
+        </button>
+
+        {/* Unsafe: manually uploaded IDLs (no on-chain IDL) are hidden by default */}
+        <button
+          onClick={() => {
+            const next = !includeManual
+            setIncludeManual(next)
+            reload({ includeManual: next, page: 1 })
+          }}
+          title="Show programs whose IDL was uploaded manually (no on-chain IDL). They are unverified and may be malicious."
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border transition-colors ${
+            includeManual
+              ? 'border-red-700 bg-red-950/40 text-red-300'
+              : 'border-border-low text-sand-1000 hover:border-border-medium hover:text-sand-1600'
+          }`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          {includeManual ? 'Showing unverified IDLs' : 'Show unverified IDLs'}
+        </button>
+
         {/* Clear filters */}
         {activeFilters > 0 && (
           <button
             onClick={() => {
               setVerified(false)
               setHasAiDocs(false)
-              reload({ verified: false, has_ai_docs: false, page: 1 })
+              setUploadedByUser(false)
+              reload({ verified: false, has_ai_docs: false, uploadedByUser: false, page: 1 })
             }}
             className="text-xs text-sand-900 hover:text-sand-1200 underline underline-offset-2"
           >

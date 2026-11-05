@@ -107,7 +107,30 @@ A `provenance` object (`origin`, `idlSource`, `verifiedOnChain`, `notice`) is re
 is non-null and `llms.txt` / `docs` / MCP tool output start with a **"Manually uploaded IDL — no on-chain IDL"** banner
 (applied when served, so owner-written `custom_docs` cannot remove it). The project page shows the same notice.
 
-Migration `029_idl_manual_provenance.sql` relabels manual uploads made before this change (which were recorded as `anchor`).
+Manual-IDL projects are additionally hidden from search and blocked from building by default — see *Manual-IDL projects are hidden by default (`secure`)* below.
+
+Manual uploads made before this change (recorded as `anchor`) were relabeled once on production, only for programs that have no on-chain IDL; migration `029_idl_manual_provenance.sql` is a no-op.
+
+### Manual-IDL projects are hidden by default (`secure`)
+
+Projects whose latest IDL is a **manual upload** (no on-chain IDL) are treated as unverified and potentially unsafe, so they are
+**excluded by default** from every discovery and action surface. Pass `secure=false` to opt in explicitly. `secure` defaults to
+`true`; only an explicit `false` (`"false"`, `"0"`, `"no"`) changes it.
+
+| Surface | Default (`secure` omitted / `true`) | With `secure=false` |
+| --- | --- | --- |
+| `GET /api/projects` (browse and `?search=`) | manual-IDL projects are not listed | they are listed (each carries a `provenance` notice) |
+| `GET /api/projects/by-program/:programId` | `404` with `code: "MANUAL_IDL_HIDDEN"` (the project owner still sees it) | returns the project |
+| `POST /api/:projectId/instructions/:name/build` | `403` with `code: "MANUAL_IDL_BLOCKED"` (the project owner may still build) | builds; the response carries `provenance` |
+| `GET /sitemap` / program discovery lists | excluded | not applicable |
+| MCP `search_programs`, `build_instruction`, `simulate_instruction` | hidden / blocked | allowed, with the manual-IDL warning |
+
+`GET /api/projects?uploaded=user` returns **only** manually uploaded projects (it implies `secure=false`); the Explorer's "Uploaded by user" filter uses it.
+
+On `GET` routes pass it as a query parameter (`?secure=false`); on the build endpoint as `?secure=false` or `"secure": false` in the
+JSON body. Do this only when the user explicitly asked for that program and trusts its uploader — a manual IDL is only the
+uploader's claim about what the program does, and anyone can upload one for a program ID they do not control.
+Direct reads by project ID (`GET /api/projects/:id`, `/idl`, `/instructions`, `/docs`, `llms.txt`) still work and always carry the warning.
 
 ## Generated Program API
 

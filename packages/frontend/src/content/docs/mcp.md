@@ -88,14 +88,14 @@ These tools are read-oriented plus transaction building, live account fetching, 
 | --- | --- |
 | `search_programs` | Search public projects in Orquestra by keyword or by exact program ID. |
 | `list_instructions` | List all instructions, args, and account metas for a project. |
-| `build_instruction` | Build and serialize a Solana instruction transaction into base58. |
+| `build_instruction` | Build and serialize a Solana instruction transaction. Legacy by default; optional `txVersion` (`legacy`, `v0`, `v1`) and `txConfig` (v1 only). Adds a warning when the project's IDL is a manual upload with no on-chain IDL. |
 | `list_pda_accounts` | Show PDA-derivable accounts and seed schemas from the IDL. |
 | `derive_pda` | Derive a PDA with your provided seed values and return the bump. |
-| `read_llms_txt` | Read full AI-focused markdown docs for a selected project. |
+| `read_llms_txt` | Read full AI-focused markdown docs for a selected project. Starts with a warning when the IDL is a manual upload with no on-chain IDL. |
 | `get_ai_analysis` | Get AI analysis summary, tags, and metadata for a project. |
 | `fetch_pda_data` | Fetch a Solana account by address and decode its fields using the project IDL. Accepts an optional cluster param (mainnet-beta, devnet, testnet). |
 | `get_program_data` | Query `getProgramAccounts` for a project's program ID. Supports discriminator filters, `dataSize`, raw `memcmp`, fixed-field IDL filters, decoded results, Helius V2 pagination, and optional raw base64. |
-| `simulate_instruction` | Preflight an instruction against the RPC without signing. Returns success/failure, compute units, and a decoded Anchor error name when a custom program error is hit. Use before signing to catch mistakes early. |
+| `simulate_instruction` | Accepts the same optional `txVersion`/`txConfig`. Preflight an instruction against the RPC without signing. Returns success/failure, compute units, and a decoded Anchor error name when a custom program error is hit. Use before signing to catch mistakes early. |
 | `simulate_transaction` | Preflight a full transaction against the RPC without signing, for cases involving multiple instructions. |
 
 ## Try this prompt

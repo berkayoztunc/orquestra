@@ -93,7 +93,7 @@ A `provenance` object (`origin`, `idlSource`, `verifiedOnChain`, `notice`) is re
 is non-null and `llms.txt` / `docs` / MCP tool output start with a **"Manually uploaded IDL — no on-chain IDL"** banner
 (applied when served, so owner-written `custom_docs` cannot remove it). The project page shows the same notice.
 
-Migration `029_idl_manual_provenance.sql` relabels manual uploads made before this change (which were recorded as `anchor`).
+Manual uploads made before this change (recorded as `anchor`) were relabeled once on production, only for programs that have no on-chain IDL; migration `029_idl_manual_provenance.sql` is a no-op.
 
 ## Generated Program API
 

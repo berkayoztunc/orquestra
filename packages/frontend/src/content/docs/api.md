@@ -38,7 +38,7 @@ Public discovery endpoints are open. Build and protected project flows use eithe
 | GET | `/api/projects` | List and search public projects. |
 | GET | `/api/projects/by-program/{programId}` | Resolve a project from its Solana program id. |
 | GET | `/api/{projectId}/instructions` | List available instructions and their arguments. |
-| **POST** | `/api/{projectId}/instructions/{instructionName}/build` | Build an unsigned base58 transaction payload. |
+| **POST** | `/api/{projectId}/instructions/{instructionName}/build` | Build an unsigned transaction payload. Legacy by default; opt in to `v0` or `v1` with `txVersion`. |
 | GET | `/api/{projectId}/pda` | Discover PDA-derivable accounts and seed schemas. |
 | GET | `/api/{projectId}/pda/fetch/{address}` | Fetch on-chain account data and decode it against the project IDL. Accepts `?network=`. |
 | **POST** | `/api/{projectId}/program-accounts/query` | Query program-owned accounts with `dataSize` and `memcmp` filters. Accepts `?network=`. |
@@ -68,6 +68,32 @@ curl -X POST https://api.orquestra.dev/api/{projectId}/instructions/{instruction
     "feePayer": "..."
   }'
 ```
+
+## Transaction format (`txVersion`)
+
+`txVersion` is optional. Omit it and the build endpoint returns a **legacy** transaction, exactly as before.
+
+| `txVersion` | Format | Limits |
+| --- | --- | --- |
+| omitted / `legacy` | Legacy message (default) | 1232 bytes |
+| `v0` | Versioned message, no lookup tables | 1232 bytes |
+| `v1` | Solana Transaction v1 (SIMD-0385) | 4096 bytes, max 64 inline accounts, no address lookup tables |
+
+For `v1`:
+
+- `encoding` defaults to `base64`. `base58` is rejected when the transaction is over 1232 bytes.
+- Compute-unit and loaded-accounts limits live in the message config, not in ComputeBudget instructions. Orquestra measures them with one preflight simulation (+10%), or falls back to protocol maxima. Override with `txConfig`: `{ "priorityFeeLamports": 5000, "computeUnitLimit": 20000, "loadedAccountsDataSizeLimit": 65536, "heapSize": 65536 }`. `priorityFeeLamports` is a total in lamports.
+- `txConfig` without `txVersion: "v1"` is rejected with a 400.
+- The response `wireFormat` says what was produced. A v1 transaction starts with byte `0x81`; `@solana/web3.js` 1.x cannot decode it (use `@solana/kit` 8+). Make sure your signer or wallet supports v1.
+
+## IDL provenance
+
+Every IDL served by Orquestra carries a `provenance` object (`origin`, `idlSource`, `verifiedOnChain`, `notice`) on project detail, by-program, `/idl`, `/instructions`, `/docs` and build responses.
+
+- `origin: "onchain"` — the IDL was read from the program's on-chain IDL account (`anchor` or `pmp`).
+- `origin: "manual"` — **no on-chain IDL exists**; the project owner uploaded the IDL manually. It is not verified against the chain, so check instruction names, accounts and arguments before signing. `notice` explains this, and the same warning is added to `llms.txt`, docs and MCP tool output.
+
+When a program has an on-chain IDL, an upload or update is replaced by the on-chain IDL, and the response `warnings` list any differences. If the chain cannot be reached, uploads fail with `503 ONCHAIN_IDL_CHECK_FAILED` instead of guessing.
 
 ## Which integration should I use?
 

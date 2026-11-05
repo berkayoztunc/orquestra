@@ -109,7 +109,7 @@ Once the server is connected, paste either of these into your assistant. The ful
 
 ## Scope Keys
 
-Scope Keys let you restrict `search_programs` to a curated collection of programs you've saved in [My Lists](/lists). Without a scope key, every public program is searchable — a scope key narrows results to only the programs in that list.
+Scope Keys let you restrict `search_programs` to a curated collection of programs you've saved in [My Lists](/lists). See the full [My Program Lists guide](/docs/lists) for what they are for and how they behave. Without a scope key, every public program is searchable — a scope key narrows results to only the programs in that list.
 
 **How to use a scope key:**
 

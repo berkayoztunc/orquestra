@@ -10,6 +10,7 @@ const docsNav = [
   { href: '/docs/packages', label: 'Published Packages', section: 'Reference' },
   { href: '/docs/sign-and-send', label: 'Sign & Send', section: 'Guides' },
   { href: '/docs/flow-engine', label: 'Flow Engine', section: 'Guides' },
+  { href: '/docs/lists', label: 'My Program Lists', section: 'Guides' },
 ]
 
 type TocItem = { id: string; label: string }

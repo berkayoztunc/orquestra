@@ -63,7 +63,8 @@ Public project read routes do not require auth. Private project routes require o
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/idl/upload` | Upload a new IDL project |
+| `POST` | `/api/idl/check-program` | One-shot on-chain lookup: does this program publish its own IDL? |
+| `POST` | `/api/idl/upload` | Create a project: import the on-chain IDL (omit `idl`) or upload one manually |
 | `GET` | `/api/idl/:projectId` | Get latest or selected IDL version |
 | `GET` | `/api/idl/:projectId/versions` | List IDL versions |
 | `PUT` | `/api/idl/:projectId` | Upload a new IDL version |
@@ -74,6 +75,19 @@ Upload limits:
 - IDL JSON: 10 MB
 - Optional `CPI.md`: 5 MB
 - `programId` must be a valid base58 Solana address (32 bytes)
+
+### On-chain first upload
+
+Adding a program is on-chain first:
+
+1. `POST /api/idl/check-program` with `{ "programId": "..." }` asks the chain once and returns `status: "found"` (with `source`, `name`, `instructionCount`), `"absent"` or `"unreadable"`, plus `alreadyListed` when a project for that program exists. `503 ONCHAIN_IDL_CHECK_FAILED` if every RPC failed.
+2. `found` → call `POST /api/idl/upload` with just `programId` (`name`, `description`, `isPublic`, `cpiMd` optional; no `idl`). The server imports the program's own IDL from the chain and stores it as verified (`anchor`/`pmp`). The upload UI hides manual upload in this case.
+3. `absent` / `unreadable` → publish the IDL on-chain as the program's upgrade authority, then check again:
+   - `npx @solana-program/program-metadata@latest write idl <PROGRAM_ID> ./idl.json`
+   - `anchor idl init -f target/idl/<program>.json <PROGRAM_ID> --provider.cluster mainnet`
+4. Only if that is impossible, upload the IDL file manually (`idl` in the body). It is stored as **`manual`** (unverified, hidden by default — see `secure`).
+
+Manual uploads are **rejected with `409 NAME_TOO_SIMILAR`** (response includes `similarTo`) when the project name, or the IDL's own name, is the same as or a near-copy of another public project's name (case, punctuation and words like "program"/"protocol" are ignored). Sending no `idl` when the program has no readable on-chain IDL returns `400 ONCHAIN_IDL_NOT_FOUND`.
 
 ### On-chain IDL check and provenance
 

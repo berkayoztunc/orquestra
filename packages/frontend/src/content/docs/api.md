@@ -69,6 +69,22 @@ curl -X POST https://api.orquestra.dev/api/{projectId}/instructions/{instruction
   }'
 ```
 
+## Adding a program (on-chain first)
+
+1. `POST /api/idl/check-program` with `{ "programId": "..." }` asks the chain once. It returns `found`, `absent` or `unreadable`.
+2. If `found`, call `POST /api/idl/upload` with just `programId` (no `idl`). The program's own on-chain IDL is imported and marked verified. Manual upload is not offered.
+3. If there is no on-chain IDL, publish it as the program's upgrade authority, then check again:
+
+```bash
+npx @solana-program/program-metadata@latest write idl <PROGRAM_ID> ./idl.json
+# or, from an Anchor project:
+anchor idl init -f target/idl/<program>.json <PROGRAM_ID> --provider.cluster mainnet
+```
+
+4. Only if that is impossible, upload the IDL file manually (`idl` in the body). It is stored as `manual` (unverified and hidden by default).
+
+Manual uploads are rejected with `409 NAME_TOO_SIMILAR` when the project name or the IDL's own name matches or closely resembles another public project's name.
+
 ## Which integration should I use?
 
 - **App backends** — use the REST API directly if you're wiring Orquestra into a dashboard, API layer, cron workflow, or custom signing service.

@@ -106,11 +106,27 @@ export async function updateProject(projectId: string, data: {
 
 // ─── IDL ─────────────────────────────────────────────
 
+export interface ProgramCheck {
+  programId: string
+  status: 'found' | 'absent' | 'unreadable'
+  source?: 'anchor' | 'pmp'
+  name?: string | null
+  instructionCount?: number
+  alreadyListed?: { projectId: string; name: string } | null
+}
+
+/** One-shot on-chain lookup: does this program already publish its own IDL? */
+export async function checkProgram(programId: string): Promise<ProgramCheck> {
+  const res = await api.post('/idl/check-program', { programId })
+  return res.data
+}
+
+/** Omit `idl` to import the program's on-chain IDL; send `idl` for a manual (unverified) upload. */
 export async function uploadIDL(data: {
-  name: string
+  name?: string
   description?: string
   programId: string
-  idl: any
+  idl?: any
   cpiMd?: string
   isPublic?: boolean
 }) {

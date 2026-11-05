@@ -42,3 +42,11 @@ describe('search hides manual-IDL projects by default', () => {
     })
   }
 })
+
+describe('onlyManual filter ("Uploaded by user")', () => {
+  test('selects only manual-IDL projects', async () => {
+    const db = recordingDb()
+    await searchProjects(db, 'metaplex', 10, 0, undefined, { onlyManual: true })
+    expect(db.sqls.every((s: string) => s.includes(`NOT (${NOT_MANUAL_IDL_SQL})`))).toBe(true)
+  })
+})

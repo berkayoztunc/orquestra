@@ -102,7 +102,7 @@ export async function searchProjects(
   limit: number = 20,
   offset: number = 0,
   userId?: string,
-  filters?: { verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean }
+  filters?: { verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean; onlyManual?: boolean }
 ): Promise<{ results: SearchResult[]; total: number }> {
   const trimmed = searchQuery.trim()
 
@@ -110,7 +110,8 @@ export async function searchProjects(
   const filterParts: string[] = []
   if (filters?.verified) filterParts.push('p.is_verified = 1')
   if (filters?.has_ai_docs) filterParts.push('aa.short_description IS NOT NULL')
-  if (!filters?.includeManual) filterParts.push(NOT_MANUAL_IDL_SQL)
+  if (filters?.onlyManual) filterParts.push(`NOT (${NOT_MANUAL_IDL_SQL})`)
+  else if (!filters?.includeManual) filterParts.push(NOT_MANUAL_IDL_SQL)
   const filterSQL = filterParts.length > 0 ? ` AND ${filterParts.join(' AND ')}` : ''
 
   // Fast path: exact program_id lookup (base58 Solana address)
@@ -216,14 +217,15 @@ async function fallbackLikeSearch(
   limit: number,
   offset: number,
   userId?: string,
-  filters?: { verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean }
+  filters?: { verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean; onlyManual?: boolean }
 ): Promise<{ results: SearchResult[]; total: number }> {
   const searchTerm = `%${searchQuery.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')}%`
 
   const filterParts: string[] = []
   if (filters?.verified) filterParts.push('p.is_verified = 1')
   if (filters?.has_ai_docs) filterParts.push('aa.short_description IS NOT NULL')
-  if (!filters?.includeManual) filterParts.push(NOT_MANUAL_IDL_SQL)
+  if (filters?.onlyManual) filterParts.push(`NOT (${NOT_MANUAL_IDL_SQL})`)
+  else if (!filters?.includeManual) filterParts.push(NOT_MANUAL_IDL_SQL)
   const filterSQL = filterParts.length > 0 ? ` AND ${filterParts.join(' AND ')}` : ''
 
   const likeCondition = `(

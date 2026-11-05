@@ -279,7 +279,9 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
   const hasAiDocs = c.req.query('has_ai_docs') === '1'
   // Manually uploaded IDLs (no on-chain IDL) are hidden unless the caller passes secure=false.
   const hideManual = parseSecure(c.req.query('secure'))
-  const filters = { verified: verifiedOnly, has_ai_docs: hasAiDocs, includeManual: !hideManual }
+  // uploaded=user → ONLY manually uploaded (no on-chain IDL) projects; implies they are shown.
+  const onlyManual = c.req.query('uploaded') === 'user'
+  const filters = { verified: verifiedOnly, has_ai_docs: hasAiDocs, includeManual: !hideManual, onlyManual }
 
   try {
     const db = c.env.DB
@@ -317,7 +319,8 @@ app.get('/projects', optionalAuthMiddleware, async (c) => {
       }
       if (verifiedOnly) whereParts.push('p.is_verified = 1')
       if (hasAiDocs) whereParts.push('aa.short_description IS NOT NULL')
-      if (hideManual) whereParts.push(NOT_MANUAL_IDL_SQL)
+      if (onlyManual) whereParts.push(`NOT (${NOT_MANUAL_IDL_SQL})`)
+      else if (hideManual) whereParts.push(NOT_MANUAL_IDL_SQL)
 
       const whereClause = `WHERE ${whereParts.join(' AND ')}`
 

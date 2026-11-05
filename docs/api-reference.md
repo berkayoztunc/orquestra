@@ -111,6 +111,8 @@ Projects whose latest IDL is a **manual upload** (no on-chain IDL) are treated a
 | `GET /sitemap` / program discovery lists | excluded | not applicable |
 | MCP `search_programs`, `build_instruction`, `simulate_instruction` | hidden / blocked | allowed, with the manual-IDL warning |
 
+`GET /api/projects?uploaded=user` returns **only** manually uploaded projects (it implies `secure=false`); the Explorer's "Uploaded by user" filter uses it.
+
 On `GET` routes pass it as a query parameter (`?secure=false`); on the build endpoint as `?secure=false` or `"secure": false` in the
 JSON body. Do this only when the user explicitly asked for that program and trusts its uploader — a manual IDL is only the
 uploader's claim about what the program does, and anyone can upload one for a program ID they do not control.

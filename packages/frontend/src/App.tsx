@@ -18,6 +18,7 @@ import Packages from '@/pages/Packages'
 import FlowEngine from '@/pages/FlowEngine'
 import Analytics from '@/pages/Analytics'
 import Lists from '@/pages/Lists'
+import ListsDocs from '@/pages/ListsDocs'
 import Updates from '@/pages/Updates'
 import Sync from '@/pages/Sync'
 import { ToastProvider } from '@/components/Toast'
@@ -55,6 +56,7 @@ function App(): JSX.Element {
             <Route path="/docs/api" element={<API />} />
             <Route path="/docs/packages" element={<Packages />} />
             <Route path="/docs/flow-engine" element={<FlowEngine />} />
+            <Route path="/docs/lists" element={<ListsDocs />} />
           </Route>
         </Routes>
       </Router>

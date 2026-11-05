@@ -5,10 +5,13 @@ import {
   EyeOff,
   FileJson,
   Loader2,
+  AlertTriangle,
+  Copy,
+  Search,
   ShieldCheck,
   UploadCloud,
 } from 'lucide-react'
-import { uploadIDL } from '../api/client'
+import { checkProgram, uploadIDL, type ProgramCheck } from '../api/client'
 import { useToast } from '../components/Toast'
 import idlGreenprint from '../assets/idl-greenprint.svg'
 
@@ -26,6 +29,9 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
   const [cpiMd, setCpiMd] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [check, setCheck] = useState<ProgramCheck | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [showManual, setShowManual] = useState(false)
   const { showToast } = useToast()
 
   const uploadBenefits = [
@@ -60,13 +66,52 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
     reader.readAsText(file)
   }
 
+  const idPlaceholder = programId.trim() || '<PROGRAM_ID>'
+  const cmdPmp = `npx @solana-program/program-metadata@latest write idl ${idPlaceholder} ./idl.json`
+  const cmdAnchor = `anchor idl init -f target/idl/<program>.json ${idPlaceholder} --provider.cluster mainnet`
+  const onChain = check?.status === 'found'
+  const noOnChain = check !== null && check.status !== 'found'
+  const manualMode = noOnChain && showManual
+
+  const resetCheck = () => {
+    setCheck(null)
+    setShowManual(false)
+    setIdlJson(null)
+    setIdlFileName('')
+  }
+
+  const handleCheck = async () => {
+    const id = programId.trim()
+    if (!id) {
+      setFieldErrors((prev) => ({ ...prev, programId: 'Program ID is required' }))
+      return
+    }
+    setChecking(true)
+    try {
+      const result = await checkProgram(id)
+      setCheck(result)
+      if (result.status === 'found' && result.name && !name) setName(result.name)
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Could not check the program on-chain', 'error')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const copy = (text: string) => {
+    navigator.clipboard?.writeText(text).then(
+      () => showToast('Copied', 'success'),
+      () => showToast('Copy failed', 'error'),
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     const newErrors: Record<string, string> = {}
     if (!name.trim()) newErrors.name = 'Project name is required'
     if (!programId.trim()) newErrors.programId = 'Program ID is required'
-    if (!idlJson) newErrors.idl = 'Please upload an IDL file'
+    if (!onChain && !idlJson) newErrors.idl = 'Please upload an IDL file'
     setFieldErrors(newErrors)
     if (Object.keys(newErrors).length > 0) return
 
@@ -76,7 +121,8 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
         name: name.trim(),
         description: description.trim(),
         programId: programId.trim(),
-        idl: idlJson,
+        // On-chain import sends no IDL: the server reads the program's own IDL from the chain.
+        idl: onChain ? undefined : idlJson,
         cpiMd: cpiMd.trim() || undefined,
         isPublic,
       })
@@ -139,13 +185,112 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 <UploadCloud className="h-5 w-5 text-primary" aria-hidden="true" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-sand-1600">Upload Anchor IDL</h3>
-                <p className="text-sm text-sand-1100">Required fields are marked with an asterisk.</p>
+                <h3 className="text-xl font-bold text-sand-1600">Add a program</h3>
+                <p className="text-sm text-sand-1100">Start with the program address. On-chain IDLs are imported directly.</p>
               </div>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" aria-busy={isLoading}>
+            <div>
+              <label htmlFor="program-id" className="block text-sm text-sand-1400 mb-2">Program ID (Solana Address) *</label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="program-id"
+                  type="text"
+                  inputMode="text"
+                  value={programId}
+                  onChange={(e) => { setProgramId(e.target.value); resetCheck(); if (fieldErrors.programId) setFieldErrors(prev => ({ ...prev, programId: '' })) }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCheck() } }}
+                  placeholder="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={fieldErrors.programId ? 'true' : undefined}
+                  aria-describedby={fieldErrors.programId ? 'program-id-error' : 'program-id-help'}
+                  className={`input w-full font-mono text-sm ${fieldErrors.programId ? 'border-red-500/50' : ''}`}
+                />
+                <button
+                  type="button"
+                  onClick={handleCheck}
+                  disabled={checking}
+                  className="btn-primary flex min-h-10 flex-shrink-0 items-center justify-center gap-2 px-4 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {checking ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Search className="h-4 w-4" aria-hidden="true" />}
+                  {check ? 'Check again' : 'Check on-chain'}
+                </button>
+              </div>
+              <p id="program-id-help" className="mt-1.5 text-xs text-sand-1100">
+                Enter the deployed program address first. Orquestra looks for the program's own on-chain IDL (one lookup) and imports it when it exists.
+              </p>
+              {fieldErrors.programId && (
+                <p id="program-id-error" className="mt-1.5 text-xs text-red-400">{fieldErrors.programId}</p>
+              )}
+            </div>
+
+            {onChain && (
+              <div role="status" className="border border-primary/30 bg-primary/10 p-4 text-sm text-sand-1400">
+                <p className="flex items-center gap-2 font-semibold text-primary">
+                  <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                  On-chain IDL found ({check?.source}){typeof check?.instructionCount === 'number' ? ` · ${check.instructionCount} instructions` : ''}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-sand-1100">
+                  This program publishes its own IDL, so it is imported straight from the chain and verified. Manual upload is not available for it.
+                </p>
+                {check?.alreadyListed && (
+                  <p className="mt-2 text-xs text-yellow-300">
+                    A project already exists for this program: {check.alreadyListed.name}.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {noOnChain && (
+              <div role="alert" className="space-y-3 border border-yellow-500/40 bg-yellow-500/5 p-4 text-sm text-sand-1400">
+                <p className="flex items-center gap-2 font-semibold text-yellow-300">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  {check?.status === 'unreadable' ? 'An on-chain IDL account exists but could not be read.' : 'No on-chain IDL was found for this program.'}
+                </p>
+                <p className="text-xs leading-5 text-sand-1100">
+                  The recommended way is to publish the IDL on-chain (as the program's upgrade authority), then press "Check again". Choose one:
+                </p>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-xs text-sand-1100">
+                    <span>Program Metadata Program (works for Anchor and Codama IDLs)</span>
+                    <button type="button" onClick={() => copy(cmdPmp)} className="inline-flex items-center gap-1 hover:text-sand-1600"><Copy className="h-3 w-3" aria-hidden="true" />Copy</button>
+                  </div>
+                  <pre className="overflow-x-auto border border-border-low bg-sand-100 p-2 font-mono text-xs text-sand-1500">{cmdPmp}</pre>
+                </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-xs text-sand-1100">
+                    <span>Anchor CLI (run in your Anchor project, mainnet-beta)</span>
+                    <button type="button" onClick={() => copy(cmdAnchor)} className="inline-flex items-center gap-1 hover:text-sand-1600"><Copy className="h-3 w-3" aria-hidden="true" />Copy</button>
+                  </div>
+                  <pre className="overflow-x-auto border border-border-low bg-sand-100 p-2 font-mono text-xs text-sand-1500">{cmdAnchor}</pre>
+                </div>
+                {!showManual && (
+                  <p className="text-xs text-sand-1100">
+                    Cannot publish on-chain?{' '}
+                    <a
+                      href="#manual-upload"
+                      role="button"
+                      onClick={(e) => { e.preventDefault(); setShowManual(true) }}
+                      className="font-medium text-yellow-300 underline underline-offset-2 hover:text-yellow-200"
+                    >
+                      Upload manually instead
+                    </a>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {manualMode && (
+              <div id="manual-upload" role="alert" className="border-2 border-red-500/60 bg-red-500/10 p-4 text-xs leading-5 text-red-200">
+                <p className="text-sm font-bold uppercase text-red-300">Manual upload — unverified</p>
+                Manually uploaded IDLs are marked unverified, hidden from search and MCP by default, and rejected when the name is too similar to an existing project.
+              </div>
+            )}
+
+            {manualMode && (
             <div>
               <label htmlFor="idl-upload" className="block text-sm text-sand-1400 mb-2">IDL File *</label>
               <div className="relative">
@@ -190,7 +335,10 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 <p id="idl-upload-error" className="mt-1.5 text-xs text-red-400">{fieldErrors.idl}</p>
               )}
             </div>
+            )}
 
+            {(onChain || manualMode) && (
+              <>
             <div>
               <label htmlFor="project-name" className="block text-sm text-sand-1400 mb-2">Project Name *</label>
               <input
@@ -214,29 +362,6 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
             </div>
 
             <div>
-              <label htmlFor="program-id" className="block text-sm text-sand-1400 mb-2">Program ID (Solana Address) *</label>
-              <input
-                id="program-id"
-                type="text"
-                inputMode="text"
-                value={programId}
-                onChange={(e) => { setProgramId(e.target.value); if (fieldErrors.programId) setFieldErrors(prev => ({ ...prev, programId: '' })) }}
-                placeholder="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-                autoComplete="off"
-                spellCheck={false}
-                aria-invalid={fieldErrors.programId ? 'true' : undefined}
-                aria-describedby={fieldErrors.programId ? 'program-id-error' : 'program-id-help'}
-                className={`input w-full font-mono text-sm ${fieldErrors.programId ? 'border-red-500/50' : ''}`}
-              />
-              <p id="program-id-help" className="mt-1.5 text-xs text-sand-1100">
-                Use the deployed program address. This links generated endpoints and PDA helpers to the correct on-chain program.
-              </p>
-              {fieldErrors.programId && (
-                <p id="program-id-error" className="mt-1.5 text-xs text-red-400">{fieldErrors.programId}</p>
-              )}
-            </div>
-
-            <div>
               <label htmlFor="project-description" className="block text-sm text-sand-1400 mb-2">Description</label>
               <textarea
                 id="project-description"
@@ -251,6 +376,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
               </p>
             </div>
 
+            {manualMode && (
             <div>
               <label htmlFor="cpi-docs" className="block text-sm text-sand-1400 mb-2">CPI Documentation (optional)</label>
               <textarea
@@ -266,6 +392,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                 Add Markdown for account constraints, seed derivation, signer expectations, or instruction ordering.
               </p>
             </div>
+            )}
 
             <div className="flex items-center gap-4 border border-border-low bg-bg1 p-4">
               <label htmlFor="project-visibility" className="relative inline-flex min-h-10 cursor-pointer items-center">
@@ -302,7 +429,7 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || checking}
               className="btn-primary flex min-h-12 w-full items-center justify-center gap-2 py-3.5 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
             >
               {isLoading ? (
@@ -311,9 +438,11 @@ export default function IDLUpload({ onSuccess }: IDLUploadProps): JSX.Element {
                   Creating Project...
                 </>
               ) : (
-                'Upload & Create Project'
+                onChain ? 'Import from chain & create project' : 'Upload manually & create project'
               )}
             </button>
+              </>
+            )}
           </form>
         </div>
       </div>

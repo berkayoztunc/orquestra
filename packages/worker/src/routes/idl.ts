@@ -14,7 +14,8 @@ import { generateId } from '../utils/id'
 import { getVisibleProject } from '../services/project-visibility'
 import { aiBackgroundDisabled } from '../utils/ai-flags'
 import { buildMainnetRpcUrlList } from '../utils/solana-rpc'
-import { resolveIdlAgainstChain } from '../services/onchain-idl-check'
+import { resolveIdlAgainstChain, checkOnChainIdl, type OnChainIdlCheck } from '../services/onchain-idl-check'
+import { findSimilarName, idlOwnName } from '../services/name-similarity'
 import { idlProvenance } from '../services/idl-provenance'
 import { PublicKey } from '@solana/web3.js'
 
@@ -59,26 +60,86 @@ function isValidProgramId(value: unknown): value is string {
 
 const app = new Hono<Env>()
 
+// One-shot on-chain lookup for the upload flow: does this program already publish its own IDL?
+// If so the client hides the manual upload and offers a chain import instead.
+app.post('/check-program', uploadRateLimit, authMiddleware, async (c) => {
+  try {
+    const body = await c.req.json<{ programId?: string }>()
+    if (!isValidProgramId(body.programId)) {
+      return c.json({ error: 'programId must be a valid base58 Solana program address (32 bytes)' }, 400)
+    }
+    const programId = body.programId
+    const check = await checkOnChainIdl(programId, buildMainnetRpcUrlList(c.env))
+    if (check.status === 'error') {
+      return c.json({ error: `Could not check the chain for an IDL (${check.message}). Please retry shortly.`, code: 'ONCHAIN_IDL_CHECK_FAILED' }, 503)
+    }
+    const existing = (await c.env?.DB
+      ?.prepare('SELECT id, name FROM projects WHERE program_id = ? LIMIT 1')
+      .bind(programId)
+      .first()) as { id: string; name: string } | null | undefined
+    const listed = existing ? { projectId: existing.id, name: existing.name } : null
+
+    if (check.status === 'found') {
+      const ixCount = Array.isArray(check.idl?.instructions) ? check.idl.instructions.length : (check.idl?.program?.instructions?.length ?? 0)
+      return c.json({
+        programId,
+        status: 'found',
+        source: check.source,
+        name: idlOwnName(check.idl),
+        instructionCount: ixCount,
+        alreadyListed: listed,
+      })
+    }
+    return c.json({ programId, status: check.status, alreadyListed: listed })
+  } catch (err) {
+    console.error('Check program error:', err)
+    return c.json({ error: 'Failed to check program' }, 500)
+  }
+})
+
 // Upload IDL - Creates a new project with IDL
 app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
   const userId = c.get('userId') as string
 
   try {
     const body = await c.req.json<{
-      name: string
+      /** Optional when the IDL is imported from the chain (defaults to the IDL's own name). */
+      name?: string
       description?: string
       programId: string
-      idl: any
+      /** Omit to import the program's ON-CHAIN IDL; required for a manual upload. */
+      idl?: any
       cpiMd?: string
       isPublic?: boolean
     }>()
 
     // Validate required fields
-    if (!body.name || !body.programId || !body.idl) {
-      return c.json({ error: 'Missing required fields: name, programId, idl' }, 400)
+    if (!body.programId) {
+      return c.json({ error: 'Missing required field: programId' }, 400)
     }
     if (!isValidProgramId(body.programId)) {
       return c.json({ error: 'programId must be a valid base58 Solana program address (32 bytes)' }, 400)
+    }
+
+    // One on-chain lookup per upload: reused below so the chain is asked only once.
+    let chainCheck: OnChainIdlCheck | null = null
+    if (!body.idl) {
+      // Chain-import mode: no IDL file was sent, so the program's own on-chain IDL is the source.
+      chainCheck = await checkOnChainIdl(body.programId, buildMainnetRpcUrlList(c.env))
+      if (chainCheck.status === 'error') {
+        return c.json({ error: `Could not check the chain for an IDL (${chainCheck.message}). Please retry shortly.`, code: 'ONCHAIN_IDL_CHECK_FAILED' }, 503)
+      }
+      if (chainCheck.status !== 'found') {
+        return c.json({
+          error: 'No readable on-chain IDL exists for this program. Publish the IDL on-chain, or upload the IDL file manually (it will be marked unverified).',
+          code: 'ONCHAIN_IDL_NOT_FOUND',
+        }, 400)
+      }
+      body.idl = chainCheck.idl
+    }
+    if (!body.name?.trim()) body.name = idlOwnName(body.idl) ?? ''
+    if (!body.name) {
+      return c.json({ error: 'Missing required field: name' }, 400)
     }
 
     // Validate IDL size
@@ -124,11 +185,36 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
 
     // Program IDs are first-come-first-served, so an uploaded IDL is only the uploader's claim.
     // The chain's own IDL (if any) wins; otherwise this is stored as a MANUAL IDL and flagged as such.
-    const resolved = await resolveIdlAgainstChain(body.programId, body.idl, buildMainnetRpcUrlList(c.env))
+    const cached = chainCheck
+    const resolved = await resolveIdlAgainstChain(
+      body.programId,
+      body.idl,
+      buildMainnetRpcUrlList(c.env),
+      cached ? async () => cached : checkOnChainIdl,
+    )
     if (!resolved.ok) {
       return c.json({ error: resolved.message, code: 'ONCHAIN_IDL_CHECK_FAILED' }, 503)
     }
     const { idlSource, warnings: provenanceWarnings, onChain } = resolved.value
+
+    // Manual uploads only: refuse names that are the same as, or a near-copy of, another public
+    // project's name — the usual shape of an impersonation attempt on a well-known program.
+    if (idlSource === 'manual') {
+      const othersRes = await db
+        ?.prepare('SELECT id, name, program_id FROM projects WHERE is_public = 1 AND program_id <> ?')
+        .bind(body.programId)
+        .all()
+      const others = (othersRes?.results ?? []) as Array<{ id: string; name: string; program_id: string }>
+      const clash = findSimilarName([body.name, idlOwnName(body.idl) ?? ''], others)
+      if (clash) {
+        return c.json({
+          error: `This name is too similar to an existing project ("${clash.name}", program ${clash.program_id}). ` +
+            'Manual uploads cannot reuse or imitate another project\'s name. Rename the project, or publish the IDL on-chain.',
+          code: 'NAME_TOO_SIMILAR',
+          similarTo: { projectId: clash.id, name: clash.name, programId: clash.program_id },
+        }, 409)
+      }
+    }
     body.idl = resolved.value.idl
     idlStr = resolved.value.idlJson
     parsed = parseIDL(body.idl)
@@ -173,7 +259,7 @@ app.post('/upload', uploadRateLimit, authMiddleware, async (c) => {
               .first()
             if (!existing) {
               const result = await identifyProgram(c.env, {
-                name: body.name,
+                name: body.name as string,
                 description: body.description,
                 programId: body.programId,
                 instructions: extractInstructionNames(body.idl),

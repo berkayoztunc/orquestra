@@ -1,3 +1,4 @@
+import { NOT_MANUAL_IDL_SQL } from './idl-provenance'
 import type { D1Database, KVNamespace } from '@cloudflare/workers-types'
 import {
   expandInstructionArgs,
@@ -409,7 +410,7 @@ async function resolveProject(
 
   if (state.programId) {
     const row = await db
-      .prepare('SELECT id FROM projects WHERE program_id = ? AND is_public = 1 LIMIT 1')
+      .prepare(`SELECT p.id FROM projects p WHERE p.program_id = ? AND p.is_public = 1 AND ${NOT_MANUAL_IDL_SQL} LIMIT 1`)
       .bind(state.programId)
       .first<{ id: string }>()
     if (row?.id) {
@@ -540,7 +541,7 @@ async function resolveProjectReference(
     if (byProjectId) return byProjectId
 
     const row = await db
-      .prepare('SELECT id FROM projects WHERE program_id = ? AND is_public = 1 LIMIT 1')
+      .prepare(`SELECT p.id FROM projects p WHERE p.program_id = ? AND p.is_public = 1 AND ${NOT_MANUAL_IDL_SQL} LIMIT 1`)
       .bind(token)
       .first<{ id: string }>()
     if (row?.id) {
@@ -580,7 +581,7 @@ async function fetchProjectIDL(db: D1Database, kv: KVNamespace, projectId: strin
       `SELECT p.id, p.name, p.program_id, v.idl_json
        FROM projects p
        JOIN idl_versions v ON v.project_id = p.id
-       WHERE p.id = ? AND p.is_public = 1
+       WHERE p.id = ? AND p.is_public = 1 AND ${NOT_MANUAL_IDL_SQL}
        ORDER BY v.version DESC LIMIT 1`,
     )
     .bind(projectId)

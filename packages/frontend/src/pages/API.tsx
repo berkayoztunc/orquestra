@@ -7,7 +7,7 @@ export default function API(): JSX.Element {
     <DocsLayout
       title="Public API Reference"
       description="Query program metadata, inspect instruction schemas, derive PDAs, and build unsigned transaction payloads through the Orquestra API."
-      toc={['Workflow', 'Base URL', 'Discovery', 'Authentication', 'Endpoints', 'Network parameter', 'Example request', 'Transaction format', 'IDL provenance']}
+      toc={['Workflow', 'Base URL', 'Discovery', 'Authentication', 'Endpoints', 'Network parameter', 'Example request', 'Transaction format', 'IDL provenance', 'Manual-IDL projects (secure)']}
     >
       <MarkdownDoc content={content} />
     </DocsLayout>

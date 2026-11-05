@@ -7,7 +7,7 @@ export default function MCP(): JSX.Element {
     <DocsLayout
       title="MCP Server Integration Guide"
       description="Connect Orquestra to MCP-capable assistants so agents can inspect Solana IDLs, derive PDAs, fetch accounts, and build unsigned transactions."
-      toc={['Workflow', 'Endpoint', 'Clients', 'Tools', 'Try this prompt', 'Scope Keys']}
+      toc={['Workflow', 'Endpoint', 'Clients', 'Tools', 'Manual-IDL programs (secure)', 'Try this prompt', 'Scope Keys']}
     >
       <MarkdownDoc content={content} />
     </DocsLayout>

@@ -74,6 +74,10 @@ export async function listProjects(params?: {
   sort?: 'active' | 'recent' | 'new'
   verified?: 1 | 0
   has_ai_docs?: 1 | 0
+  /** 'false' includes manually uploaded (no on-chain IDL) projects, which are hidden by default. */
+  secure?: 'false'
+  /** 'user' shows ONLY manually uploaded (no on-chain IDL) projects. */
+  uploaded?: 'user'
 }) {
   const res = await api.get('/projects', { params })
   return res.data

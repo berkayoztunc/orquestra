@@ -95,6 +95,21 @@ Every IDL served by Orquestra carries a `provenance` object (`origin`, `idlSourc
 
 When a program has an on-chain IDL, an upload or update is replaced by the on-chain IDL, and the response `warnings` list any differences. If the chain cannot be reached, uploads fail with `503 ONCHAIN_IDL_CHECK_FAILED` instead of guessing.
 
+## Manual-IDL projects (secure)
+
+Projects whose IDL was **uploaded manually** (no on-chain IDL) are unverified and may be malicious, so they are excluded by default. Pass `secure=false` to opt in explicitly. `secure` defaults to `true`; only an explicit `false` changes it.
+
+| Surface | Default | With `secure=false` |
+| --- | --- | --- |
+| `GET /api/projects` (browse and search) | Not listed | Listed, with a `provenance` notice |
+| `GET /api/projects/by-program/{programId}` | `404` (`MANUAL_IDL_HIDDEN`); the owner still sees it | Returned |
+| `POST /api/{projectId}/instructions/{name}/build` | `403` (`MANUAL_IDL_BLOCKED`); the owner may still build | Builds, response carries `provenance` |
+| MCP `search_programs`, `build_instruction`, `simulate_instruction` | Hidden / refused | Allowed, with the manual-IDL warning |
+
+`GET /api/projects?uploaded=user` returns only manually uploaded projects (it implies `secure=false`); the Explorer's "Uploaded by user" filter uses it.
+
+Use `?secure=false` on GET routes, and `?secure=false` or `"secure": false` in the build body. Only do this when the user explicitly asked for that program and trusts its uploader: a manual IDL is just the uploader's claim about what a program does, and anyone can upload one for a program ID they do not control. Reading a project directly by ID still works and always carries the warning.
+
 ## Which integration should I use?
 
 - **App backends** — use the REST API directly if you're wiring Orquestra into a dashboard, API layer, cron workflow, or custom signing service.

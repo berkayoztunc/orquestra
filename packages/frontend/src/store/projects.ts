@@ -69,7 +69,7 @@ interface ProjectsState {
     totalPages: number
   }
 
-  loadPublicProjects: (params?: { page?: number; search?: string; sort?: string; verified?: boolean; has_ai_docs?: boolean }) => Promise<void>
+  loadPublicProjects: (params?: { page?: number; search?: string; sort?: string; verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean }) => Promise<void>
   loadMyProjects: () => Promise<void>
   loadProject: (projectId: string) => Promise<void>
   loadProjectByProgramId: (programId: string) => Promise<void>
@@ -96,6 +96,7 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
         sort: (params as any)?.sort,
         verified: (params as any)?.verified ? 1 : undefined,
         has_ai_docs: (params as any)?.has_ai_docs ? 1 : undefined,
+        secure: (params as any)?.includeManual ? 'false' : undefined,
       })
       set({
         projects: data.projects,

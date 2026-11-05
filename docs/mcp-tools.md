@@ -102,9 +102,15 @@ Inputs:
 - `query` - optional text search
 - `programId` - optional exact base58 program ID
 - `limit` - 1 to 20, default 10
+- `secure` - boolean, default `true`. Set `false` to include manually uploaded (no on-chain IDL) programs, which are hidden by default
 
 Returns matching project IDs, names, program IDs, descriptions, and authors.
 
+> **Hidden by default (`secure`).** Programs whose IDL was uploaded manually (no on-chain IDL) are **not returned** by
+> `search_programs`, and `build_instruction` / `simulate_instruction` **refuse** them, unless the call passes `secure: false`.
+> Agents must only set `secure: false` when the user explicitly asked for that program and trusts the uploader. An exact
+> `programId` lookup that matches only a hidden program says so and tells the caller to pass `secure=false`.
+>
 > **Manually uploaded IDLs.** If a project's IDL was uploaded by its owner and no on-chain IDL exists for the program,
 > `list_instructions`, `build_instruction`, `simulate_instruction` and `read_llms_txt` start their output with a
 > "Manually uploaded IDL — no on-chain IDL" warning. Treat such an IDL's accounts and arguments as unverified and check
@@ -129,6 +135,7 @@ Build an unsigned Solana transaction for a project instruction.
 Inputs:
 
 - `projectId`
+- `secure` - default `true`; a project with a manually uploaded IDL (no on-chain IDL) is refused unless `secure: false`
 - `instruction`
 - `accounts`
 - `args`
@@ -161,6 +168,7 @@ Preflight an instruction without signing.
 Inputs:
 
 - `projectId`
+- `secure` - default `true`; a project with a manually uploaded IDL (no on-chain IDL) is refused unless `secure: false`
 - `instruction`
 - `accounts`
 - `args`

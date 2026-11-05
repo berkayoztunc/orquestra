@@ -86,9 +86,9 @@ These tools are read-oriented plus transaction building, live account fetching, 
 
 | Tool | Description |
 | --- | --- |
-| `search_programs` | Search public projects in Orquestra by keyword or by exact program ID. |
+| `search_programs` | Search public projects in Orquestra by keyword or by exact program ID. Manually uploaded IDLs (no on-chain IDL) are hidden unless `secure: false` is passed. |
 | `list_instructions` | List all instructions, args, and account metas for a project. |
-| `build_instruction` | Build and serialize a Solana instruction transaction. Legacy by default; optional `txVersion` (`legacy`, `v0`, `v1`) and `txConfig` (v1 only). Adds a warning when the project's IDL is a manual upload with no on-chain IDL. |
+| `build_instruction` | Build and serialize a Solana instruction transaction. Legacy by default; optional `txVersion` (`legacy`, `v0`, `v1`) and `txConfig` (v1 only). Refuses projects with a manually uploaded IDL (no on-chain IDL) unless `secure: false` is passed. |
 | `list_pda_accounts` | Show PDA-derivable accounts and seed schemas from the IDL. |
 | `derive_pda` | Derive a PDA with your provided seed values and return the bump. |
 | `read_llms_txt` | Read full AI-focused markdown docs for a selected project. Starts with a warning when the IDL is a manual upload with no on-chain IDL. |
@@ -97,6 +97,10 @@ These tools are read-oriented plus transaction building, live account fetching, 
 | `get_program_data` | Query `getProgramAccounts` for a project's program ID. Supports discriminator filters, `dataSize`, raw `memcmp`, fixed-field IDL filters, decoded results, Helius V2 pagination, and optional raw base64. |
 | `simulate_instruction` | Accepts the same optional `txVersion`/`txConfig`. Preflight an instruction against the RPC without signing. Returns success/failure, compute units, and a decoded Anchor error name when a custom program error is hit. Use before signing to catch mistakes early. |
 | `simulate_transaction` | Preflight a full transaction against the RPC without signing, for cases involving multiple instructions. |
+
+## Manual-IDL programs (secure)
+
+`search_programs`, `build_instruction` and `simulate_instruction` take a boolean `secure` (default `true`). While it is `true`, programs whose IDL was uploaded manually and has no on-chain IDL are **not returned and cannot be built**, because anyone can upload an IDL for a program ID they do not control. Set `secure: false` only when the user explicitly asks for such a program and trusts the uploader; results then carry a "Manually uploaded IDL — no on-chain IDL" warning.
 
 ## Try this prompt
 

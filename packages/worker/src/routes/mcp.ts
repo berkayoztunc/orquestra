@@ -46,7 +46,7 @@ import { incrementEvent, EVENT_TYPE, MCP_TOOL } from '../services/analytics'
 import { fetchIDL } from '../services/idl-fetch'
 import { PROGRAM_ACCOUNTS_SELECTOR_ERROR, hasProgramAccountsSelector } from '../services/validation'
 import { validateTxOptions, describeWireFormat } from '../services/tx-v1'
-import { provenanceBanner, latestIdlSource } from '../services/idl-provenance'
+import { provenanceBanner, latestIdlSource, NOT_MANUAL_IDL_SQL, parseSecure, SECURE_FALSE_HINT } from '../services/idl-provenance'
 
 // ── Env type (re-declared per project convention) ────────────────────────────
 
@@ -70,7 +70,16 @@ type Bindings = {
 
 // ── Tool input schemas (module scope — built once per isolate, not per request) ──
 
+const secureSchema = z
+  .boolean()
+  .default(true)
+  .describe(
+    'Default true: programs whose IDL was uploaded manually (no verified on-chain IDL) are hidden/blocked because they may be malicious. ' +
+      'Set false ONLY if the user explicitly asked for such a program and trusts the uploader.',
+  )
+
 const searchProgramsSchema = {
+  secure: secureSchema,
   query: z
     .string()
     .max(100)
@@ -119,6 +128,7 @@ const txConfigSchema = z
   .describe('OPTIONAL, only with txVersion "v1": message-config fields. Unset limits are measured automatically. Rejected for any other txVersion.')
 
 const buildInstructionSchema = {
+  secure: secureSchema,
   projectId: z.string().describe('The orquestra project ID'),
   instruction: z.string().describe('Instruction name (exact or camelCase/snake_case variant)'),
   accounts: z
@@ -165,6 +175,7 @@ const buildInstructionSchema = {
 }
 
 const simulateInstructionSchema = {
+  secure: secureSchema,
   projectId: z.string().describe('The orquestra project ID'),
   instruction: z.string().describe('Instruction name'),
   accounts: z.record(z.string()).describe('Map of account name → base58 public key'),
@@ -292,9 +303,12 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
     'search_programs',
     'Search the orquestra registry for Solana programs. Supply either a text query (matches name/description/category) or a Solana programId (base58 public key). Results are sorted by weekly active users descending — prefer programs near the top as they are more widely used and validated. Each result includes weeklyUsers, weeklyTxCount, and weeklyFeesSol (7-day Solana Compass data) so you can assess program activity before interacting.',
     searchProgramsSchema,
-    async ({ query, programId, limit }) => {
+    async ({ query, programId, limit, secure }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.search_programs })
+        const hideManual = parseSecure(secure)
+        const manualCond = hideManual ? ` AND ${NOT_MANUAL_IDL_SQL}` : ''
+        const searchFilters = { includeManual: !hideManual }
         const db = env.DB
         let results: any[] = []
 
@@ -324,13 +338,13 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
                FROM projects p LEFT JOIN users u ON p.user_id = u.id
                LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
                JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
-               WHERE p.program_id = ? AND p.is_public = 1
+               WHERE p.program_id = ? AND p.is_public = 1${manualCond}
                LIMIT 1`
             : `SELECT p.id, p.name, p.program_id, p.description, p.updated_at, u.username,
                       pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
                FROM projects p LEFT JOIN users u ON p.user_id = u.id
                LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-               WHERE p.program_id = ? AND p.is_public = 1
+               WHERE p.program_id = ? AND p.is_public = 1${manualCond}
                LIMIT 1`
           const row = scopeListId
             ? await db?.prepare(baseQuery).bind(scopeListId, programId).first()
@@ -339,7 +353,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
         } else if (query) {
           if (scopeListId) {
             // Scoped text search — filter FTS results by list membership; preserve metrics from FTS
-            const { results: searchResults } = await searchProjects(db, query, limit, 0)
+            const { results: searchResults } = await searchProjects(db, query, limit, 0, undefined, searchFilters)
             const projectIds = searchResults.map((r) => r.id)
             if (projectIds.length > 0) {
               const placeholders = projectIds.map(() => '?').join(',')
@@ -347,7 +361,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
                 ?.prepare(
                   `SELECT p.id FROM projects p
                    JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
-                   WHERE p.id IN (${placeholders}) AND p.is_public = 1`,
+                   WHERE p.id IN (${placeholders}) AND p.is_public = 1${manualCond}`,
                 )
                 .bind(scopeListId, ...projectIds)
                 .all()
@@ -362,7 +376,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             }
           } else {
             // Use FTS search for text queries
-            const { results: searchResults } = await searchProjects(db, query, limit, 0)
+            const { results: searchResults } = await searchProjects(db, query, limit, 0, undefined, searchFilters)
             results = searchResults.map((r) => ({
               id: r.id,
               name: r.name,
@@ -386,7 +400,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
                  FROM projects p LEFT JOIN users u ON p.user_id = u.id
                  LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
                  JOIN program_list_items pli ON pli.project_id = p.id AND pli.list_id = ?
-                 WHERE p.is_public = 1
+                 WHERE p.is_public = 1${manualCond}
                  ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, pli.added_at DESC
                  LIMIT ?`,
               )
@@ -401,7 +415,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
                         pm.unique_users_7d, pm.tx_count_7d, pm.fees_sol_7d
                  FROM projects p LEFT JOIN users u ON p.user_id = u.id
                  LEFT JOIN program_metrics pm ON p.program_id = pm.program_id
-                 WHERE p.is_public = 1
+                 WHERE p.is_public = 1${manualCond}
                  ORDER BY COALESCE(pm.unique_users_7d, 0) DESC, COALESCE(pm.tx_count_7d, 0) DESC, p.updated_at DESC
                  LIMIT ?`,
               )
@@ -412,7 +426,15 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
         }
 
         if (results.length === 0) {
-          return { content: [{ type: 'text', text: 'No programs found matching your query.' }] }
+          let hint = ''
+          if (hideManual && programId) {
+            const hidden = await db
+              ?.prepare(`SELECT 1 AS x FROM projects p WHERE p.program_id = ? AND p.is_public = 1 AND NOT (${NOT_MANUAL_IDL_SQL}) LIMIT 1`)
+              .bind(programId)
+              .first()
+            if (hidden) hint = `\n\n${SECURE_FALSE_HINT}`
+          }
+          return { content: [{ type: 'text', text: 'No programs found matching your query.' + hint }] }
         }
 
         const lines = results.map((r: any) => {
@@ -542,7 +564,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
     'build_instruction',
       'Build a serialized Solana transaction for a specific instruction. Returns a base58 legacy transaction string by default (pass `encoding: "base64"` for the modern Solana standard; pass the optional `txVersion` "v0" or "v1" for a versioned / Transaction v1 message). The result can be signed and submitted. Use list_instructions first to get the required accounts and args. IMPORTANT: For devnet/testnet you must set `network` (or pass `rpcUrl`) so the blockhash is fetched from the correct cluster — omitting both defaults to mainnet-beta and will embed a mainnet blockhash. If you omit `recentBlockhash`, the server fetches it via `network`/`rpcUrl`.',
     buildInstructionSchema,
-    async ({ projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate, encoding, txVersion, txConfig }) => {
+    async ({ secure, projectId, instruction, accounts, args, feePayer, recentBlockhash, network, rpcUrl, simulate, encoding, txVersion, txConfig }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.build_instruction, projectId })
         // Opt-in only: invalid combinations / the TX_V1_DISABLED kill switch fail fast with a clear message.
@@ -553,6 +575,9 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             isError: true,
             content: [{ type: 'text', text: `Project "${projectId}" not found or is private.` }],
           }
+        }
+        if (parseSecure(secure) && data.idlSource === 'manual') {
+          return { isError: true, content: [{ type: 'text', text: SECURE_FALSE_HINT }] }
         }
 
         const { rpcUrl: resolvedRpc, cluster } = resolveSolanaRpcUrl({
@@ -634,7 +659,7 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
     'simulate_instruction',
     'Preflight an instruction against the Solana RPC without signing. Builds the transaction internally (same as build_instruction), runs simulateTransaction with sigVerify=false, and returns success/failure, compute units, raw logs, and a decoded Anchor error (when the on-chain log matches the IDL `errors[]` table). Use this BEFORE asking the user to sign — it catches missing seeds, bad account states, and program-side guards without any wallet involvement.',
     simulateInstructionSchema,
-    async ({ projectId, instruction, accounts, args, feePayer, network, rpcUrl, txVersion, txConfig }) => {
+    async ({ secure, projectId, instruction, accounts, args, feePayer, network, rpcUrl, txVersion, txConfig }) => {
       try {
         incrementEvent(env.DB, ctx, { eventType: EVENT_TYPE.mcp, toolId: MCP_TOOL.simulate_instruction, projectId })
         const tx = validateTxOptions({ txVersion, txConfig, env })
@@ -644,6 +669,9 @@ function createServer(env: Bindings, ctx: ExecutionContext, scopeKey?: string): 
             isError: true,
             content: [{ type: 'text', text: `Project "${projectId}" not found or is private.` }],
           }
+        }
+        if (parseSecure(secure) && data.idlSource === 'manual') {
+          return { isError: true, content: [{ type: 'text', text: SECURE_FALSE_HINT }] }
         }
 
         const { rpcUrl: resolvedRpc, cluster } = resolveSolanaRpcUrl({

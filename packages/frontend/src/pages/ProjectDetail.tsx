@@ -650,11 +650,19 @@ export default function ProjectDetail(): JSX.Element {
 
                 {selectedProject.provenance?.notice && (
                   <div
-                    role="note"
-                    className="mt-4 max-w-3xl border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 text-xs leading-5 text-yellow-300"
+                    role="alert"
+                    className="mt-4 max-w-3xl border-2 border-red-500/70 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200"
                   >
-                    <span className="font-semibold">Manually uploaded IDL — no on-chain IDL.</span>{' '}
-                    {selectedProject.provenance.notice}
+                    <p className="flex items-center gap-2 text-base font-bold uppercase tracking-wide text-red-300">
+                      <span aria-hidden="true">⚠</span> Unverified — manually uploaded IDL
+                    </p>
+                    <p className="mt-1 font-semibold text-red-100">
+                      No on-chain IDL exists for this program. Do not sign transactions built from it unless you trust the uploader.
+                    </p>
+                    <p className="mt-1 text-xs text-red-200/90">{selectedProject.provenance.notice}</p>
+                    <p className="mt-1 text-xs text-red-200/90">
+                      Hidden from search and MCP by default; API and MCP callers must pass <code className="font-mono">secure=false</code> to use it.
+                    </p>
                   </div>
                 )}
               </div>

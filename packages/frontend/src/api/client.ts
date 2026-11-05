@@ -74,6 +74,8 @@ export async function listProjects(params?: {
   sort?: 'active' | 'recent' | 'new'
   verified?: 1 | 0
   has_ai_docs?: 1 | 0
+  /** 'false' includes manually uploaded (no on-chain IDL) projects, which are hidden by default. */
+  secure?: 'false'
 }) {
   const res = await api.get('/projects', { params })
   return res.data

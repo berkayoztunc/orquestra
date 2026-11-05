@@ -104,3 +104,28 @@ export async function latestIdlSource(
     .first<{ idl_source: string | null }>()
   return row?.idl_source ?? null
 }
+
+// ─── Default visibility of manual-IDL projects ───────────────────────────────
+
+/**
+ * SQL predicate (alias `p` = projects) that is true unless the project's LATEST IDL version is a
+ * manual upload. Used to keep manually uploaded IDLs out of search, lists, sitemaps and MCP by
+ * default; callers opt in with `secure=false`.
+ */
+export const NOT_MANUAL_IDL_SQL =
+  `NOT EXISTS (SELECT 1 FROM idl_versions mv WHERE mv.project_id = p.id AND mv.idl_source = 'manual' ` +
+  `AND mv.version = (SELECT MAX(version) FROM idl_versions mx WHERE mx.project_id = p.id))`
+
+/**
+ * Parses the `secure` flag. Default (undefined/anything else) is `true` = hide manual-IDL projects.
+ * Only an explicit `false` / `"false"` / `"0"` opts in to seeing them.
+ */
+export function parseSecure(value: unknown): boolean {
+  if (value === false) return false
+  if (typeof value === 'string' && ['false', '0', 'no'].includes(value.trim().toLowerCase())) return false
+  return true
+}
+
+export const SECURE_FALSE_HINT =
+  'This program\'s IDL was uploaded manually and no on-chain IDL exists, so it is hidden by default. ' +
+  'Pass secure=false to include it, and only if you trust the uploader.'

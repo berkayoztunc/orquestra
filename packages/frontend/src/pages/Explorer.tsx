@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Search, X, ShieldCheck, BookOpen } from 'lucide-react'
+import { Search, X, ShieldCheck, BookOpen, AlertTriangle } from 'lucide-react'
 import { useProjectsStore } from '../store/projects'
 import ProjectCard from '../components/ProjectCard'
 
@@ -17,21 +17,23 @@ export default function Explorer(): JSX.Element {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortValue>('active')
   const [verified, setVerified] = useState(false)
+  const [includeManual, setIncludeManual] = useState(false)
   const [hasAiDocs, setHasAiDocs] = useState(false)
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   const reload = useCallback(
-    (overrides?: { search?: string; sort?: SortValue; verified?: boolean; has_ai_docs?: boolean; page?: number }) => {
+    (overrides?: { search?: string; sort?: SortValue; verified?: boolean; has_ai_docs?: boolean; includeManual?: boolean; page?: number }) => {
       loadPublicProjects({
         page: 1,
         search,
         sort,
         verified,
         has_ai_docs: hasAiDocs,
+        includeManual,
         ...overrides,
       })
     },
-    [search, sort, verified, hasAiDocs, loadPublicProjects],
+    [search, sort, verified, hasAiDocs, includeManual, loadPublicProjects],
   )
 
   // Initial load
@@ -64,7 +66,7 @@ export default function Explorer(): JSX.Element {
   }
 
   const handlePage = (page: number) => {
-    loadPublicProjects({ page, search, sort, verified, has_ai_docs: hasAiDocs })
+    loadPublicProjects({ page, search, sort, verified, has_ai_docs: hasAiDocs, includeManual })
   }
 
   const activeFilters = (verified ? 1 : 0) + (hasAiDocs ? 1 : 0)
@@ -147,6 +149,24 @@ export default function Explorer(): JSX.Element {
         >
           <BookOpen className="w-3.5 h-3.5" />
           Has AI Docs
+        </button>
+
+        {/* Unsafe: manually uploaded IDLs (no on-chain IDL) are hidden by default */}
+        <button
+          onClick={() => {
+            const next = !includeManual
+            setIncludeManual(next)
+            reload({ includeManual: next, page: 1 })
+          }}
+          title="Show programs whose IDL was uploaded manually (no on-chain IDL). They are unverified and may be malicious."
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border transition-colors ${
+            includeManual
+              ? 'border-red-700 bg-red-950/40 text-red-300'
+              : 'border-border-low text-sand-1000 hover:border-border-medium hover:text-sand-1600'
+          }`}
+        >
+          <AlertTriangle className="w-3.5 h-3.5" />
+          {includeManual ? 'Showing unverified IDLs' : 'Show unverified IDLs'}
         </button>
 
         {/* Clear filters */}

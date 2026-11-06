@@ -584,8 +584,8 @@ export default function ProjectDetail(): JSX.Element {
             {/* Identity: icon, name + status badges, author, description */}
             <div className="flex items-start gap-4 sm:gap-5">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden border border-border-low bg-sand-50 text-2xl font-semibold text-sand-1600 sm:h-20 sm:w-20">
-                {selectedProject.icon_url ? (
-                  <img src={selectedProject.icon_url} alt={selectedProject.name} className="h-full w-full object-contain p-1.5" />
+                {selectedProject.icon_url || selectedProject.iconUrl ? (
+                  <img src={(selectedProject.icon_url || selectedProject.iconUrl) as string} alt={selectedProject.name} className="h-full w-full object-contain p-1.5" />
                 ) : selectedProject.avatar_url ? (
                   <img src={selectedProject.avatar_url} alt={selectedProject.username || selectedProject.name} className="h-full w-full object-cover" />
                 ) : (

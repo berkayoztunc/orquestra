@@ -19,6 +19,8 @@ interface Project {
   category?: string | null
   category_source?: string | null
   icon_url?: string | null
+  /** The detail endpoints (by-program, /:projectId) return the logo camelCased; list endpoints use icon_url. */
+  iconUrl?: string | null
   categoryTags?: string[]
   isVerifiedIdentity?: boolean
   /** Where the IDL came from. `notice` is set for manually uploaded IDLs (no on-chain IDL exists). */

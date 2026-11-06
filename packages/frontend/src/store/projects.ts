@@ -75,7 +75,7 @@ interface ProjectsState {
   loadMyProjects: () => Promise<void>
   loadProject: (projectId: string) => Promise<void>
   loadProjectByProgramId: (programId: string) => Promise<void>
-  loadUpdates: (params?: { page?: number; project_id?: string }) => Promise<void>
+  loadUpdates: (params?: { page?: number; limit?: number; project_id?: string }) => Promise<void>
   clearSelected: () => void
 }
 

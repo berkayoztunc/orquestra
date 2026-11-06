@@ -2,7 +2,7 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes } from 'react'
 import { cn } from './cn'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost'
-type ButtonSize = 'sm' | 'md' | 'lg'
+type ButtonSize = 'nav' | 'sm' | 'md' | 'lg'
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'border-sand-1600 bg-sand-1600 text-bg1 hover:bg-sand-1400 hover:border-sand-1400',
@@ -11,6 +11,8 @@ const variantClasses: Record<ButtonVariant, string> = {
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
+  // Header controls: same 36px height and text size as the nav links, so the whole bar lines up.
+  nav: 'h-9 px-3 text-sm',
   sm: 'min-h-9 px-3 py-1.5 text-xs',
   md: 'min-h-10 px-4 py-2 text-sm',
   lg: 'min-h-11 px-5 py-2.5 text-sm',

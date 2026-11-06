@@ -1,213 +1,415 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAnalyticsStore } from '@/store/analytics'
 import type { DailyApiEntry, DailyMcpEntry } from '@/api/client'
 import { Card } from '@/ui/Card'
 import { Button } from '@/ui/Button'
 
+// ─── Constants ───────────────────────────────────────────────────────────────
+
 const MCP_TOOL_NAMES: Record<number, string> = {
-  0: 'Search Programs',
-  1: 'List instructions',
-  2: 'Build instruction',
-  3: 'List PDA accounts',
-  4: 'Derive PDA',
-  5: 'Read LLMs TXT',
-  6: 'Get AI analysis',
-  7: 'Fetch PDA data',
-  8: 'Simulate instruction',
-  9: 'Get program data',
-  10: 'Simulate transaction',
-  11: 'Get flow schema',
-  12: 'Validate flow',
-  13: 'Simulate flow',
-  14: 'Publish flow',
-  15: 'List flows',
-  16: 'Get flow metadata',
-  17: 'Estimate flow',
+  0: 'search_programs',
+  1: 'list_instructions',
+  2: 'build_instruction',
+  3: 'list_pda_accounts',
+  4: 'derive_pda',
+  5: 'read_llms_txt',
+  6: 'get_ai_analysis',
+  7: 'fetch_pda_data',
+  8: 'simulate_instruction',
+  9: 'get_program_data',
+  10: 'simulate_transaction',
+  11: 'get_flow_schema',
+  12: 'validate_flow',
+  13: 'simulate_flow',
+  14: 'publish_flow',
+  15: 'list_flows',
+  16: 'get_flow_metadata',
+  17: 'estimate_flow',
 }
+const MAIN_TOOL_IDS = Array.from({ length: 11 }, (_, i) => i)
+const FLOW_TOOL_IDS = Array.from({ length: 7 }, (_, i) => i + 11)
 
-/** Cap on-screen rows so the page fits one viewport without scrolling. */
-const MAX_TOOL_ROWS = 6
+const COLORS = {
+  api: 'rgb(var(--rgb-sand-1600))',
+  mcp: '#b75000',
+} as const
 
-const skeletonHeights = [32, 58, 42, 74, 46, 88, 62, 38, 70, 52, 84, 45, 66, 92, 56, 76, 40, 64]
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-function formatDate(d: number): string {
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const nf = new Intl.NumberFormat('en-US')
+const fmt = (n: number): string => nf.format(Math.round(n))
+const compact = (n: number): string =>
+  new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+
+function intToDate(d: number): Date {
   const s = String(d)
-  const year = parseInt(s.slice(0, 4), 10)
-  const month = parseInt(s.slice(4, 6), 10) - 1
-  const day = parseInt(s.slice(6, 8), 10)
-  return new Date(year, month, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)))
 }
-
-function shortId(value: string): string {
-  return value.length > 14 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value
+function dateToInt(d: Date): number {
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate()
 }
+const longDate = (d: Date): string =>
+  d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
 function pct(n: number, total: number, decimals = 0): string {
   if (!total) return '0%'
-  const value = (n / total) * 100
-  return `${decimals ? value.toFixed(decimals) : Math.round(value)}%`
+  const v = (n / total) * 100
+  return `${decimals ? v.toFixed(decimals) : Math.round(v)}%`
 }
 
-const CHART_COLORS = {
-  primary: 'rgb(var(--rgb-sand-1600))',
-  secondary: 'rgb(var(--rgb-sand-1100))',
-} as const
-
-interface BarChartProps {
-  data: { label: string; value: number }[]
-  tone?: 'primary' | 'secondary'
-  height?: number
+function shortId(value: string): string {
+  return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value
 }
 
-function BarChart({ data, tone = 'primary', height = 64 }: BarChartProps) {
-  const color = CHART_COLORS[tone]
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; label: string; value: number } | null>(null)
+/** Sum of the last `n` values vs the `n` before them. */
+function trend(values: number[], n = 7): { current: number; previous: number; delta: number | null } {
+  const current = values.slice(-n).reduce((s, v) => s + v, 0)
+  const previous = values.slice(-2 * n, -n).reduce((s, v) => s + v, 0)
+  return { current, previous, delta: previous > 0 ? ((current - previous) / previous) * 100 : null }
+}
 
-  if (data.length === 0) {
-    return <EmptyState title="No chart data yet" desc="Requests appear here after API or MCP traffic arrives." />
-  }
+// ─── Small UI pieces ─────────────────────────────────────────────────────────
 
-  const max = Math.max(...data.map((d) => d.value), 1)
-  const barWidth = 100 / data.length
-  const labelStep = Math.max(1, Math.ceil(data.length / 7))
-
+function SectionLabel({ children, right }: { children: ReactNode; right?: ReactNode }): JSX.Element {
   return (
-    <div className="relative select-none">
-      <svg
-        viewBox={`0 0 100 ${height}`}
-        preserveAspectRatio="none"
-        className="w-full overflow-visible"
-        style={{ height }}
-        onMouseLeave={() => setTooltip(null)}
-        role="img"
-        aria-label="Usage bar chart"
-      >
-        <defs>
-          <linearGradient id={`bar-${tone}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" style={{ stopColor: color, stopOpacity: 1 }} />
-            <stop offset="100%" style={{ stopColor: color, stopOpacity: 0.3 }} />
-          </linearGradient>
-        </defs>
-        {[0.25, 0.5, 0.75].map((line) => (
-          <line key={line} x1="0" x2="100" y1={height * line} y2={height * line} style={{ stroke: 'rgb(var(--rgb-border-low))' }} strokeWidth="0.5" />
-        ))}
-        {data.map((d, i) => {
-          const barH = Math.max(2, (d.value / max) * (height - 12))
-          const x = i * barWidth + barWidth * 0.18
-          const w = Math.max(1.2, barWidth * 0.64)
-          const y = height - barH - 6
-          return (
-            <rect
-              key={`${d.label}-${i}`}
-              x={x}
-              y={y}
-              width={w}
-              height={barH}
-              rx="0"
-              fill={`url(#bar-${tone})`}
-              opacity={d.value === 0 ? 0.2 : 0.9}
-              className="cursor-pointer motion-safe:transition-opacity motion-safe:duration-150 hover:opacity-100"
-              onMouseEnter={(e) => {
-                const svg = (e.target as SVGRectElement).closest('svg')!
-                const rect = svg.getBoundingClientRect()
-                const cx = rect.left + (i + 0.5) * (rect.width / data.length)
-                const cy = rect.top + y * (rect.height / height)
-                setTooltip({ x: cx, y: cy, label: d.label, value: d.value })
-              }}
-            />
-          )
-        })}
-      </svg>
-
-      <div className="mt-1.5 flex">
-        {data.map((d, i) => (
-          <div key={`${d.label}-label`} className="overflow-hidden text-center text-[10px] text-sand-1100" style={{ width: `${barWidth}%` }}>
-            {i % labelStep === 0 ? d.label.split(' ')[1] : ''}
-          </div>
-        ))}
-      </div>
-
-      {tooltip && (
-        <div
-          className="fixed z-50 min-w-[132px] pointer-events-none border border-border-medium bg-bg1 px-3 py-2 text-xs shadow-lg"
-          style={{ left: tooltip.x - 66, top: tooltip.y - 54 }}
-        >
-          <p className="text-sand-1200">{tooltip.label}</p>
-          <p className="mt-0.5 font-bold text-sand-1600">{tooltip.value.toLocaleString()} requests</p>
-        </div>
-      )}
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <h2 className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">{children}</h2>
+      {right}
     </div>
   )
 }
 
-interface StatCardProps {
-  label: string
-  value: number | string
-  icon: ReactNode
-  isLoading?: boolean
-  hint?: string
-  size?: 'sm' | 'lg'
+function Delta({ value }: { value: number | null }): JSX.Element {
+  if (value === null) return <span className="font-mono text-[11px] text-sand-1000">new</span>
+  const up = value >= 0
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 font-mono text-[11px] font-semibold ${up ? 'text-emerald-600' : 'text-red-500'}`}
+      title="Last 7 days vs the 7 days before"
+    >
+      <span aria-hidden="true">{up ? '▲' : '▼'}</span>
+      {Math.abs(value).toFixed(value > 99 || value < -99 ? 0 : 1)}%
+    </span>
+  )
 }
 
-function StatCard({ label, value, icon, isLoading, hint, size = 'sm' }: StatCardProps) {
-  if (isLoading) {
+function Skeleton({ className = '' }: { className?: string }): JSX.Element {
+  return <div className={`bg-sand-200 motion-safe:animate-pulse ${className}`} />
+}
+
+function Sparkline({ data, color, height = 36 }: { data: number[]; color: string; height?: number }): JSX.Element {
+  if (data.length < 2) return <div style={{ height }} />
+  const max = Math.max(...data, 1)
+  const w = 100
+  const step = w / (data.length - 1)
+  const pts = data.map((v, i) => [i * step, height - 3 - (v / max) * (height - 8)] as const)
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ')
+  const area = `${line} L${w} ${height} L0 ${height} Z`
+  return (
+    <svg viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }} aria-hidden="true">
+      <path d={area} fill={color} opacity="0.12" />
+      <path d={line} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function KpiCard({
+  label,
+  value,
+  sub,
+  delta,
+  spark,
+  color,
+  hint,
+  loading,
+}: {
+  label: string
+  value: string
+  sub?: string
+  delta?: number | null
+  spark?: number[]
+  color?: string
+  hint?: string
+  loading?: boolean
+}): JSX.Element {
+  if (loading) {
     return (
-      <div className={`border border-border-low bg-bg1 ${size === 'lg' ? 'p-4' : 'p-3'}`}>
-        <div className={`bg-sand-200 motion-safe:animate-pulse ${size === 'lg' ? 'h-9 w-9' : 'h-8 w-8'}`} />
-        <div className="mt-3 h-2.5 w-20 bg-sand-200 motion-safe:animate-pulse" />
-        <div className={`mt-2 bg-sand-200 motion-safe:animate-pulse ${size === 'lg' ? 'h-8 w-24' : 'h-6 w-16'}`} />
+      <div className="border border-border-low bg-bg1 p-4">
+        <Skeleton className="h-2.5 w-24" />
+        <Skeleton className="mt-3 h-8 w-28" />
+        <Skeleton className="mt-4 h-8 w-full" />
       </div>
     )
   }
-
   return (
-    <div
-      className={`group overflow-hidden border border-border-low bg-bg1 motion-safe:transition-transform motion-safe:duration-150 motion-safe:ease-out motion-safe:hover:-translate-y-0.5 ${size === 'lg' ? 'p-4' : 'p-3'}`}
-    >
+    <div className="flex flex-col border border-border-low bg-bg1 p-4">
       <div className="flex items-start justify-between gap-2">
-        <div
-          className={`flex items-center justify-center border border-border-low bg-sand-100 text-sand-1500 ${size === 'lg' ? 'h-9 w-9' : 'h-8 w-8'}`}
-        >
-          {icon}
-        </div>
-        {hint && (
-          <span className="truncate border border-border-low bg-sand-100 px-1.5 py-0.5 text-[10px] text-sand-1200">
-            {hint}
-          </span>
-        )}
+        <p className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">{label}</p>
+        {delta !== undefined && <Delta value={delta} />}
       </div>
-      <p className="mt-3 truncate text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">{label}</p>
-      <p className={`mt-1 truncate font-black tracking-tight text-sand-1600 ${size === 'lg' ? 'text-3xl' : 'text-xl'}`}>
-        {typeof value === 'number' ? value.toLocaleString() : value}
-      </p>
+      <p className="mt-2 font-mono text-3xl font-semibold tracking-tight text-sand-1600">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-sand-1100">{sub}</p>}
+      {spark && color && (
+        <div className="mt-3">
+          <Sparkline data={spark} color={color} />
+        </div>
+      )}
+      {hint && !spark && <p className="mt-auto pt-3 text-[11px] text-sand-1000">{hint}</p>}
     </div>
   )
 }
 
-function EmptyState({ title, desc }: { title: string; desc: string }) {
+function EmptyState({ title, desc }: { title: string; desc: string }): JSX.Element {
   return (
-    <div className="flex min-h-20 flex-col items-center justify-center border border-dashed border-border-low bg-sand-50 px-4 py-4 text-center">
+    <div className="flex min-h-24 flex-col items-center justify-center border border-dashed border-border-low bg-sand-50 px-4 py-4 text-center">
       <p className="text-sm font-semibold text-sand-1600">{title}</p>
       <p className="mt-0.5 max-w-sm text-xs leading-5 text-sand-1200">{desc}</p>
     </div>
   )
 }
 
-function ChartSkeleton() {
+// ─── Charts ──────────────────────────────────────────────────────────────────
+
+interface Series {
+  name: string
+  color: string
+  data: number[]
+}
+
+/** Two-series area chart with a hover crosshair. API and MCP share one time axis. */
+function TrafficChart({ dates, series, height = 220 }: { dates: Date[]; series: Series[]; height?: number }): JSX.Element {
+  const [hover, setHover] = useState<number | null>(null)
+  // Draw in real pixels so axis text stays readable on phones instead of scaling down with the viewBox.
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [W, setW] = useState(640)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const update = () => setW(Math.max(280, Math.round(el.getBoundingClientRect().width)))
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const padL = 36
+  const padR = 8
+  const padT = 10
+  const padB = 22
+  const n = dates.length
+  if (n < 2) return <EmptyState title="No chart data yet" desc="Requests appear here after API or MCP traffic arrives." />
+
+  const max = Math.max(...series.flatMap((s) => s.data), 1)
+  const niceMax = Math.ceil(max / 10 ** Math.floor(Math.log10(max))) * 10 ** Math.floor(Math.log10(max))
+  const x = (i: number) => padL + (i / (n - 1)) * (W - padL - padR)
+  const y = (v: number) => padT + (1 - v / niceMax) * (height - padT - padB)
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * niceMax)
+  const labelStep = Math.max(1, Math.ceil(n / (W < 420 ? 4 : 7)))
+
+  const pathFor = (data: number[]) => data.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ')
+
   return (
-    <div className="border border-border-low bg-bg1 p-4">
-      <div className="h-4 w-40 bg-sand-200 motion-safe:animate-pulse" />
-      <div className="mt-4 flex h-16 items-end gap-1">
-        {skeletonHeights.map((height, i) => (
-          <div key={i} className="flex-1 bg-sand-200 motion-safe:animate-pulse" style={{ height: `${height}%` }} />
+    <div ref={wrapRef} className="relative select-none">
+      <svg
+        viewBox={`0 0 ${W} ${height}`}
+        width={W}
+        height={height}
+        className="block max-w-full"
+        role="img"
+        aria-label="Daily API requests and MCP tool calls"
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const rel = ((e.clientX - rect.left) / rect.width) * W
+          const idx = Math.round(((rel - padL) / (W - padL - padR)) * (n - 1))
+          setHover(Math.max(0, Math.min(n - 1, idx)))
+        }}
+      >
+        <defs>
+          {series.map((s, i) => (
+            <linearGradient key={s.name} id={`area-${i}`} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={s.color} stopOpacity="0.22" />
+              <stop offset="100%" stopColor={s.color} stopOpacity="0" />
+            </linearGradient>
+          ))}
+        </defs>
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="rgb(var(--rgb-border-low))" strokeWidth="1" />
+            <text x={padL - 6} y={y(t) + 3} textAnchor="end" fontSize="10" fill="rgb(var(--rgb-sand-1000))" fontFamily="monospace">
+              {compact(t)}
+            </text>
+          </g>
+        ))}
+        {dates.map((d, i) =>
+          i % labelStep === 0 ? (
+            <text key={i} x={x(i)} y={height - 6} textAnchor="middle" fontSize="10" fill="rgb(var(--rgb-sand-1000))" fontFamily="monospace">
+              {longDate(d)}
+            </text>
+          ) : null,
+        )}
+        {series.map((s, i) => (
+          <g key={s.name}>
+            <path d={`${pathFor(s.data)} L${x(n - 1)} ${y(0)} L${x(0)} ${y(0)} Z`} fill={`url(#area-${i})`} />
+            <path d={pathFor(s.data)} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+          </g>
+        ))}
+        {hover !== null && (
+          <g>
+            <line x1={x(hover)} x2={x(hover)} y1={padT} y2={height - padB} stroke="rgb(var(--rgb-sand-800))" strokeDasharray="3 3" />
+            {series.map((s) => (
+              <circle key={s.name} cx={x(hover)} cy={y(s.data[hover])} r="3.5" fill="rgb(var(--rgb-sand-50))" stroke={s.color} strokeWidth="2" />
+            ))}
+          </g>
+        )}
+      </svg>
+
+      {hover !== null && (
+        <div
+          className="pointer-events-none absolute top-2 z-10 min-w-[150px] border border-border-medium bg-bg1 px-3 py-2 text-xs shadow-lg"
+          style={{ left: `clamp(0px, calc(${(x(hover) / W) * 100}% - 75px), calc(100% - 156px))` }}
+        >
+          <p className="font-mono text-[11px] text-sand-1100">{longDate(dates[hover])}</p>
+          {series.map((s) => (
+            <p key={s.name} className="mt-1 flex items-center justify-between gap-4">
+              <span className="flex items-center gap-1.5 text-sand-1200">
+                <span className="inline-block size-2" style={{ background: s.color }} />
+                {s.name}
+              </span>
+              <span className="font-mono font-semibold text-sand-1600">{fmt(s.data[hover])}</span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** GitHub-style calendar of the last weeks of API traffic. */
+function ActivityCalendar({ dates, values }: { dates: Date[]; values: number[] }): JSX.Element {
+  if (dates.length === 0) return <EmptyState title="No activity yet" desc="Daily traffic will appear here." />
+  const max = Math.max(...values, 1)
+  const firstDow = dates[0].getUTCDay()
+  const cells: Array<{ date: Date; value: number } | null> = [
+    ...Array.from({ length: firstDow }, () => null),
+    ...dates.map((date, i) => ({ date, value: values[i] })),
+  ]
+  const weeks: Array<typeof cells> = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+
+  return (
+    <div className="flex gap-1.5">
+      <div className="flex flex-col justify-between py-0.5 pr-1 font-mono text-[9px] text-sand-1000">
+        {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((d, i) => (
+          <span key={i} className="h-4 leading-4">
+            {d}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-1 gap-1">
+        {weeks.map((week, wi) => (
+          <div key={wi} className="flex flex-1 flex-col gap-1">
+            {Array.from({ length: 7 }, (_, di) => {
+              const cell = week[di]
+              if (!cell) return <div key={di} className="h-4" />
+              const level = cell.value === 0 ? 0 : Math.max(1, Math.ceil((cell.value / max) * 4))
+              const opacity = [0, 0.18, 0.38, 0.62, 0.95][level]
+              return (
+                <div
+                  key={di}
+                  className="h-4 border border-border-low"
+                  style={{ background: level ? `rgb(var(--rgb-sand-1600) / ${opacity})` : undefined }}
+                  title={`${longDate(cell.date)} · ${fmt(cell.value)} requests`}
+                />
+              )
+            })}
+          </div>
         ))}
       </div>
     </div>
   )
 }
 
-function RefreshIcon() {
+function WeekdayBars({ avg }: { avg: number[] }): JSX.Element {
+  const max = Math.max(...avg, 1)
+  const best = avg.indexOf(Math.max(...avg))
+  return (
+    <div className="flex h-28 items-end gap-2">
+      {avg.map((v, i) => (
+        <div key={WEEKDAYS[i]} className="flex flex-1 flex-col items-center gap-1.5">
+          <span className="font-mono text-[10px] text-sand-1100">{compact(v)}</span>
+          <div className="flex h-16 w-full items-end">
+            <div
+              className="w-full bg-sand-1600 motion-safe:transition-[height] motion-safe:duration-300"
+              style={{ height: `${Math.max(4, (v / max) * 100)}%`, opacity: i === best ? 1 : 0.35 }}
+            />
+          </div>
+          <span className={`font-mono text-[10px] ${i === best ? 'font-bold text-sand-1600' : 'text-sand-1100'}`}>{WEEKDAYS[i]}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function FunnelRow({ label, value, total, note, strong }: { label: string; value: number; total: number; note?: string; strong?: boolean }): JSX.Element {
+  const width = total ? Math.max(1.5, (value / total) * 100) : 0
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
+        <span className={strong ? 'font-semibold text-sand-1600' : 'text-sand-1300'}>{label}</span>
+        <span className="font-mono text-sand-1200">
+          {fmt(value)} <span className="text-sand-1000">· {pct(value, total, value / (total || 1) < 0.01 ? 2 : 1)}</span>
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden bg-sand-200">
+        <div className="h-full bg-sand-1600 motion-safe:transition-[width] motion-safe:duration-500" style={{ width: `${width}%`, opacity: strong ? 1 : 0.55 }} />
+      </div>
+      {note && <p className="mt-1 text-[11px] text-sand-1000">{note}</p>}
+    </div>
+  )
+}
+
+function ToolList({ title, ids, counts, total }: { title: string; ids: number[]; counts: Map<number, number>; total: number }): JSX.Element {
+  const rows = ids.map((id) => ({ id, count: counts.get(id) ?? 0 })).sort((a, b) => b.count - a.count)
+  const max = Math.max(...rows.map((r) => r.count), 1)
+  return (
+    <div>
+      <p className="mb-2 flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
+        <span>{title}</span>
+        <span>{fmt(rows.reduce((s, r) => s + r.count, 0))} calls</span>
+      </p>
+      <ul className="space-y-1.5">
+        {rows.map((r) => (
+          <li key={r.id} className={r.count === 0 ? 'opacity-45' : ''}>
+            <div className="mb-0.5 flex items-center justify-between gap-3">
+              <code className="truncate font-mono text-xs text-sand-1500">{MCP_TOOL_NAMES[r.id] ?? `tool_${r.id}`}</code>
+              <span className="font-mono text-[11px] text-sand-1200">
+                {fmt(r.count)} <span className="text-sand-1000">· {pct(r.count, total)}</span>
+              </span>
+            </div>
+            <div className="h-1 overflow-hidden bg-sand-200">
+              <div className="h-full" style={{ width: `${(r.count / max) * 100}%`, background: COLORS.mcp }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function Insight({ label, value, sub }: { label: string; value: string; sub?: string }): JSX.Element {
+  return (
+    <div className="border border-border-low bg-sand-50 px-3 py-2.5">
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-sand-1000">{label}</p>
+      <p className="mt-1 truncate font-mono text-base font-semibold text-sand-1600">{value}</p>
+      {sub && <p className="mt-0.5 truncate text-[11px] text-sand-1100">{sub}</p>}
+    </div>
+  )
+}
+
+function RefreshIcon(): JSX.Element {
   return (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -215,367 +417,300 @@ function RefreshIcon() {
   )
 }
 
-export default function Analytics() {
-  const {
-    stats,
-    analytics,
-    isLoadingStats,
-    isLoadingAnalytics,
-    error,
-    loadStats,
-    loadAnalytics,
-  } = useAnalyticsStore()
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function Analytics(): JSX.Element {
+  const { stats, analytics, isLoadingStats, isLoadingAnalytics, error, loadStats, loadAnalytics } = useAnalyticsStore()
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
 
   useEffect(() => {
-    loadStats()
-    loadAnalytics()
+    Promise.all([loadStats(), loadAnalytics()]).then(() => setUpdatedAt(new Date()))
   }, [loadStats, loadAnalytics])
 
-  const dailyApiData: { label: string; value: number }[] = useMemo(
-    () => (analytics?.daily_api ?? []).map((d: DailyApiEntry) => ({ label: formatDate(d.date), value: d.total })),
-    [analytics?.daily_api],
-  )
-
-  const dailyMcpData = useMemo(() => {
-    const mcpByDate = new Map<number, number>()
-    for (const d of analytics?.daily_mcp ?? []) {
-      mcpByDate.set(d.date, (mcpByDate.get(d.date) ?? 0) + d.total)
+  // One continuous day axis (missing days = 0) shared by API and MCP.
+  const model = useMemo(() => {
+    if (!analytics) return null
+    const apiMap = new Map<number, number>(analytics.daily_api.map((d: DailyApiEntry) => [d.date, d.total]))
+    const mcpMap = new Map<number, number>()
+    const toolCounts = new Map<number, number>()
+    for (const d of analytics.daily_mcp as DailyMcpEntry[]) {
+      mcpMap.set(d.date, (mcpMap.get(d.date) ?? 0) + d.total)
+      toolCounts.set(d.tool_id, (toolCounts.get(d.tool_id) ?? 0) + d.total)
     }
-    return [...mcpByDate.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([date, total]) => ({ label: formatDate(date), value: total }))
-  }, [analytics?.daily_mcp])
+    const all = [...apiMap.keys(), ...mcpMap.keys()]
+    if (all.length === 0) return { dates: [] as Date[], api: [] as number[], mcp: [] as number[], toolCounts }
+    const start = intToDate(Math.min(...all))
+    const end = intToDate(Math.max(...all))
+    const dates: Date[] = []
+    for (let d = new Date(start); d <= end; d = new Date(d.getTime() + 86_400_000)) dates.push(new Date(d))
+    const api = dates.map((d) => apiMap.get(dateToInt(d)) ?? 0)
+    const mcp = dates.map((d) => mcpMap.get(dateToInt(d)) ?? 0)
+    return { dates, api, mcp, toolCounts }
+  }, [analytics])
 
-  const toolBreakdown = useMemo(() => {
-    const toolTotals = new Map<number, number>()
-    for (const d of analytics?.daily_mcp ?? []) {
-      toolTotals.set(d.tool_id, (toolTotals.get(d.tool_id) ?? 0) + d.total)
+  const derived = useMemo(() => {
+    if (!model || model.dates.length === 0) return null
+    const { dates, api, mcp, toolCounts } = model
+    const api30 = api.reduce((s, v) => s + v, 0)
+    const mcp30 = mcp.reduce((s, v) => s + v, 0)
+    const peakIdx = api.indexOf(Math.max(...api))
+    const activeDays = api.filter((v) => v > 0).length
+    const weekdaySums = Array(7).fill(0) as number[]
+    const weekdayCounts = Array(7).fill(0) as number[]
+    dates.forEach((d, i) => {
+      weekdaySums[d.getUTCDay()] += api[i]
+      weekdayCounts[d.getUTCDay()] += 1
+    })
+    const weekdayAvg = weekdaySums.map((s, i) => (weekdayCounts[i] ? s / weekdayCounts[i] : 0))
+    const toolTotal = [...toolCounts.values()].reduce((s, v) => s + v, 0)
+    const topTool = [...toolCounts.entries()].sort(([, a], [, b]) => b - a)[0]
+    const todayInt = dateToInt(new Date())
+    const todayIdx = dates.findIndex((d) => dateToInt(d) === todayInt)
+    return {
+      api30,
+      mcp30,
+      avgPerDay: api30 / dates.length,
+      peak: { date: dates[peakIdx], value: api[peakIdx] },
+      activeDays,
+      weekdayAvg,
+      weekdayBest: WEEKDAYS[weekdayAvg.indexOf(Math.max(...weekdayAvg))],
+      apiTrend: trend(api),
+      mcpTrend: trend(mcp),
+      mcpShare: api30 + mcp30 ? (mcp30 / (api30 + mcp30)) * 100 : 0,
+      toolTotal,
+      topTool,
+      activeTools: [...toolCounts.values()].filter((v) => v > 0).length,
+      todayApi: todayIdx >= 0 ? api[todayIdx] : 0,
+      todayMcp: todayIdx >= 0 ? mcp[todayIdx] : 0,
     }
-    return [...toolTotals.entries()].sort(([, a], [, b]) => b - a)
-  }, [analytics?.daily_mcp])
+  }, [model])
 
-  const totals = useMemo(() => {
-    const today = new Date()
-    const todayInt = today.getUTCFullYear() * 10000 + (today.getUTCMonth() + 1) * 100 + today.getUTCDate()
-    const api30d = dailyApiData.reduce((s, d) => s + d.value, 0)
-    const mcp30d = dailyMcpData.reduce((s, d) => s + d.value, 0)
-    const todayApi = analytics?.daily_api.find((d: DailyApiEntry) => d.date === todayInt)?.total ?? 0
-    const todayMcp = [...(analytics?.daily_mcp ?? [])]
-      .filter((d: DailyMcpEntry) => d.date === todayInt)
-      .reduce((s, d) => s + d.total, 0)
-    return { api30d, mcp30d, todayApi, todayMcp }
-  }, [analytics?.daily_api, analytics?.daily_mcp, dailyApiData, dailyMcpData])
-
-  const activeTools = toolBreakdown.filter(([, count]) => count > 0).length
-  const analyticsReady = !!analytics && !isLoadingAnalytics
+  const platform = analytics?.platform
+  const loading = isLoadingAnalytics && !analytics
+  const topTotal = analytics?.top_programs.reduce((s, p) => s + p.total, 0) ?? 0
 
   return (
-    <div className="space-y-3 px-6 py-6 sm:px-8 sm:py-8">
+    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-6 py-6 sm:px-8 sm:py-8">
+      {/* Header */}
       <section className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-3xl">
-          <h1 className="text-balance text-2xl font-semibold tracking-tight text-sand-1600 md:text-3xl">
-            Analytics for API and MCP agents
-          </h1>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-sand-1200 sm:text-sm">
-            Usage signals for Orquestra adoption: program traffic, API calls, and MCP tool demand.
+          <p className="mb-2 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">
+            <span className="relative flex size-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60 motion-safe:animate-ping" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+            </span>
+            Live · last 30 days
+          </p>
+          <h1 className="text-balance text-2xl font-semibold tracking-tight text-sand-1600 md:text-3xl">Analytics</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-sand-1200">
+            How apps and AI agents use Orquestra: API traffic, MCP tool demand, the programs people build against, and how much of Solana we cover.
           </p>
         </div>
-
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            loadStats()
-            loadAnalytics()
-          }}
-        >
-          <RefreshIcon />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {updatedAt && (
+            <span className="hidden font-mono text-[11px] text-sand-1000 sm:inline">
+              Updated {updatedAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              Promise.all([loadStats(), loadAnalytics()]).then(() => setUpdatedAt(new Date()))
+            }}
+          >
+            <RefreshIcon />
+            Refresh
+          </Button>
+        </div>
       </section>
 
       {error && (
-        <div className="border border-[#b75000]/20 bg-[#b75000]/5 p-3 text-sm">
-          <div className="flex items-start gap-3">
-            <svg className="mt-0.5 h-4 w-4 shrink-0 text-[#b75000]" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <p className="font-semibold text-[#b75000]">Analytics failed to load</p>
-              <p className="mt-1 text-[#b75000]/80">{error}</p>
+        <div className="border border-[#b75000]/20 bg-[#b75000]/5 p-3 text-sm" role="alert">
+          <p className="font-semibold text-[#b75000]">Analytics failed to load</p>
+          <p className="mt-1 text-[#b75000]/80">{error}</p>
+        </div>
+      )}
+
+      {/* KPI strip */}
+      <section aria-label="Key metrics" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="API requests · 30d"
+          value={derived ? compact(derived.api30) : '–'}
+          sub={derived ? `${fmt(derived.avgPerDay)} per day on average` : undefined}
+          delta={derived?.apiTrend.delta}
+          spark={model?.api}
+          color={COLORS.api}
+          loading={loading}
+        />
+        <KpiCard
+          label="MCP calls · 30d"
+          value={derived ? compact(derived.mcp30) : '–'}
+          sub={derived ? `${derived.activeTools} of 18 tools used` : undefined}
+          delta={derived?.mcpTrend.delta}
+          spark={model?.mcp}
+          color={COLORS.mcp}
+          loading={loading}
+        />
+        <KpiCard
+          label="Programs in catalog"
+          value={stats ? fmt(stats.total_projects) : '–'}
+          sub={platform ? `${fmt(platform.idl_versions_total)} IDL versions stored` : undefined}
+          hint="Public programs with an IDL"
+          loading={isLoadingStats && !stats}
+        />
+        <KpiCard
+          label="Users"
+          value={stats ? fmt(stats.total_users) : '–'}
+          sub={platform ? `${fmt(platform.workflow_runs_total)} workflow runs` : undefined}
+          hint="Signed in with GitHub"
+          loading={isLoadingStats && !stats}
+        />
+      </section>
+
+      {/* All-time totals: every counter in one place, full numbers */}
+      <section aria-label="All-time totals">
+        <SectionLabel right={<span className="font-mono text-[11px] text-sand-1000">since launch</span>}>Totals</SectionLabel>
+        <div className="grid grid-cols-2 gap-px overflow-hidden border border-border-low bg-border-low lg:grid-cols-5">
+          {(
+            [
+              { label: 'API requests', value: analytics?.totals_alltime.api, accent: COLORS.api },
+              { label: 'MCP calls', value: analytics?.totals_alltime.mcp, accent: COLORS.mcp },
+              {
+                label: 'All traffic',
+                value: analytics ? analytics.totals_alltime.api + analytics.totals_alltime.mcp : undefined,
+              },
+              { label: 'Users', value: stats?.total_users },
+              { label: 'Programs in catalog', value: stats?.total_projects },
+              { label: 'Programs scanned', value: platform?.total_programs },
+              { label: 'Programs with IDL', value: platform?.programs_with_idl },
+              { label: 'Verified builds', value: platform?.verified_programs },
+              { label: 'IDL versions', value: platform?.idl_versions_total },
+              { label: 'Workflow runs', value: platform?.workflow_runs_total },
+            ] as Array<{ label: string; value: number | undefined; accent?: string }>
+          ).map((t) => (
+            <div key={t.label} className="bg-bg1 px-4 py-3">
+              <p className="flex min-h-[2.2em] items-start gap-1.5 font-mono text-[10px] uppercase leading-[1.1] tracking-[0.12em] text-sand-1000">
+                {t.accent && <span className="mt-[0.2em] inline-block size-1.5 shrink-0" style={{ background: t.accent }} />}
+                <span>{t.label}</span>
+              </p>
+              {t.value === undefined ? (
+                <Skeleton className="mt-2 h-6 w-20" />
+              ) : (
+                <p className="mt-1 break-all font-mono text-lg font-semibold tabular-nums text-sand-1600 sm:text-xl" title={fmt(t.value)}>
+                  {fmt(t.value)}
+                </p>
+              )}
             </div>
-          </div>
+          ))}
         </div>
-      )}
+        {stats && (
+          <p className="mt-2 font-mono text-[11px] text-sand-1000">
+            + {fmt(stats.total_known_addresses)} known addresses annotated
+          </p>
+        )}
+      </section>
 
-      <div>
-        <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">Overview</p>
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard
-            size="lg"
-            label="Total users"
-            value={stats?.total_users ?? 0}
-            isLoading={isLoadingStats}
-            hint="public"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            size="lg"
-            label="Total programs"
-            value={stats?.total_projects ?? 0}
-            isLoading={isLoadingStats}
-            hint="catalog"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-            }
-          />
-          <StatCard
-            size="lg"
-            label="Workflow runs"
-            value={isLoadingAnalytics ? '-' : (analytics?.platform.workflow_runs_total ?? 0)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="total"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            }
-          />
-        </section>
-      </div>
-
-      <div>
-        <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">Data coverage</p>
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            label="Have IDL"
-            value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl ?? 0, analytics?.platform.total_programs ?? 0)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint={analytics ? `${analytics.platform.programs_with_idl}/${analytics.platform.total_programs}` : undefined}
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Verified"
-            value={isLoadingAnalytics ? '-' : pct(analytics?.platform.verified_programs ?? 0, analytics?.platform.total_programs ?? 0, 5)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint={analytics ? `${analytics.platform.verified_programs}/${analytics.platform.total_programs}` : undefined}
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="IDL + Verified"
-            value={isLoadingAnalytics ? '-' : pct(analytics?.platform.programs_with_idl_and_verified ?? 0, analytics?.platform.total_programs ?? 0, 5)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint={analytics ? `${analytics.platform.programs_with_idl_and_verified}/${analytics.platform.total_programs}` : undefined}
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Programs scanned"
-            value={isLoadingAnalytics ? '-' : (analytics?.platform.total_programs ?? 0)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="sync queue, all-time"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="IDL versions"
-            value={isLoadingAnalytics ? '-' : (analytics?.platform.idl_versions_total ?? 0)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="all versions"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Coverage gaps"
-            value={
-              isLoadingAnalytics
-                ? '-'
-                : Math.max((analytics?.platform.verified_programs ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0) +
-                  Math.max((analytics?.platform.programs_with_idl ?? 0) - (analytics?.platform.programs_with_idl_and_verified ?? 0), 0)
-            }
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="verified w/o IDL + IDL unverified"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-              </svg>
-            }
-          />
-        </section>
-      </div>
-
-      <div>
-        <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-sand-1100">Traffic</p>
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard
-            label="API today"
-            value={isLoadingAnalytics ? '-' : totals.todayApi}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="requests"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="MCP today"
-            value={isLoadingAnalytics ? '-' : totals.todayMcp}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint={`${activeTools} tools`}
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="API all-time"
-            value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.api ?? 0)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="since launch"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="MCP all-time"
-            value={isLoadingAnalytics ? '-' : (analytics?.totals_alltime.mcp ?? 0)}
-            isLoading={isLoadingAnalytics && !analytics}
-            hint="since launch"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            }
-          />
-        </section>
-      </div>
-
-      {isLoadingAnalytics && !analytics && (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <ChartSkeleton />
-          <ChartSkeleton />
-        </div>
-      )}
-
-      {analyticsReady && (
+      {derived && model && (
         <>
-          <section className="grid gap-3 xl:grid-cols-2">
-            <Card className="p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-bold text-sand-1600">Daily API requests</h2>
-                <span className="w-fit border border-border-low bg-sand-100 px-2 py-0.5 text-[11px] font-medium text-sand-1500">
-                  {totals.api30d.toLocaleString()} · 30d
-                </span>
-              </div>
-              <BarChart data={dailyApiData} tone="primary" height={88} />
+          {/* Traffic + today */}
+          <section className="grid gap-3 xl:grid-cols-[2fr_1fr]">
+            <Card className="p-4 sm:p-5">
+              <SectionLabel
+                right={
+                  <span className="flex items-center gap-4 font-mono text-[11px] text-sand-1200">
+                    <span className="flex items-center gap-1.5"><span className="inline-block size-2" style={{ background: COLORS.api }} />API</span>
+                    <span className="flex items-center gap-1.5"><span className="inline-block size-2" style={{ background: COLORS.mcp }} />MCP</span>
+                  </span>
+                }
+              >
+                Traffic
+              </SectionLabel>
+              <TrafficChart
+                dates={model.dates}
+                series={[
+                  { name: 'API requests', color: COLORS.api, data: model.api },
+                  { name: 'MCP calls', color: COLORS.mcp, data: model.mcp },
+                ]}
+              />
             </Card>
 
-            <Card className="p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-bold text-sand-1600">Daily MCP tool calls</h2>
-                <span className="w-fit border border-border-low bg-sand-100 px-2 py-0.5 text-[11px] font-medium text-sand-1500">
-                  {totals.mcp30d.toLocaleString()} · 30d
-                </span>
+            <Card className="p-4 sm:p-5">
+              <SectionLabel>Highlights</SectionLabel>
+              <div className="grid grid-cols-2 gap-2">
+                <Insight label="API today" value={fmt(derived.todayApi)} sub="requests" />
+                <Insight label="MCP today" value={fmt(derived.todayMcp)} sub="tool calls" />
+                <Insight label="Peak day" value={fmt(derived.peak.value)} sub={longDate(derived.peak.date)} />
+                <Insight label="Busiest weekday" value={derived.weekdayBest} sub="highest daily average" />
+                <Insight label="MCP share" value={`${derived.mcpShare.toFixed(1)}%`} sub="of all traffic" />
+                <Insight label="Active days" value={`${derived.activeDays}/${model.dates.length}`} sub="with API traffic" />
+                <Insight
+                  label="Top MCP tool"
+                  value={derived.topTool ? (MCP_TOOL_NAMES[derived.topTool[0]] ?? `tool_${derived.topTool[0]}`) : '–'}
+                  sub={derived.topTool ? `${pct(derived.topTool[1], derived.toolTotal)} of calls` : undefined}
+                />
+                <Insight label="All-time" value={compact((analytics?.totals_alltime.api ?? 0) + (analytics?.totals_alltime.mcp ?? 0))} sub={`${compact(analytics?.totals_alltime.api ?? 0)} API · ${compact(analytics?.totals_alltime.mcp ?? 0)} MCP`} />
               </div>
-              <BarChart data={dailyMcpData} tone="secondary" height={88} />
             </Card>
           </section>
 
-          <section className="grid gap-3 xl:grid-cols-[0.9fr_1.1fr]">
-            <Card className="p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-sm font-bold text-sand-1600">MCP tool breakdown</h2>
-                {toolBreakdown.length > MAX_TOOL_ROWS && (
-                  <span className="font-mono text-[11px] text-sand-1000">+{toolBreakdown.length - MAX_TOOL_ROWS} more</span>
-                )}
-              </div>
-
-              {toolBreakdown.length > 0 ? (
-                <div className="space-y-1.5">
-                  {toolBreakdown.slice(0, MAX_TOOL_ROWS).map(([toolId, count]) => {
-                    const maxCount = toolBreakdown[0][1]
-                    const pct = maxCount ? (count / maxCount) * 100 : 0
-                    return (
-                      <div key={toolId} className="border border-border-low bg-sand-50 p-2">
-                        <div className="mb-1 flex items-center justify-between gap-3">
-                          <code className="truncate font-mono text-xs text-sand-1500">{MCP_TOOL_NAMES[toolId] ?? `tool_${toolId}`}</code>
-                          <span className="font-mono text-xs text-sand-1200">{count.toLocaleString()}</span>
-                        </div>
-                        <div className="h-1 overflow-hidden bg-sand-200">
-                          <div className="h-full bg-sand-1600 motion-safe:transition-[width] motion-safe:duration-300" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <EmptyState title="No MCP calls yet" desc="Connect an AI agent through MCP to populate tool demand." />
-              )}
+          {/* Rhythm */}
+          <section className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
+            <Card className="p-4 sm:p-5">
+              <SectionLabel right={<span className="font-mono text-[11px] text-sand-1000">darker = busier</span>}>Daily activity</SectionLabel>
+              <ActivityCalendar dates={model.dates} values={model.api} />
             </Card>
+            <Card className="p-4 sm:p-5">
+              <SectionLabel right={<span className="font-mono text-[11px] text-sand-1000">avg API requests</span>}>By weekday</SectionLabel>
+              <WeekdayBars avg={derived.weekdayAvg} />
+            </Card>
+          </section>
+        </>
+      )}
 
-            <Card className="p-4">
-              <h2 className="mb-3 text-sm font-bold text-sand-1600">Top programs</h2>
+      {loading && (
+        <div className="grid gap-3 xl:grid-cols-[2fr_1fr]">
+          <div className="border border-border-low bg-bg1 p-5"><Skeleton className="h-4 w-32" /><Skeleton className="mt-4 h-52 w-full" /></div>
+          <div className="border border-border-low bg-bg1 p-5"><Skeleton className="h-4 w-24" /><Skeleton className="mt-4 h-52 w-full" /></div>
+        </div>
+      )}
 
+      {analytics && (
+        <>
+          {/* Programs + coverage */}
+          <section className="grid gap-3 xl:grid-cols-[1.3fr_1fr]">
+            <Card className="p-4 sm:p-5">
+              <SectionLabel right={<span className="font-mono text-[11px] text-sand-1000">API + MCP · all time</span>}>Top programs</SectionLabel>
               {analytics.top_programs.length > 0 ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border-low text-[10px] uppercase tracking-[0.14em] text-sand-1100">
-                        <th className="pb-1.5 text-left font-semibold">#</th>
-                        <th className="pb-1.5 text-left font-semibold">Program</th>
-                        <th className="hidden pb-1.5 text-left font-semibold md:table-cell">Program ID</th>
-                        <th className="pb-1.5 text-right font-semibold">Requests</th>
+                        <th className="pb-2 text-left font-semibold">#</th>
+                        <th className="pb-2 text-left font-semibold">Program</th>
+                        <th className="hidden pb-2 text-left font-semibold md:table-cell">Project ID</th>
+                        <th className="pb-2 text-right font-semibold">Share</th>
+                        <th className="pb-2 text-right font-semibold">Requests</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-low">
-                      {analytics.top_programs.map((program, i) => {
-                        const maxTotal = analytics.top_programs[0].total
-                        const pct = maxTotal ? (program.total / maxTotal) * 100 : 0
+                      {analytics.top_programs.map((p, i) => {
+                        const max = analytics.top_programs[0].total
                         return (
-                          <tr key={program.project_id} className="transition-colors duration-150 hover:bg-sand-50">
-                            <td className="py-1.5 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
-                            <td className="py-1.5 pr-4">
-                              <div className="min-w-[140px]">
-                                <p className="truncate text-sm font-semibold text-sand-1600">{program.name ?? program.project_id}</p>
-                                <div className="mt-1 h-1 max-w-[140px] overflow-hidden bg-sand-200">
-                                  <div className="h-full bg-sand-1600" style={{ width: `${pct}%` }} />
-                                </div>
+                          <tr key={p.project_id} className="transition-colors hover:bg-sand-50">
+                            <td className="py-2.5 pr-3 font-mono text-xs text-sand-1100">{i + 1}</td>
+                            <td className="py-2.5 pr-4">
+                              <p className="truncate text-sm font-semibold text-sand-1600">{p.name ?? p.project_id}</p>
+                              <div className="mt-1.5 h-1 max-w-[220px] overflow-hidden bg-sand-200">
+                                <div className="h-full bg-sand-1600" style={{ width: `${max ? (p.total / max) * 100 : 0}%` }} />
                               </div>
                             </td>
-                            <td className="hidden py-1.5 pr-4 md:table-cell">
-                              <span className="font-mono text-xs text-sand-1100">{shortId(program.project_id)}</span>
+                            <td className="hidden py-2.5 pr-4 md:table-cell">
+                              <span className="font-mono text-xs text-sand-1100">{shortId(p.project_id)}</span>
                             </td>
-                            <td className="py-1.5 text-right font-mono font-semibold tabular-nums text-sand-1600">
-                              {program.total.toLocaleString()}
-                            </td>
+                            <td className="py-2.5 pr-4 text-right font-mono text-xs text-sand-1200">{pct(p.total, topTotal)}</td>
+                            <td className="py-2.5 text-right font-mono font-semibold tabular-nums text-sand-1600">{fmt(p.total)}</td>
                           </tr>
                         )
                       })}
@@ -586,7 +721,45 @@ export default function Analytics() {
                 <EmptyState title="No program traffic yet" desc="Programs with API usage will rank here automatically." />
               )}
             </Card>
+
+            <Card className="p-4 sm:p-5">
+              <SectionLabel right={<span className="font-mono text-[11px] text-sand-1000">of {platform ? fmt(platform.total_programs) : '–'} scanned</span>}>Coverage funnel</SectionLabel>
+              {platform ? (
+                <div className="space-y-4">
+                  <FunnelRow label="Programs scanned" value={platform.total_programs} total={platform.total_programs} strong />
+                  <FunnelRow label="Verified builds" value={platform.verified_programs} total={platform.total_programs} />
+                  <FunnelRow label="With an IDL" value={platform.programs_with_idl} total={platform.total_programs} />
+                  <FunnelRow label="IDL + verified" value={platform.programs_with_idl_and_verified} total={platform.total_programs} strong />
+                  <div className="grid grid-cols-2 gap-2 border-t border-border-low pt-3">
+                    <Insight label="Catalog with IDL" value={fmt(platform.catalog_programs_with_idl)} sub="usable via API/MCP" />
+                    <Insight
+                      label="Coverage gaps"
+                      value={fmt(
+                        Math.max(platform.verified_programs - platform.programs_with_idl_and_verified, 0) +
+                          Math.max(platform.programs_with_idl - platform.programs_with_idl_and_verified, 0),
+                      )}
+                      sub="verified w/o IDL + IDL unverified"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <Skeleton className="h-52 w-full" />
+              )}
+            </Card>
           </section>
+
+          {/* MCP tools: all of them, grouped */}
+          <Card className="p-4 sm:p-5">
+            <SectionLabel right={derived ? <span className="font-mono text-[11px] text-sand-1000">{fmt(derived.toolTotal)} calls · 30d</span> : undefined}>MCP tool demand</SectionLabel>
+            {model && derived && derived.toolTotal > 0 ? (
+              <div className="grid gap-6 md:grid-cols-2">
+                <ToolList title="Orquestra MCP · 11 tools" ids={MAIN_TOOL_IDS} counts={model.toolCounts} total={derived.toolTotal} />
+                <ToolList title="Flow Engine MCP · 7 tools" ids={FLOW_TOOL_IDS} counts={model.toolCounts} total={derived.toolTotal} />
+              </div>
+            ) : (
+              <EmptyState title="No MCP calls yet" desc="Connect an AI agent through MCP to populate tool demand." />
+            )}
+          </Card>
         </>
       )}
     </div>

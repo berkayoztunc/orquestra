@@ -9,6 +9,32 @@ export interface VideoEntry {
   channel: string
 }
 
+/** A demo video that lives in an X post (nothing from X is loaded until the visitor opens the link). */
+export interface XVideoEntry {
+  url: string
+  title: string
+  author: string
+  handle: string
+  date: string
+  quote: string
+  /** Self-hosted copy of the post's video poster (served from /videos). */
+  thumb: string
+  duration: string
+}
+
+export const xVideos: XVideoEntry[] = [
+  {
+    url: 'https://x.com/SolPlay_jonas/status/2059976475877486808',
+    title: 'Claude bought me a drink',
+    author: 'Jonas Hahn',
+    handle: 'SolPlay_jonas',
+    date: 'May 28, 2026',
+    quote: 'Here the demo of how @claudeai bought me a drink',
+    thumb: '/videos/claude-bought-a-drink.jpg',
+    duration: '1:24',
+  },
+]
+
 export const videos: VideoEntry[] = [
   {
     id: 'aLuo-9if0TE',

@@ -22,24 +22,76 @@ const proofStats = [
   { value: '0', label: 'client SDKs required' },
 ]
 
-const workflow = [
+function Chip({ children, strong = false }: { children: React.ReactNode; strong?: boolean }): JSX.Element {
+  return (
+    <span
+      className={`inline-flex items-center border px-2 py-1 font-mono text-[11px] ${
+        strong ? 'border-sand-1500 bg-sand-1600 text-sand-50' : 'border-border-low bg-sand-50 text-sand-1400'
+      }`}
+    >
+      {children}
+    </span>
+  )
+}
+
+const workflow: Array<{
+  step: string
+  title: string
+  desc: string
+  icon: typeof FileText
+  detail: JSX.Element
+}> = [
   {
     step: '01',
-    title: 'Upload IDL',
-    desc: 'Anchor interfaces become indexed instructions, accounts, errors, PDAs, and typed args.',
+    title: 'Add a program',
+    desc: 'Enter a program ID. If it already publishes its IDL on-chain, Orquestra imports and verifies it. If not, we show how to publish it, or you can upload it as an unverified manual IDL.',
     icon: FileText,
+    detail: (
+      <div className="space-y-1.5 font-mono text-[11px] leading-5 text-sand-1400">
+        <p className="flex items-center justify-between gap-2 border border-border-low bg-sand-50 px-2 py-1.5">
+          <span className="text-sand-1100">program</span>
+          <span className="text-sand-1600">7xKp…9Qz</span>
+        </p>
+        <p className="flex items-center gap-1.5 text-sand-1600">
+          <span aria-hidden="true">✓</span> on-chain IDL found · verified
+        </p>
+        <p className="text-sand-1100">no on-chain IDL? publish it, or upload manually</p>
+      </div>
+    ),
   },
   {
     step: '02',
     title: 'Generate surfaces',
-    desc: 'Orquestra publishes REST endpoints, Markdown docs, MCP tools, and transaction builders.',
+    desc: 'Every instruction, account, error and PDA becomes REST endpoints, AI-ready docs, MCP tools and a transaction builder. Legacy by default, v0 or Transaction v1 when you ask.',
     icon: Braces,
+    detail: (
+      <div className="flex flex-wrap gap-1.5">
+        <Chip>REST</Chip>
+        <Chip>llms.txt</Chip>
+        <Chip>MCP</Chip>
+        <Chip>PDA</Chip>
+        <Chip strong>legacy · v0 · v1</Chip>
+      </div>
+    ),
   },
   {
     step: '03',
     title: 'Connect apps + agents',
-    desc: 'Backends, mobile apps, Claude, Cursor, and agents call Solana programs through HTTP.',
+    desc: 'Backends and mobile apps call HTTP. Claude, Cursor and other agents use MCP, scoped to the programs you choose. Orquestra builds the transaction; you sign it.',
     icon: Network,
+    detail: (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Chip>curl</Chip>
+          <Chip>Claude</Chip>
+          <Chip>Cursor</Chip>
+          <Chip>mobile</Chip>
+        </div>
+        <p className="border border-border-low bg-sand-50 px-2 py-1.5 font-mono text-[11px] text-sand-1400">
+          X-Scope-Key: <span className="text-sand-1100">sk_…</span>
+        </p>
+      </div>
+    ),
   },
 ]
 
@@ -379,6 +431,7 @@ export default function Home(): JSX.Element {
                     <h3 className="text-lg font-semibold text-sand-1600">{item.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-sand-1200">{item.desc}</p>
                   </div>
+                  <div className="mt-auto border-t border-border-low pt-4">{item.detail}</div>
                 </div>
               )
             })}

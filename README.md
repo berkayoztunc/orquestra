@@ -40,6 +40,27 @@ bun run dev
 - Known address notes and external API documentation for richer AI context
 - Cloudflare Workers, D1, and KV deployment
 
+## Videos
+
+Walkthroughs by [White Moon Dev](https://www.youtube.com/@whitemoondev):
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <a href="https://www.youtube.com/watch?v=aLuo-9if0TE"><img src="https://img.youtube.com/vi/aLuo-9if0TE/hqdefault.jpg" alt="Orquestra 101 - The Open Source API Layer for Solana Programs" /></a><br />
+      <a href="https://www.youtube.com/watch?v=aLuo-9if0TE">Orquestra 101 - The Open Source API Layer for Solana Programs</a>
+    </td>
+    <td width="33%" valign="top">
+      <a href="https://www.youtube.com/watch?v=SOlGJChz2o0"><img src="https://img.youtube.com/vi/SOlGJChz2o0/hqdefault.jpg" alt="3 Easy Ways to Upload Your Solana Program IDL (AI Ready in Minutes)" /></a><br />
+      <a href="https://www.youtube.com/watch?v=SOlGJChz2o0">3 Easy Ways to Upload Your Solana Program IDL (AI Ready in Minutes)</a>
+    </td>
+    <td width="33%" valign="top">
+      <a href="https://www.youtube.com/watch?v=z-wTwDII608"><img src="https://img.youtube.com/vi/z-wTwDII608/hqdefault.jpg" alt="This New Orquestra Feature Scans Solana Every Day" /></a><br />
+      <a href="https://www.youtube.com/watch?v=z-wTwDII608">This New Orquestra Feature Scans Solana Every Day</a>
+    </td>
+  </tr>
+</table>
+
 ## Add the MCP Server
 
 Orquestra exposes `search_programs`, `list_instructions`, `build_instruction`, `simulate_instruction`, `simulate_transaction`, `list_pda_accounts`, `derive_pda`, `read_llms_txt`, `get_ai_analysis`, `fetch_pda_data`, and `get_program_data` over Streamable HTTP MCP at `https://api.orquestra.dev/mcp`. Full tool reference: [docs/mcp-tools.md](./docs/mcp-tools.md) · [live docs](https://orquestra.dev/docs/mcp).
@@ -49,6 +70,8 @@ Orquestra exposes `search_programs`, `list_instructions`, `build_instruction`, `
 ```bash
 claude mcp add --transport http orquestra https://api.orquestra.dev/mcp
 ```
+
+**Grok (xAI API)** — pass Orquestra as a remote MCP tool (`"type": "mcp"`, `"server_url": "https://api.orquestra.dev/mcp"`) in a Responses API request. Full example: [live docs](https://orquestra.dev/docs/mcp).
 
 **Claude Desktop / Cursor / VS Code** — add to your MCP config file:
 

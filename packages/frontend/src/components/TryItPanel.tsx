@@ -5,6 +5,13 @@ import { listProjects, listInstructions, buildTransaction } from '../api/client'
 import CodeBlock from './CodeBlock'
 
 type Stage = 'idle' | 'fetching' | 'building' | 'done' | 'error'
+type TxFormat = 'legacy' | 'v0' | 'v1'
+
+const TX_FORMATS: Array<{ id: TxFormat; label: string; hint: string }> = [
+  { id: 'legacy', label: 'Legacy', hint: 'default · base58' },
+  { id: 'v0', label: 'v0', hint: 'versioned message' },
+  { id: 'v1', label: 'v1', hint: 'Transaction v1 · 4096 bytes · base64' },
+]
 
 interface Demo {
   projectId: string
@@ -45,12 +52,18 @@ function shortenBase58(s: string, take = 8): string {
   return `${s.slice(0, take)}…${s.slice(-take)}`
 }
 
-function buildCurl(demo: Demo): string {
-  const body = {
+/** `txVersion` is opt-in: omitted for legacy, so the default request is unchanged. */
+function requestBody(demo: Demo, txVersion: TxFormat) {
+  return {
     accounts: demo.accounts,
     args: demo.args,
     feePayer: demo.feePayer,
+    ...(txVersion === 'legacy' ? {} : { txVersion }),
   }
+}
+
+function buildCurl(demo: Demo, txVersion: TxFormat): string {
+  const body = requestBody(demo, txVersion)
   return `curl -X POST https://api.orquestra.dev/api/${demo.projectId}/instructions/${demo.instruction}/build \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(body, null, 2)}'`
@@ -62,11 +75,14 @@ export default function TryItPanel(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{
     transaction: string
+    wireFormat?: string
+    encoding?: string
     estimatedFee: number
     rpcUrlHost?: string
     network?: string
     accounts?: Array<{ name: string; pubkey: string; isSigner: boolean; isWritable: boolean }>
   } | null>(null)
+  const [txVersion, setTxVersion] = useState<TxFormat>('legacy')
   const [copied, setCopied] = useState<'curl' | 'tx' | null>(null)
   const [elapsedMs, setElapsedMs] = useState<number | null>(null)
   const [autoTriggered, setAutoTriggered] = useState(false)
@@ -138,7 +154,7 @@ export default function TryItPanel(): JSX.Element {
     return () => clearTimeout(timer)
   }, [demo, stage])
 
-  async function handleRun() {
+  async function handleRun(version: TxFormat = txVersion) {
     if (!demo) return
     setStage('building')
     setError(null)
@@ -146,15 +162,13 @@ export default function TryItPanel(): JSX.Element {
     setElapsedMs(null)
     const t0 = performance.now()
     try {
-      const data = await buildTransaction(demo.projectId, demo.instruction, {
-        accounts: demo.accounts,
-        args: demo.args,
-        feePayer: demo.feePayer,
-      })
+      const data = await buildTransaction(demo.projectId, demo.instruction, requestBody(demo, version))
       const t1 = performance.now()
       setElapsedMs(Math.round(t1 - t0))
       setResult({
         transaction: data.transaction,
+        wireFormat: data.wireFormat,
+        encoding: data.encoding,
         estimatedFee: data.estimatedFee ?? 5000,
         rpcUrlHost: data.rpcUrlHost,
         network: data.network,
@@ -170,7 +184,7 @@ export default function TryItPanel(): JSX.Element {
 
   async function copy(kind: 'curl' | 'tx') {
     if (!demo) return
-    const text = kind === 'curl' ? buildCurl(demo) : (result?.transaction ?? '')
+    const text = kind === 'curl' ? buildCurl(demo, txVersion) : (result?.transaction ?? '')
     try {
       await navigator.clipboard.writeText(text)
       setCopied(kind)
@@ -182,15 +196,7 @@ export default function TryItPanel(): JSX.Element {
 
   if (!demo) return <></>
 
-  const requestBlock = JSON.stringify(
-    {
-      accounts: demo.accounts,
-      args: demo.args,
-      feePayer: demo.feePayer,
-    },
-    null,
-    2,
-  )
+  const requestBlock = JSON.stringify(requestBody(demo, txVersion), null, 2)
 
   return (
     <div className="space-y-5">
@@ -223,12 +229,41 @@ export default function TryItPanel(): JSX.Element {
           </div>
         </div>
         <button
-          onClick={handleRun}
+          onClick={() => handleRun()}
           disabled={stage === 'building' || stage === 'fetching'}
           className="btn-primary self-start disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
         >
           {stage === 'building' ? 'Building…' : stage === 'done' ? 'Run Again' : 'Run Live'}
         </button>
+      </div>
+
+      {/* Transaction format: opt-in txVersion, legacy stays the default */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div role="radiogroup" aria-label="Transaction format" className="inline-flex border border-border-low">
+          {TX_FORMATS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="radio"
+              aria-checked={txVersion === f.id}
+              disabled={stage === 'building'}
+              onClick={() => {
+                if (txVersion === f.id) return
+                setTxVersion(f.id)
+                setAutoTriggered(true)
+                handleRun(f.id)
+              }}
+              className={`px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                txVersion === f.id ? 'bg-sand-1600 text-sand-50' : 'bg-sand-50 text-sand-1200 hover:text-sand-1600'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <p className="font-mono text-[11px] text-sand-1100">
+          txVersion: {TX_FORMATS.find((f) => f.id === txVersion)?.hint}
+        </p>
       </div>
 
       {/* Request / Response columns */}
@@ -313,7 +348,7 @@ export default function TryItPanel(): JSX.Element {
               <div className=" border border-border-medium bg-sand-100 p-4">
                 <div className="mb-2 flex items-center gap-2">
                   <CheckIcon className="h-4 w-4 text-sand-1500" />
-                  <p className="text-sm font-medium text-sand-1600">Base58 transaction ready</p>
+                  <p className="text-sm font-medium text-sand-1600">{(result.wireFormat ?? 'legacy')} transaction ready · {result.encoding ?? 'base58'}</p>
                 </div>
                 <p className="break-all font-mono text-xs leading-relaxed text-sand-1200">
                   {shortenBase58(result.transaction, 36)}
@@ -333,7 +368,7 @@ export default function TryItPanel(): JSX.Element {
                   )}
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="grid grid-cols-3 gap-2 text-[11px]">
                 <div className=" border border-border-low bg-bg1 px-3 py-2">
                   <p className="mb-0.5 font-mono uppercase tracking-[0.12em] text-sand-1100">est. fee</p>
                   <p className="font-mono text-sand-1600">
@@ -343,6 +378,10 @@ export default function TryItPanel(): JSX.Element {
                 <div className=" border border-border-low bg-bg1 px-3 py-2">
                   <p className="mb-0.5 font-mono uppercase tracking-[0.12em] text-sand-1100">network</p>
                   <p className="font-mono text-sand-1600">{result.network ?? 'mainnet-beta'}</p>
+                </div>
+                <div className=" border border-border-low bg-bg1 px-3 py-2">
+                  <p className="mb-0.5 font-mono uppercase tracking-[0.12em] text-sand-1100">format</p>
+                  <p className="font-mono text-sand-1600">{result.wireFormat ?? 'legacy'}</p>
                 </div>
               </div>
             </div>
@@ -354,7 +393,8 @@ export default function TryItPanel(): JSX.Element {
       <div className="flex flex-col gap-3 border-t border-border-low pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-sand-1200">
           Want this from your AI agent? Same call works as an MCP tool —{' '}
-          <code className="font-mono text-sand-1600">build_instruction</code>.
+          <code className="font-mono text-sand-1600">build_instruction</code> (pass{' '}
+          <code className="font-mono text-sand-1600">txVersion</code> to opt in to v0 or Transaction v1).
         </p>
         <div className="flex items-center gap-4">
           <Link

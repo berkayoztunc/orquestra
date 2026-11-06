@@ -7,6 +7,7 @@ import { getGitHubLoginUrl } from '../api/client'
 import CodeBlock from '../components/CodeBlock'
 import TwitterWall from '../components/TwitterWall'
 import TryItPanel from '../components/TryItPanel'
+import VideoShowcase from '../components/VideoShowcase'
 import { buttonClassName } from '@/ui/Button'
 import { Card } from '@/ui/Card'
 import { Section } from '@/ui/Section'
@@ -126,224 +127,194 @@ function CtaButtons(): JSX.Element {
 }
 
 function SurfaceIllustration({ type }: { type: SurfaceVisual }): JSX.Element {
-  const stroke = 'rgb(var(--rgb-sand-800))'
-  const soft = 'rgb(var(--rgb-border-medium))'
-  const faint = 'rgb(var(--rgb-border-low))'
+  const line = 'rgb(var(--rgb-sand-800))'
+  const edge = 'rgb(var(--rgb-border-medium))'
+  const grid = 'rgb(var(--rgb-border-low))'
   const ink = 'rgb(var(--rgb-sand-1500))'
+  const muted = 'rgb(var(--rgb-sand-1100))'
   const paper = 'rgb(var(--rgb-sand-50))'
+  const card = 'rgb(var(--rgb-sand-100))'
+  const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+
+  // Shared frame: faint dot grid + arrowhead marker, so all four illustrations read as one family.
+  const Frame = ({ id, label, children }: { id: string; label: string; children: React.ReactNode }) => (
+    <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label={label}>
+      <defs>
+        <pattern id={`${id}-dots`} width="20" height="20" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="1" fill={grid} />
+        </pattern>
+        <marker id={`${id}-arrow`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0.5L7.5 4L0 7.5z" fill={line} />
+        </marker>
+      </defs>
+      <rect width="560" height="260" fill={`url(#${id}-dots)`} opacity="0.7" />
+      {children}
+    </svg>
+  )
+
+  const Label = ({ x, y, children, anchor = 'middle', size = 10, fill = muted, weight = 500 }: {
+    x: number; y: number; children: React.ReactNode; anchor?: 'start' | 'middle' | 'end'; size?: number; fill?: string; weight?: number
+  }) => (
+    <text x={x} y={y} textAnchor={anchor} fontSize={size} fontFamily={mono} fill={fill} fontWeight={weight} letterSpacing="0.4">
+      {children}
+    </text>
+  )
 
   if (type === 'api') {
+    const routes = [
+      { y: 80, text: 'GET /instructions' },
+      { y: 122, text: 'GET /pda' },
+      { y: 164, text: 'POST /build', hot: true },
+    ]
     return (
-      <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="Hosted API diagram">
-        <defs>
-          <linearGradient id="apiFade" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor={paper} stopOpacity="0.2" />
-            <stop offset="1" stopColor={paper} stopOpacity="1" />
-          </linearGradient>
-        </defs>
-        <g fill="none" stroke={faint} strokeWidth="1">
-          {[80, 170, 390, 480].map((x, index) => (
-            <path key={x} d={`M${x} ${index % 2 ? 46 : 28}l58 33-58 33-58-33z`} opacity={index === 0 || index === 3 ? 0.35 : 0.8} />
-          ))}
-          {[78, 190, 370, 486].map((x, index) => (
-            <circle key={x} cx={x} cy={index % 2 ? 196 : 178} r="24" opacity={index === 0 || index === 3 ? 0.28 : 0.65} />
-          ))}
-        </g>
-        <g fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M280 80v44" />
-          <path d="M280 168v42" />
-          <path d="M236 145H154" />
-          <path d="M324 145h82" />
-          <path d="M248 116l-64-42" />
-          <path d="M312 116l64-42" />
-          <path d="M248 174l-64 42" />
-          <path d="M312 174l64 42" />
-        </g>
-        {[
-          [280, 52],
-          [280, 232],
-          [132, 145],
-          [428, 145],
-          [164, 60],
-          [396, 60],
-          [164, 230],
-          [396, 230],
-        ].map(([x, y]) => (
-          <g key={`${x}-${y}`}>
-            <rect x={x - 35} y={y - 18} width="70" height="36" rx="18" fill={paper} stroke={soft} />
-            <text x={x} y={y + 4} textAnchor="middle" fill={stroke} fontSize="11" fontFamily="monospace" letterSpacing="1.5">
-              HTTP
-            </text>
+      <Frame id="api" label="Hosted API: a client sends JSON and receives an unsigned transaction">
+        {/* client */}
+        <rect x="24" y="92" width="112" height="76" rx="10" fill={paper} stroke={edge} />
+        <Label x={80} y={118} size={10}>CLIENT</Label>
+        <Label x={80} y={140} size={12} fill={ink} weight={700}>curl / app</Label>
+        <Label x={80} y={156} size={10}>JSON over HTTPS</Label>
+
+        <path d="M136 130H196" stroke={line} strokeWidth="1.5" markerEnd="url(#api-arrow)" />
+
+        {/* api */}
+        <rect x="200" y="30" width="160" height="200" rx="12" fill={paper} stroke={line} strokeWidth="1.5" />
+        <path d="M200 42a12 12 0 0 1 12-12h136a12 12 0 0 1 12 12v18H200z" fill={ink} />
+        <Label x={280} y={50} size={11} fill={paper} weight={700}>HOSTED API</Label>
+        {routes.map((r) => (
+          <g key={r.text}>
+            <rect x="214" y={r.y} width="132" height="30" rx="8" fill={r.hot ? card : paper} stroke={r.hot ? line : edge} strokeWidth={r.hot ? 1.5 : 1} />
+            <circle cx="228" cy={r.y + 15} r="3" fill={r.hot ? ink : edge} />
+            <Label x={237} y={r.y + 18.5} anchor="start" size={9.5} fill={r.hot ? ink : muted} weight={r.hot ? 700 : 500}>{r.text}</Label>
           </g>
         ))}
-        <g>
-          <rect x="232" y="104" width="96" height="82" rx="18" fill={paper} stroke={stroke} strokeWidth="2" />
-          <rect x="252" y="125" width="56" height="40" rx="8" fill={ink} opacity="0.92" />
-          <text x="280" y="150" textAnchor="middle" fill={paper} fontSize="15" fontFamily="monospace" fontWeight="700">
-            API
-          </text>
-        </g>
-      </svg>
+        <Label x={280} y={212} size={10}>no SDK needed</Label>
+
+        <path d="M360 130H420" stroke={line} strokeWidth="1.5" markerEnd="url(#api-arrow)" />
+
+        {/* output */}
+        <rect x="424" y="92" width="112" height="76" rx="10" fill={paper} stroke={edge} />
+        <Label x={480} y={118} size={10}>RESPONSE</Label>
+        <Label x={480} y={140} size={12} fill={ink} weight={700}>unsigned tx</Label>
+        <Label x={480} y={156} size={10}>base58 / base64</Label>
+      </Frame>
     )
   }
 
   if (type === 'mcp') {
+    const tools = [
+      { y: 40, text: 'search_programs' },
+      { y: 88, text: 'read_llms_txt' },
+      { y: 136, text: 'derive_pda' },
+      { y: 184, text: 'build_instruction' },
+    ]
     return (
-      <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="MCP registry network">
-        <defs>
-          <linearGradient id="mcpFade" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor={paper} stopOpacity="0" />
-            <stop offset="1" stopColor={paper} stopOpacity="0.95" />
-          </linearGradient>
-        </defs>
-
-        <g fill="none" stroke={faint} strokeWidth="1">
-          <path d="M64 60h432M64 132h432M64 204h432" opacity="0.32" />
-          <path d="M104 36v188M280 36v188M456 36v188" opacity="0.2" />
-        </g>
-
-        <g fill="none" stroke={stroke} strokeLinecap="round" strokeLinejoin="round" opacity="0.82">
-          <path d="M186 96H236" strokeWidth="2" />
-          <path d="M324 96H374" strokeWidth="2" />
-          <path d="M280 130v42" strokeWidth="2" />
-          <path d="M104 172h352" strokeWidth="1.5" />
-          <path d="M152 172v-36M408 172v-36" strokeWidth="1.5" />
-          <path d="M222 172v28M338 172v28" strokeWidth="1.5" strokeDasharray="5 8" />
-        </g>
-
-        <g transform="translate(236 62)">
-          <rect width="88" height="68" rx="14" fill={paper} stroke={stroke} strokeWidth="2" />
-          <text x="44" y="37" textAnchor="middle" fill={ink} fontSize="17" fontFamily="monospace" fontWeight="700" letterSpacing="1.8">
-            MCP
-          </text>
-          <text x="44" y="53" textAnchor="middle" fill={stroke} fontSize="8" fontFamily="monospace" letterSpacing="1.2">
-            registry
-          </text>
-        </g>
-
-        <g transform="translate(80 60)">
-          <rect width="112" height="72" rx="14" fill={paper} stroke={soft} />
-          <image
-            href="/brand/integrations/claude-color.svg"
-            x="18"
-            y="18"
-            width="36"
-            height="36"
-            preserveAspectRatio="xMidYMid meet"
-          />
-          <text x="78" y="42" textAnchor="middle" fill={ink} fontSize="11" fontFamily="monospace" letterSpacing="1">
-            Claude
-          </text>
-        </g>
-
-        <g transform="translate(368 60)">
-          <rect width="112" height="72" rx="14" fill={paper} stroke={soft} />
-          <image
-            href="/brand/integrations/codex.svg"
-            x="18"
-            y="16"
-            width="40"
-            height="40"
-            preserveAspectRatio="xMidYMid meet"
-          />
-          <text x="80" y="42" textAnchor="middle" fill={ink} fontSize="11" fontFamily="monospace" letterSpacing="1">
-            Codex
-          </text>
-        </g>
-
+      <Frame id="mcp" label="MCP registry: Claude and Codex call Orquestra tools">
+        {/* clients */}
         {[
-          { x: 78, label: 'search' },
-          { x: 194, label: 'docs' },
-          { x: 310, label: 'pda' },
-          { x: 426, label: 'build' },
-        ].map((node) => (
-          <g key={node.label} transform={`translate(${node.x} 190)`}>
-            <rect width="64" height="30" rx="15" fill={paper} stroke={soft} />
-            <circle cx="15" cy="15" r="3.5" fill={stroke} />
-            <text x="38" y="18.5" textAnchor="middle" fill={stroke} fontSize="9" fontFamily="monospace" letterSpacing="0.8">
-              {node.label}
-            </text>
+          { y: 48, src: '/brand/integrations/claude-color.svg', name: 'Claude' },
+          { y: 156, src: '/brand/integrations/codex.svg', name: 'Codex' },
+        ].map((c) => (
+          <g key={c.name}>
+            <rect x="24" y={c.y} width="120" height="56" rx="10" fill={paper} stroke={edge} />
+            <image href={c.src} x="38" y={c.y + 14} width="28" height="28" preserveAspectRatio="xMidYMid meet" />
+            <Label x={78} y={c.y + 33} anchor="start" size={12} fill={ink} weight={700}>{c.name}</Label>
           </g>
         ))}
+        <path d="M144 76H176V130H206" fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" markerEnd="url(#mcp-arrow)" />
+        <path d="M144 184H176V130" fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" />
 
-        <g fill={paper} stroke={stroke} strokeWidth="1.4">
-          <circle cx="186" cy="96" r="4.5" />
-          <circle cx="236" cy="96" r="4.5" />
-          <circle cx="324" cy="96" r="4.5" />
-          <circle cx="374" cy="96" r="4.5" />
-          <circle cx="152" cy="136" r="4.5" />
-          <circle cx="408" cy="136" r="4.5" />
-          <circle cx="280" cy="172" r="4.5" />
-        </g>
-      </svg>
+        {/* registry */}
+        <rect x="210" y="92" width="136" height="76" rx="12" fill={ink} />
+        <Label x={278} y={124} size={18} fill={paper} weight={700}>MCP</Label>
+        <Label x={278} y={146} size={10} fill={paper}>registry · /mcp</Label>
+
+        {/* tools bus */}
+        <path d="M346 130H376M376 58V202" fill="none" stroke={line} strokeWidth="1.5" />
+        {tools.map((t) => (
+          <g key={t.text}>
+            <path d={`M376 ${t.y + 18}H396`} stroke={line} strokeWidth="1.5" markerEnd="url(#mcp-arrow)" />
+            <rect x="400" y={t.y} width="144" height="36" rx="18" fill={paper} stroke={edge} />
+            <circle cx="417" cy={t.y + 18} r="3.5" fill={ink} />
+            <Label x={428} y={t.y + 21.5} anchor="start" size={10} fill={ink}>{t.text}</Label>
+          </g>
+        ))}
+      </Frame>
     )
   }
 
   if (type === 'docs') {
+    const files = [
+      { y: 34, name: 'llms.txt', note: 'agent-readable summary' },
+      { y: 104, name: 'docs.md', note: 'human + AI markdown' },
+      { y: 174, name: 'schema.json', note: 'typed instructions & accounts' },
+    ]
     return (
-      <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="AI-ready documents">
-        <g fill="none" stroke={faint} strokeWidth="1">
-          <path d="M78 66h404" opacity="0.5" />
-          <path d="M120 214h320" opacity="0.35" />
-          <path d="M170 28v208" opacity="0.25" />
-          <path d="M390 28v208" opacity="0.25" />
-        </g>
-        {[
-          { x: 118, y: 60, o: 0.45, s: 0.9 },
-          { x: 206, y: 36, o: 0.75, s: 1 },
-          { x: 298, y: 72, o: 1, s: 1.05 },
-        ].map((doc, index) => (
-          <g key={doc.x} opacity={doc.o} transform={`translate(${doc.x} ${doc.y}) scale(${doc.s})`}>
-            <path d="M0 0h90l28 28v118H0z" fill={paper} stroke={stroke} strokeWidth="2" />
-            <path d="M90 0v28h28" fill="none" stroke={stroke} strokeWidth="2" />
-            <path d="M20 52h68M20 76h78M20 100h46" stroke={soft} strokeWidth="8" strokeLinecap="round" />
-            <circle cx="88" cy="112" r="22" fill={index === 2 ? ink : paper} stroke={stroke} />
-            <path d="M78 111l8 8 15-18" stroke={index === 2 ? paper : stroke} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <Frame id="docs" label="AI-ready documents generated from one IDL">
+        {/* source */}
+        <rect x="24" y="92" width="104" height="76" rx="10" fill={ink} />
+        <Label x={76} y={122} size={20} fill={paper} weight={700}>{'{ }'}</Label>
+        <Label x={76} y={146} size={11} fill={paper} weight={700}>IDL</Label>
+
+        <path d="M128 130H164M164 60V200" fill="none" stroke={line} strokeWidth="1.5" />
+        {files.map((f) => (
+          <g key={f.name}>
+            <path d={`M164 ${f.y + 26}H196`} stroke={line} strokeWidth="1.5" markerEnd="url(#docs-arrow)" />
+            <rect x="200" y={f.y} width="336" height="52" rx="10" fill={paper} stroke={edge} />
+            {/* file icon */}
+            <path d={`M218 ${f.y + 12}h14l8 8v20h-22z`} fill={card} stroke={line} strokeWidth="1.4" strokeLinejoin="round" />
+            <path d={`M232 ${f.y + 12}v8h8`} fill="none" stroke={line} strokeWidth="1.4" strokeLinejoin="round" />
+            <Label x={252} y={f.y + 23} anchor="start" size={12} fill={ink} weight={700}>{f.name}</Label>
+            <Label x={252} y={f.y + 39} anchor="start" size={10}>{f.note}</Label>
+            <circle cx="512" cy={f.y + 26} r="9" fill="none" stroke={line} strokeWidth="1.4" />
+            <path d={`M507.5 ${f.y + 26}l3.2 3.2 5.8-6.4`} fill="none" stroke={line} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </g>
         ))}
-        <g transform="translate(120 192)">
-          <rect width="320" height="34" rx="17" fill={paper} stroke={soft} />
-          <text x="160" y="22" textAnchor="middle" fill={stroke} fontSize="12" fontFamily="monospace" letterSpacing="1.4">
-            llms.txt / markdown / schema
-          </text>
-        </g>
-      </svg>
+      </Frame>
     )
   }
 
+  // pda
   return (
-    <svg viewBox="0 0 560 260" className="h-full w-full" role="img" aria-label="PDA and account data boxes">
-      <g fill="none" stroke={faint} strokeWidth="1">
-        <path d="M112 58l80 45-80 45-80-45z" opacity="0.42" />
-        <path d="M448 58l80 45-80 45-80-45z" opacity="0.42" />
-        <path d="M280 146l80 45-80 45-80-45z" opacity="0.5" />
-      </g>
-      <g fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M148 126l90 48" />
-        <path d="M412 126l-90 48" />
-        <path d="M280 70v88" strokeDasharray="5 8" />
-      </g>
-      {[
-        { x: 88, y: 86, label: 'seed' },
-        { x: 424, y: 86, label: 'acct' },
-        { x: 256, y: 42, label: 'PDA' },
-        { x: 256, y: 166, label: 'data' },
-      ].map((box, index) => (
-        <g key={box.label} transform={`translate(${box.x} ${box.y})`}>
-          <path d="M24 0l64 36v72l-64 36-64-36V36z" fill={paper} stroke={index === 2 ? stroke : soft} strokeWidth={index === 2 ? 2 : 1.5} />
-          <path d="M-40 36l64 36 64-36M24 72v72" stroke={soft} strokeWidth="1.5" fill="none" />
-          <text x="24" y="82" textAnchor="middle" fill={index === 2 ? ink : stroke} fontSize="12" fontFamily="monospace" fontWeight={index === 2 ? 700 : 500} letterSpacing="1">
-            {box.label}
-          </text>
+    <Frame id="pda" label="PDA derivation and decoded account data">
+      {/* seeds */}
+      <rect x="24" y="52" width="124" height="132" rx="10" fill={paper} stroke={edge} />
+      <Label x={86} y={74} size={10}>SEEDS</Label>
+      {['program id', '"vault"', 'user pubkey'].map((s, i) => (
+        <g key={s}>
+          <rect x="36" y={86 + i * 32} width="100" height="24" rx="12" fill={card} stroke={edge} />
+          <Label x={86} y={102 + i * 32} size={10} fill={ink}>{s}</Label>
         </g>
       ))}
-      <g transform="translate(202 204)">
-        <rect width="156" height="36" rx="18" fill={ink} opacity="0.9" />
-        <text x="78" y="23" textAnchor="middle" fill={paper} fontSize="12" fontFamily="monospace" letterSpacing="1.2">
-          account data
-        </text>
-      </g>
-    </svg>
+
+      <path d="M148 118H208" stroke={line} strokeWidth="1.5" markerEnd="url(#pda-arrow)" />
+      <Label x={178} y={108} size={10}>derive</Label>
+
+      {/* PDA */}
+      <rect x="212" y="78" width="136" height="80" rx="12" fill={ink} />
+      <Label x={280} y={106} size={10} fill={paper}>PDA</Label>
+      <Label x={280} y={128} size={13} fill={paper} weight={700}>7xKp…9Qz</Label>
+      <Label x={280} y={146} size={10} fill={paper}>bump 254</Label>
+
+      <path d="M348 118H408" stroke={line} strokeWidth="1.5" markerEnd="url(#pda-arrow)" />
+      <Label x={378} y={108} size={10}>fetch</Label>
+
+      {/* account */}
+      <rect x="412" y="52" width="124" height="132" rx="10" fill={paper} stroke={line} strokeWidth="1.5" />
+      <Label x={474} y={74} size={10}>ACCOUNT DATA</Label>
+      {[
+        ['owner', '9wQ…c1'],
+        ['amount', '1,250'],
+        ['bump', '254'],
+      ].map(([k, v], i) => (
+        <g key={k}>
+          <rect x="424" y={86 + i * 32} width="100" height="24" rx="6" fill={card} stroke={edge} />
+          <Label x={434} y={102 + i * 32} anchor="start" size={10}>{k}</Label>
+          <Label x={514} y={102 + i * 32} anchor="end" size={10} fill={ink} weight={700}>{v}</Label>
+        </g>
+      ))}
+
+      <Label x={280} y={226} size={10}>derive_pda  →  fetch_pda_data</Label>
+    </Frame>
   )
 }
 
@@ -513,6 +484,10 @@ export default function Home(): JSX.Element {
             />
           </Card>
         </section>
+
+        <Section eyebrow="Watch" title="See Orquestra in action.">
+          <VideoShowcase />
+        </Section>
 
         <Section eyebrow="Live proof" title="Build a real transaction at edge speed.">
           <Card className="p-5 md:p-6" tone="default">

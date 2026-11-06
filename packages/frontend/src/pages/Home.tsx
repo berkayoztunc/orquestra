@@ -1,13 +1,12 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, Braces, FileText, Network } from 'lucide-react'
-import { useAuthStore } from '../store/auth'
 import { useAnalyticsStore } from '../store/analytics'
-import { getGitHubLoginUrl } from '../api/client'
 import TwitterWall from '../components/TwitterWall'
 import TryItPanel from '../components/TryItPanel'
 import VideoShowcase from '../components/VideoShowcase'
 import RestBuildCard from '../components/RestBuildCard'
+import StackIllustration from '../components/StackIllustration'
 import AgentSetupCard from '../components/AgentSetupCard'
 import { buttonClassName } from '@/ui/Button'
 import { Card } from '@/ui/Card'
@@ -136,23 +135,14 @@ const capabilities: Array<{
 ]
 
 function CtaButtons(): JSX.Element {
-  const { isAuthenticated } = useAuthStore()
-
   return (
     <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-      {isAuthenticated ? (
-        <Link to="/dashboard" className={buttonClassName({ size: 'lg' })}>
-          Go to dashboard
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
-      ) : (
-        <a href={getGitHubLoginUrl()} className={buttonClassName({ size: 'lg' })}>
-          Start building
-          <ArrowRight className="h-4 w-4" aria-hidden="true" />
-        </a>
-      )}
-      <Link to="/explorer" className={buttonClassName({ variant: 'secondary', size: 'lg' })}>
+      <Link to="/explorer" className={buttonClassName({ size: 'lg' })}>
         Browse programs
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+      </Link>
+      <Link to="/docs/api" className={buttonClassName({ variant: 'secondary', size: 'lg' })}>
+        Read the docs
       </Link>
     </div>
   )
@@ -410,6 +400,40 @@ export default function Home(): JSX.Element {
       <div className="border-t border-border-low" />
 
       <div className="space-y-24 px-6 py-20 sm:px-8">
+        <Section eyebrow="The stack" title="Between your agent and the chain.">
+          <div className="grid items-center gap-8 border border-border-low bg-bg1 p-5 md:p-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)]">
+            <ol className="space-y-5">
+              {[
+                ['AI clients', 'Claude, Grok, ChatGPT and any MCP-capable agent ask in plain English: "swap 1 SOL for USDC, simulate first."'],
+                ['Orquestra', 'Turns each program\'s IDL into an API, AI-ready docs, MCP tools and flows. It builds and simulates the transaction.'],
+                ['Solana programs', 'The programs stay exactly as they are. Orquestra reads their IDL, it never needs a change on-chain.'],
+                ['Solana', 'Your wallet signs and sends. Nothing is signed or broadcast on your behalf.'],
+              ].map(([title, desc], i) => (
+                <li key={title} className="flex gap-4">
+                  <span className="flex size-7 shrink-0 items-center justify-center bg-sand-1600 font-mono text-xs text-sand-50">{i + 1}</span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-sand-1600">{title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-sand-1200">{desc}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="mx-auto w-full max-w-3xl">
+              <StackIllustration />
+            </div>
+          </div>
+        </Section>
+
+        <Section eyebrow="Watch" title="See Orquestra in action.">
+          <VideoShowcase />
+        </Section>
+
+        <Section eyebrow="Live proof" title="Build a real transaction at edge speed.">
+          <Card className="p-5 md:p-6" tone="default">
+            <TryItPanel />
+          </Card>
+        </Section>
+
         <Section
           eyebrow="Products"
           title="One IDL becomes the operating layer for apps and agents."
@@ -480,16 +504,6 @@ export default function Home(): JSX.Element {
           <RestBuildCard />
           <AgentSetupCard />
         </section>
-
-        <Section eyebrow="Watch" title="See Orquestra in action.">
-          <VideoShowcase />
-        </Section>
-
-        <Section eyebrow="Live proof" title="Build a real transaction at edge speed.">
-          <Card className="p-5 md:p-6" tone="default">
-            <TryItPanel />
-          </Card>
-        </Section>
 
         <Section
           eyebrow="Builder signal"

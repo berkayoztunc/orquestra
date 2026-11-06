@@ -844,4 +844,32 @@ export async function listFlows(params?: { q?: string; intent?: string; protocol
   return res.data.flows ?? []
 }
 
+export interface FlowRunResponse {
+  ok: boolean
+  watermark?: string
+  outputs?: Record<string, unknown>
+  kind?: string
+  reason?: string
+  nodeId?: string | null
+  partialOutputs?: Record<string, unknown>
+}
+
+/**
+ * Runs a published flow's estimate (resolve accounts, build, compose, simulate; nothing is signed or sent).
+ * Never throws on 4xx/5xx: a failed run is a normal result with `ok: false`, `reason` and the failing node.
+ */
+export async function runFlowEstimate(
+  slug: string,
+  body: { inputs: Record<string, unknown>; network?: string; txVersion?: 'legacy' | 'v0' | 'v1' },
+): Promise<{ status: number; ms: number; data: FlowRunResponse }> {
+  const base = import.meta.env.VITE_WORKER_URL || 'https://api.orquestra.dev'
+  const t0 = performance.now()
+  const res = await axios.post(`${base}/flows/${encodeURIComponent(slug)}/estimate`, body, { validateStatus: () => true })
+  const data: FlowRunResponse =
+    res.data && typeof res.data === 'object' && 'ok' in res.data
+      ? res.data
+      : { ok: false, reason: typeof res.data?.error === 'string' ? res.data.error : `Request failed (${res.status})` }
+  return { status: res.status, ms: Math.round(performance.now() - t0), data }
+}
+
 export default api

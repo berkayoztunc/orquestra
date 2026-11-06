@@ -61,6 +61,8 @@ Walkthroughs by [White Moon Dev](https://www.youtube.com/@whitemoondev):
   </tr>
 </table>
 
+Demo: [Claude buys a drink through Orquestra](https://x.com/SolPlay_jonas/status/2059976475877486808), by Jonas Hahn on X.
+
 ## Add the MCP Server
 
 Orquestra exposes `search_programs`, `list_instructions`, `build_instruction`, `simulate_instruction`, `simulate_transaction`, `list_pda_accounts`, `derive_pda`, `read_llms_txt`, `get_ai_analysis`, `fetch_pda_data`, and `get_program_data` over Streamable HTTP MCP at `https://api.orquestra.dev/mcp`. Full tool reference: [docs/mcp-tools.md](./docs/mcp-tools.md) · [live docs](https://orquestra.dev/docs/mcp).

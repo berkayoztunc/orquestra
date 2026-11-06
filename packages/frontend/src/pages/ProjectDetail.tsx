@@ -581,172 +581,144 @@ export default function ProjectDetail(): JSX.Element {
       <section className="overflow-hidden border border-border-low bg-sand-100">
         <div className="flex flex-col gap-6 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1 space-y-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden border border-border-low bg-sand-100 text-lg font-semibold text-sand-1600">
+            {/* Identity: icon, name + status badges, author, description */}
+            <div className="flex items-start gap-4 sm:gap-5">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden border border-border-low bg-sand-50 text-2xl font-semibold text-sand-1600 sm:h-20 sm:w-20">
                 {selectedProject.icon_url ? (
-                  <img
-                    src={selectedProject.icon_url}
-                    alt={selectedProject.name}
-                    className="h-full w-full object-contain p-1"
-                  />
+                  <img src={selectedProject.icon_url} alt={selectedProject.name} className="h-full w-full object-contain p-1.5" />
                 ) : selectedProject.avatar_url ? (
-                  <img
-                    src={selectedProject.avatar_url}
-                    alt={selectedProject.username || selectedProject.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={selectedProject.avatar_url} alt={selectedProject.username || selectedProject.name} className="h-full w-full object-cover" />
                 ) : (
                   selectedProject.name.charAt(0).toUpperCase()
                 )}
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-medium ${
-                      selectedProject.is_public
-                        ? 'border-border-low bg-sand-100 text-sand-1500'
-                        : 'border-[#b75000]/20 bg-[#b75000]/10 text-[#b75000]'
-                    }`}
-                  >
-                    {selectedProject.is_public ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <LockKeyhole className="h-3.5 w-3.5" />
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <h1 className="min-w-0 break-words text-2xl font-semibold tracking-tight text-sand-1600 sm:text-4xl">
+                    {selectedProject.name}
+                  </h1>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {!selectedProject.is_public && (
+                      <span className="inline-flex items-center gap-1 border border-[#b75000]/25 bg-[#b75000]/10 px-2 py-0.5 text-[11px] font-medium text-[#b75000]">
+                        <LockKeyhole className="h-3 w-3" /> Private
+                      </span>
                     )}
-                    {selectedProject.is_public ? 'Public' : 'Private'}
-                  </span>
-                  {selectedProject.is_verified ? (
-                    <span className="inline-flex items-center gap-1.5 border border-[#b75000]/20 bg-[#b75000]/10 px-2.5 py-1 text-xs font-medium text-[#b75000]">
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                      </svg>
-                      Verified Build
-                    </span>
-                  ) : null}
-                  {selectedProject.isVerifiedIdentity ? (
-                    <span
-                      className="inline-flex items-center gap-1.5 border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-600"
-                      title="Program identity verified via Helius"
-                    >
-                      <BadgeCheck className="h-3.5 w-3.5" />
-                      Verified Program
-                    </span>
-                  ) : null}
-                  {selectedProject.username && (
-                    <span className="text-sm text-sand-1200">by {selectedProject.username}</span>
-                  )}
+                    {selectedProject.is_verified ? (
+                      <span className="inline-flex items-center gap-1 border border-[#b75000]/25 bg-[#b75000]/10 px-2 py-0.5 text-[11px] font-medium text-[#b75000]">
+                        <CheckCircle2 className="h-3 w-3" /> Verified Build
+                      </span>
+                    ) : null}
+                    {selectedProject.isVerifiedIdentity ? (
+                      <span
+                        className="inline-flex items-center gap-1 border border-blue-500/25 bg-blue-500/10 px-2 py-0.5 text-[11px] font-medium text-blue-600"
+                        title="Program identity verified via Helius"
+                      >
+                        <BadgeCheck className="h-3 w-3" /> Verified Program
+                      </span>
+                    ) : null}
+                    {selectedProject.provenance?.notice && (
+                      <span className="inline-flex items-center gap-1 border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-400">
+                        Unverified IDL
+                      </span>
+                    )}
+                  </div>
                 </div>
-
-                <h1 className="text-3xl font-semibold tracking-tight text-sand-1600 sm:text-4xl">
-                  {selectedProject.name}
-                </h1>
-
-                {selectedProject.description && (
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-sand-1200 sm:text-base">
-                    {selectedProject.description}
+                {selectedProject.username && (
+                  <p className="mt-1.5 text-sm text-sand-1100">
+                    by <span className="text-sand-1300">{selectedProject.username}</span>
                   </p>
                 )}
-
-                {selectedProject.provenance?.notice && (
-                  <div
-                    role="alert"
-                    className="mt-4 max-w-3xl border-2 border-red-500/70 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200"
-                  >
-                    <p className="flex items-center gap-2 text-base font-bold uppercase tracking-wide text-red-300">
-                      <span aria-hidden="true">⚠</span> Unverified — manually uploaded IDL
-                    </p>
-                    <p className="mt-1 font-semibold text-red-100">
-                      No on-chain IDL exists for this program. Do not sign transactions built from it unless you trust the uploader.
-                    </p>
-                    <p className="mt-1 text-xs text-red-200/90">{selectedProject.provenance.notice}</p>
-                    <p className="mt-1 text-xs text-red-200/90">
-                      Hidden from search and MCP by default; API and MCP callers must pass <code className="font-mono">secure=false</code> to use it.
-                    </p>
-                  </div>
+                {selectedProject.description && (
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-sand-1200 sm:text-base">{selectedProject.description}</p>
                 )}
               </div>
             </div>
 
-            <div className="flex min-w-0 flex-col gap-2 border border-border-low bg-sand-50 p-3 sm:flex-row sm:items-center">
-              <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-sand-1100">Program</span>
-              <code className="min-w-0 flex-1 truncate font-mono text-xs text-sand-1500 sm:text-sm">
-                {selectedProject.program_id}
-              </code>
+            {selectedProject.provenance?.notice && (
+              <div role="alert" className="border-2 border-red-500/70 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200">
+                <p className="flex items-center gap-2 text-base font-bold uppercase tracking-wide text-red-300">
+                  <span aria-hidden="true">⚠</span> Unverified — manually uploaded IDL
+                </p>
+                <p className="mt-1 font-semibold text-red-100">
+                  No on-chain IDL exists for this program. Do not sign transactions built from it unless you trust the uploader.
+                </p>
+                <p className="mt-1 text-xs text-red-200/90">{selectedProject.provenance.notice}</p>
+                <p className="mt-1 text-xs text-red-200/90">
+                  Hidden from search and MCP by default; API and MCP callers must pass <code className="font-mono">secure=false</code> to use it.
+                </p>
+              </div>
+            )}
+
+            {/* Program ID + one-line meta */}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <button
+                type="button"
                 onClick={() => {
                   navigator.clipboard.writeText(selectedProject.program_id)
                   showToast('Copied to clipboard', 'success')
                 }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-sand-1200 transition-colors hover:bg-sand-100 hover:text-sand-1600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-1600/30"
                 title="Copy program ID"
+                className="group inline-flex min-w-0 max-w-full items-center gap-2.5 border border-border-low bg-sand-50 px-3 py-2 text-left transition-colors hover:border-border-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sand-1600/30"
               >
-                <Clipboard className="h-4 w-4" />
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-sand-1000">Program</span>
+                <code className="min-w-0 truncate font-mono text-xs text-sand-1500 sm:text-sm">{selectedProject.program_id}</code>
+                <Clipboard className="h-3.5 w-3.5 shrink-0 text-sand-1100 transition-colors group-hover:text-sand-1600" />
               </button>
+
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-sand-1100">
+                {selectedProject.latestVersion !== undefined && (
+                  <>
+                    <span className="inline-flex items-center gap-1.5 text-sand-1300">
+                      <GitBranch className="h-3.5 w-3.5" />
+                      IDL v{selectedProject.latestVersion}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                  </>
+                )}
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  Updated {new Date(selectedProject.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Created {new Date(selectedProject.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </p>
             </div>
 
-            <div className="grid gap-2 text-xs text-sand-1200 sm:grid-cols-3">
-              {selectedProject.latestVersion !== undefined && (
-                <div className="flex items-center gap-2 border border-border-low bg-sand-50 px-3 py-2">
-                  <GitBranch className="h-3.5 w-3.5 text-sand-1100" />
-                  <span className="truncate">
-                    IDL v{selectedProject.latestVersion}
-                    {selectedProject.latestVersionDate && (
-                      <span className="text-sand-1100">
-                        {' '}{new Date(selectedProject.latestVersionDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </span>
-                    )}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center gap-2 border border-border-low bg-sand-50 px-3 py-2">
-                <Clock3 className="h-3.5 w-3.5 text-sand-1100" />
-                <span>Updated {new Date(selectedProject.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              </div>
-              <div className="flex items-center gap-2 border border-border-low bg-sand-50 px-3 py-2">
-                <Calendar className="h-3.5 w-3.5 text-sand-1100" />
-                <span>Created {new Date(selectedProject.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              </div>
-            </div>
-
+            {/* Metrics: one joined strip instead of four separate boxes */}
             {programMetrics && (
-              <div className="grid gap-2 sm:grid-cols-4">
-                <div className="flex items-center gap-2.5 border border-border-low bg-sand-50 px-3 py-2.5">
-                  <ArrowLeftRight className="h-4 w-4 shrink-0 text-sand-1000" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">7d Transactions</span>
-                    <span className="font-mono text-base font-semibold text-sand-1600">{programMetrics.tx_count_7d.toLocaleString()}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5 border border-border-low bg-sand-50 px-3 py-2.5">
-                  <Users className="h-4 w-4 shrink-0 text-sand-1000" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">7d Unique Users</span>
-                    <span className="font-mono text-base font-semibold text-sand-1600">{programMetrics.unique_users_7d.toLocaleString()}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5 border border-border-low bg-sand-50 px-3 py-2.5">
-                  <Coins className="h-4 w-4 shrink-0 text-sand-1000" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">7d Fees (SOL)</span>
-                    <span className="font-mono text-base font-semibold text-sand-1600">{programMetrics.fees_sol_7d.toFixed(2)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5 border border-border-low bg-sand-50 px-3 py-2.5">
-                  <Activity className="h-4 w-4 shrink-0 text-sand-1000" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-sand-900">Activity</span>
-                    <span className="font-mono text-base font-semibold text-sand-1600">
-                      {programMetrics.tx_count_7d > 1_000_000
+              <div className="grid grid-cols-2 gap-px overflow-hidden border border-border-low bg-border-low sm:grid-cols-4">
+                {[
+                  { label: '7d Transactions', icon: ArrowLeftRight, value: programMetrics.tx_count_7d.toLocaleString() },
+                  { label: '7d Unique Users', icon: Users, value: programMetrics.unique_users_7d.toLocaleString() },
+                  { label: '7d Fees (SOL)', icon: Coins, value: programMetrics.fees_sol_7d.toFixed(2) },
+                  {
+                    label: 'Activity',
+                    icon: Activity,
+                    value:
+                      programMetrics.tx_count_7d > 1_000_000
                         ? 'Very High'
                         : programMetrics.tx_count_7d > 100_000
                           ? 'High'
                           : programMetrics.tx_count_7d > 10_000
                             ? 'Medium'
-                            : 'Low'}
-                    </span>
-                  </div>
-                </div>
+                            : 'Low',
+                  },
+                ].map((m) => {
+                  const MetricIcon = m.icon
+                  return (
+                    <div key={m.label} className="bg-sand-50 px-4 py-3">
+                      <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-sand-1000">
+                        <MetricIcon className="h-3.5 w-3.5" />
+                        {m.label}
+                      </p>
+                      <p className="mt-1 font-mono text-xl font-semibold text-sand-1600">{m.value}</p>
+                    </div>
+                  )
+                })}
               </div>
             )}
 

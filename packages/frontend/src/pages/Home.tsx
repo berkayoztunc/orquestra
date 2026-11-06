@@ -7,6 +7,7 @@ import { getGitHubLoginUrl } from '../api/client'
 import CodeBlock from '../components/CodeBlock'
 import TwitterWall from '../components/TwitterWall'
 import TryItPanel from '../components/TryItPanel'
+import VideoShowcase from '../components/VideoShowcase'
 import { buttonClassName } from '@/ui/Button'
 import { Card } from '@/ui/Card'
 import { Section } from '@/ui/Section'
@@ -513,6 +514,10 @@ export default function Home(): JSX.Element {
             />
           </Card>
         </section>
+
+        <Section eyebrow="Watch" title="See Orquestra in action.">
+          <VideoShowcase />
+        </Section>
 
         <Section eyebrow="Live proof" title="Build a real transaction at edge speed.">
           <Card className="p-5 md:p-6" tone="default">

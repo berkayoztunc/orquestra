@@ -3,7 +3,7 @@ import { Bot, Check } from 'lucide-react'
 import CodeBlock from './CodeBlock'
 import { Card } from '@/ui/Card'
 
-type ClientId = 'claude-code' | 'cursor' | 'desktop' | 'vscode'
+type ClientId = 'claude-code' | 'cursor' | 'desktop' | 'vscode' | 'grok'
 
 const MCP_URL = 'https://api.orquestra.dev/mcp'
 
@@ -36,6 +36,23 @@ const clients: Record<ClientId, { label: string; hint: string; language: 'bash' 
     }
   }
 }`,
+  },
+  grok: {
+    label: 'Grok',
+    hint: 'xAI API · Responses · remote MCP tool',
+    language: 'bash',
+    code: `curl https://api.x.ai/v1/responses \\
+  -H "Authorization: Bearer $XAI_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "grok-4.3",
+    "input": "Find the Jupiter program and list its instructions",
+    "tools": [{
+      "type": "mcp",
+      "server_url": "${MCP_URL}",
+      "server_label": "orquestra"
+    }]
+  }'`,
   },
   vscode: {
     label: 'VS Code',

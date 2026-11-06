@@ -77,13 +77,14 @@ const workflow: Array<{
   {
     step: '03',
     title: 'Connect apps + agents',
-    desc: 'Backends and mobile apps call HTTP. Claude, Cursor and other agents use MCP, scoped to the programs you choose. Orquestra builds the transaction; you sign it.',
+    desc: 'Backends and mobile apps call HTTP. Claude, Grok, Cursor and other agents use MCP, scoped to the programs you choose. Orquestra builds the transaction; you sign it.',
     icon: Network,
     detail: (
       <div className="space-y-2">
         <div className="flex flex-wrap gap-1.5">
           <Chip>curl</Chip>
           <Chip>Claude</Chip>
+          <Chip>Grok</Chip>
           <Chip>Cursor</Chip>
           <Chip>mobile</Chip>
         </div>
@@ -239,20 +240,29 @@ function SurfaceIllustration({ type }: { type: SurfaceVisual }): JSX.Element {
       { y: 184, text: 'build_instruction' },
     ]
     return (
-      <Frame id="mcp" label="MCP registry: Claude and Codex call Orquestra tools">
+      <Frame id="mcp" label="MCP registry: Claude, Codex and Grok call Orquestra tools">
         {/* clients */}
         {[
-          { y: 48, src: '/brand/integrations/claude-color.svg', name: 'Claude' },
-          { y: 156, src: '/brand/integrations/codex.svg', name: 'Codex' },
+          { y: 28, src: '/brand/integrations/claude-color.svg', name: 'Claude' },
+          { y: 102, src: '/brand/integrations/codex.svg', name: 'Codex' },
+          { y: 176, src: '', name: 'Grok' },
         ].map((c) => (
           <g key={c.name}>
             <rect x="24" y={c.y} width="120" height="56" rx="10" fill={paper} stroke={edge} />
-            <image href={c.src} x="38" y={c.y + 14} width="28" height="28" preserveAspectRatio="xMidYMid meet" />
+            {c.src ? (
+              <image href={c.src} x="38" y={c.y + 14} width="28" height="28" preserveAspectRatio="xMidYMid meet" />
+            ) : (
+              <g>
+                <rect x="38" y={c.y + 14} width="28" height="28" rx="7" fill={ink} />
+                <Label x={52} y={c.y + 33} size={14} fill={paper} weight={700}>G</Label>
+              </g>
+            )}
             <Label x={78} y={c.y + 33} anchor="start" size={12} fill={ink} weight={700}>{c.name}</Label>
           </g>
         ))}
-        <path d="M144 76H176V130H206" fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" markerEnd="url(#mcp-arrow)" />
-        <path d="M144 184H176V130" fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M144 56H176V130M144 204H176V130" fill="none" stroke={line} strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M144 130H206" fill="none" stroke={line} strokeWidth="1.5" markerEnd="url(#mcp-arrow)" />
+        <circle cx="176" cy="130" r="3" fill={line} />
 
         {/* registry */}
         <rect x="210" y="92" width="136" height="76" rx="12" fill={ink} />

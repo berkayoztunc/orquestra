@@ -71,6 +71,8 @@ Orquestra exposes `search_programs`, `list_instructions`, `build_instruction`, `
 claude mcp add --transport http orquestra https://api.orquestra.dev/mcp
 ```
 
+**Grok (xAI API)** — pass Orquestra as a remote MCP tool (`"type": "mcp"`, `"server_url": "https://api.orquestra.dev/mcp"`) in a Responses API request. Full example: [live docs](https://orquestra.dev/docs/mcp).
+
 **Claude Desktop / Cursor / VS Code** — add to your MCP config file:
 
 ```json

@@ -80,6 +80,25 @@ Save and reload window to make tools available in your agent panel.
 
 Reload VS Code and check the Copilot MCP panel for Orquestra server status.
 
+**Grok (xAI API)** — Grok connects to remote MCP servers through the xAI Responses API. Orquestra's endpoint uses Streamable HTTP, which xAI supports:
+
+```bash
+curl https://api.x.ai/v1/responses \
+  -H "Authorization: Bearer $XAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-4.3",
+    "input": "Find the Jupiter program and list its instructions",
+    "tools": [{
+      "type": "mcp",
+      "server_url": "https://api.orquestra.dev/mcp",
+      "server_label": "orquestra"
+    }]
+  }'
+```
+
+Use any Grok model that supports tool calling; model names change, so check the [xAI remote MCP docs](https://docs.x.ai/developers/tools/remote-mcp). To limit what Grok can call, add `allowed_tool_names` to the tool entry (for example `["search_programs", "list_instructions"]`). Signing stays on your side, as with every other client.
+
 ## Tools
 
 These tools are read-oriented plus transaction building, live account fetching, and simulation. Signing and broadcasting stay on your client side.

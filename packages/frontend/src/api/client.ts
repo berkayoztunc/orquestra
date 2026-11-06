@@ -94,7 +94,9 @@ export async function getProject(projectId: string) {
 }
 
 export async function getProjectByProgramId(programId: string) {
-  const res = await api.get(`/projects/by-program/${programId}`)
+  // The project page is where manually uploaded (no on-chain IDL) programs are shown WITH a prominent
+  // warning, so it opts in with secure=false; discovery and MCP keep hiding them by default.
+  const res = await api.get(`/projects/by-program/${programId}`, { params: { secure: 'false' } })
   return res.data.project
 }
 
@@ -180,7 +182,8 @@ export async function buildTransaction(
     encoding?: 'base58' | 'base64'
   }
 ) {
-  const res = await api.post(`/${projectId}/instructions/${instructionName}/build`, data)
+  // Same opt-in as the project page: the UI shows the manual-IDL warning next to this builder.
+  const res = await api.post(`/${projectId}/instructions/${instructionName}/build`, data, { params: { secure: 'false' } })
   return res.data
 }
 

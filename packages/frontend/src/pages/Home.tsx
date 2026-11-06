@@ -1,13 +1,14 @@
 import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Braces, FileText, Network, ShieldCheck, Terminal } from 'lucide-react'
+import { ArrowRight, Braces, FileText, Network } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import { useAnalyticsStore } from '../store/analytics'
 import { getGitHubLoginUrl } from '../api/client'
-import CodeBlock from '../components/CodeBlock'
 import TwitterWall from '../components/TwitterWall'
 import TryItPanel from '../components/TryItPanel'
 import VideoShowcase from '../components/VideoShowcase'
+import RestBuildCard from '../components/RestBuildCard'
+import AgentSetupCard from '../components/AgentSetupCard'
 import { buttonClassName } from '@/ui/Button'
 import { Card } from '@/ui/Card'
 import { Section } from '@/ui/Section'
@@ -80,28 +81,6 @@ const capabilities: Array<{
     code: 'derive_pda({ seeds, programId })',
   },
 ]
-
-const curlExample = `API=https://api.orquestra.dev
-
-curl -X POST "$API/api/marinade/instructions/deposit/build" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "accounts": { "state": "8szGk...", "user": "9xTy..." },
-    "args": { "lamports": 1000000000 },
-    "network": "mainnet-beta"
-  }'
-
-# -> { "transaction": "AQAAAAAAAAAAAA..." }`
-
-const mcpConfig = `{
-  "mcpServers": {
-    "orquestra": {
-			"url": "https://api.orquestra.dev/mcp",
-			"type": "http"
-		}
-  }
-  //
-}`
 
 function CtaButtons(): JSX.Element {
   const { isAuthenticated } = useAuthStore()
@@ -435,54 +414,8 @@ export default function Home(): JSX.Element {
         </Section>
 
         <section className="grid min-w-0 gap-5 lg:grid-cols-2">
-          <Card className="min-w-0 overflow-hidden p-5 md:p-6" tone="sand">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
-                  REST transaction build
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-sand-1600">
-                  HTTP in, base58 transaction out.
-                </h2>
-              </div>
-              <Terminal className="size-5 text-sand-1100" aria-hidden="true" />
-            </div>
-            <CodeBlock
-              language="bash"
-              code={curlExample}
-              copyable={false}
-              wrapLongLines
-              maxHeightClassName="max-h-[340px]"
-            />
-          </Card>
-
-          <Card className="min-w-0 overflow-hidden p-5 md:p-6" tone="sand">
-            <div className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-sand-1100">
-                  AI agent setup
-                </p>
-                <h2 className="mt-2 text-xl font-semibold text-sand-1600">
-                  Give Claude program-level Solana tools.
-                </h2>
-              </div>
-              <ShieldCheck className="size-5 text-sand-1100" aria-hidden="true" />
-            </div>
-            <CodeBlock
-              language="json"
-              code={mcpConfig}
-              copyable={false}
-              wrapLongLines
-              maxHeightClassName="max-h-[340px]"
-            />
-            <CodeBlock
-              language="bash"
-              code="claude mcp add --transport http orquestra https://api.orquestra.dev/mcp"
-              copyable={false}
-              wrapLongLines
-              maxHeightClassName="max-h-[340px]"
-            />
-          </Card>
+          <RestBuildCard />
+          <AgentSetupCard />
         </section>
 
         <Section eyebrow="Watch" title="See Orquestra in action.">
